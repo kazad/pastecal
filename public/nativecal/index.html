@@ -43,10 +43,39 @@ Copyright (c) 2025 Kalid Azad
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
+    <!-- Analytics privacy: must run before Google Tag Manager (see the comment inside). -->
+    <!-- Europe (EU/EEA/UK/CH and nearby): no third-party trackers, so no cookie banner is needed. Read from the
+         browser's time zone because most pages are served without the Worker; it errs toward not tracking.
+         First-party cookieless analytics (/api/collect) and calendar stats still count everyone. -->
+    <script>
+        window.pcInEurope = (function () {
+            try { return /^(Europe\/|Atlantic\/(Canary|Madeira|Azores|Reykjavik|Faroe)|Africa\/Ceuta|Arctic\/)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
+            catch (e) { return false; }
+        })();
+    </script>
+    <script>
+        (function () {
+            if (window.__TEST__ || window.pcInEurope || window.location.search.includes('no-analytics')) return;
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+            // Never send a calendar's name to Google: the path IS the edit key (anyone holding
+            // pastecal.com/<name> can change that calendar), and every hit carries the page URL.
+            // Google sees a generic path (/, /view, /beta, /cal), the campaign params, and a referrer
+            // with pastecal's own paths removed. Set BEFORE the GTM snippet below queues gtm.js: the container's Google tag
+            // sends its page_view on that event, and commands are applied in dataLayer order.
+            var p = location.pathname, q = new URLSearchParams(location.search), keep = new URLSearchParams();
+            var generic = p === '/' ? '/' : /^\/view\//.test(p) ? '/view' : /^\/(beta|nativecal)(\/|$)/.test(p) ? '/beta' : '/cal';
+            q.forEach(function (v, k) { if (/^utm_[a-z]+$|^gclid$/.test(k)) keep.set(k, v); });
+            var ref = document.referrer;
+            try { if (ref && new URL(ref).host === location.host) ref = location.origin + '/'; } catch (e) { ref = ''; }
+            window.gtag('set', { page_location: location.origin + generic + (keep.toString() ? '?' + keep : ''), page_path: generic, page_referrer: ref });
+        })();
+    </script>
+
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
-            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics'));
+            const enableAnalytics = !(w.__TEST__ || w.pcInEurope || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
             if (!enableAnalytics) {
                 console.log('[analytics] disabled by test mode');
                 return;
@@ -63,21 +92,25 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- Core styles -->
     <link rel="stylesheet" href="/tokens.css?v=1763769217">
-    <link rel="stylesheet" href="/style.css?v=1763769217">
+    <link rel="stylesheet" href="/components.css?v=1792797113">
+    <link rel="stylesheet" href="/style.css?v=1792797113">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
     <!-- ?ux=2 switches NativeCal to the redesign (see components/ncUx.js). Set before
          first paint so neither look flashes. -->
     <script>(function () { var ux = new URLSearchParams(location.search).get('ux');
         if (ux === '2' || (ux !== '1' && /^\/beta(\/|$)/.test(location.pathname))) document.documentElement.dataset.ux = '2'; })();</script>
     <link rel="stylesheet" href="/nativecal/native.css">
+    <!-- Tailwind, prebuilt by scripts/build-css.sh from this page's files (was the cdn.tailwindcss.com in-browser
+         compiler, not meant for production). Last, where the compiler injected its output. -->
+    <link rel="stylesheet" href="/nativecal/tailwind.css?v=20261024">
 
     <!-- Third-party libraries -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+    <!-- Vue, self-hosted and pinned: the same build the main app uses (public/index.html), not unpkg's floating vue@3. -->
+    <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js" integrity="sha384-yzVjVsgM1C687v6dWwBp9XurYpqEHWfk39FYLcmjZkbneJ2hefxMNuv73FZOxcNx" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js" integrity="sha384-wZrK4b7F6nW2Jp4rrQ2D5NbLlGAyUvPfyrReLbqjf+DyXRvT/usqx3w5RO043g1Q" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js" integrity="sha384-jxA//jFtZ5wjn1SjXb0Sg82gt6EeMtPbRu/MsN+fkNRI1LXjgIZyPDRwKNJ09PKg" crossorigin="anonymous"></script>
     
     <script>
         // Served at /beta/<name> (the public beta: the v2 redesign) and /nativecal/<name>
@@ -106,6 +139,7 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
     <script src="/utils/analytics.js?v=1763769217"></script>
+    <script src="/nativecal/errors.js?v=1"></script>
     <script src="/utils/utils.js?v=1763769217"></script>
     <script src="/models/Event.js?v=1763769217"></script>
     <script src="/services/SlugManager.js?v=1763769217"></script>
@@ -123,7 +157,7 @@ Copyright (c) 2025 Kalid Azad
     <script src="/components/Tooltip.js?v=1763769217"></script>
     <script src="/components/QuickAddDialog.js?v=1763769217"></script>
     <script src="/components/CalendarTitle.js?v=1763769217"></script>
-    <script src="/components/NavigationDropdown.js?v=1763769217"></script>
+    <script src="/components/NavigationDropdown.js?v=1792797113"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -158,7 +192,8 @@ Copyright (c) 2025 Kalid Azad
 
 </head>
 
-<body class="p-1 m-1">
+<!-- Session recordings (Clarity, Hotjar) never see calendar contents: titles, events, notes. Clicks and layout still count. -->
+<body class="p-1 m-1" data-clarity-mask="true" data-hj-suppress>
     <div id="app" data-testid="app-root">
         <!-- Mobile Header -->
         <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
@@ -270,7 +305,8 @@ Copyright (c) 2025 Kalid Azad
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <!-- Not on a view-only link: its own Cmd/Ctrl+E listener opened it there and drew a phantom event. -->
+        <quick-add-dialog v-if="canEdit" ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -1087,8 +1123,23 @@ Copyright (c) 2025 Kalid Azad
             </div>
         </panel>
 
+        <div v-if="isColorFilterActive" data-testid="hidden-events-banner"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 px-3 py-2 rounded-sm border border-color-default bg-2 text-sm"
+            v-cloak>
+            <span class="text-color-2">{{ hiddenEventsMessage }}</span>
+            <button @click="resetColorFilters" type="button"
+                class="underline text-color-1 hover:text-red-500 transition-colors">
+                Show all events
+            </button>
+        </div>
         <div id="cal2_wrap" style="width: 100%; height: 100%;" class="flex-1 overflow-hidden">
             <native-calendar
+                :hidden-slots="hiddenColorSlots"
+                ref="nativeCal"
+                :initial-view="resolvedInitialView"
+                :initial-date="resolvedInitialDate"
+                :custom-duration="resolvedCustomDuration"
+                :custom-unit="resolvedCustomUnit"
                 :events="displayEvents"
                 :time-format="globalSettings.timeFormat"
                 :colors="COLORS"

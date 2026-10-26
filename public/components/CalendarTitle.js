@@ -3,16 +3,16 @@
 const CalendarTitle = {
     template: /* html */ `
         <div class="w-full text-center">
-            <!-- Show title (including "New Calendar" for new calendars) -->
-            <h1 v-if="!isEditing"
+            <!-- Show title ("New calendar" for new calendars; see Calendar.displayTitle) -->
+            <component :is="heading" v-if="!isEditing"
                 @click="handleTitleClick"
-                :class="titleClasses">
-                {{ title || 'New Calendar' }}
-            </h1>
+                :class="titleClasses" :title="isReadOnly ? null : 'Rename this calendar'">
+                {{ shownTitle }}
+            </component>
             <!-- Edit mode input -->
             <input v-if="isEditing"
                 type="text"
-                :value="title"
+                :value="title === 'New Calendar' ? displayTitle : title"
                 @input="$emit('update:title', $event.target.value)"
                 @blur="$emit('blur')"
                 @keyup.enter="$emit('enter')"
@@ -33,17 +33,33 @@ const CalendarTitle = {
         inputRef: {
             type: String,
             default: 'titleInput'
+        },
+        // The page's main heading, except on the homepage, where the draft's "New calendar" is
+        // not what the page is about (the guide's headline is the h1 there).
+        heading: {
+            type: String,
+            default: 'h1'
         }
     },
     emits: ['update:title', 'blur', 'enter', 'click'],
     computed: {
+        displayTitle() {
+            return Calendar.displayTitle(this.title);
+        },
+        // Still the default name: invite a real one, quietly (muted text and a pencil, no prompt).
+        isUnnamed() {
+            return !this.isReadOnly && (!this.title || !String(this.title).trim() || this.title === 'New Calendar');
+        },
+        shownTitle() {
+            return this.isUnnamed ? 'Name this calendar' : this.displayTitle;
+        },
         brandingClass() {
             return this.mode === 'mobile'
                 ? 'text-base font-bold text-color-2 leading-tight'
                 : 'text-lg font-bold text-color-2 leading-tight';
         },
         taglineClass() {
-            return 'text-color-1 text-xs -mt-0.5 text-[10px]';
+            return 'text-color-1 text-xs -mt-0.5';
         },
         titleClasses() {
             const base = this.mode === 'mobile'
@@ -51,14 +67,14 @@ const CalendarTitle = {
                 : 'font-bold max-w-[150px] md:max-w-xs text-center inline-block leading-tight py-1';
 
             const interactive = !this.isReadOnly
-                ? 'cursor-pointer hover:text-blue-500 transition-colors px-1 py-0.5 rounded hover:bg-[var(--bg-interactive-hover)]'
+                ? 'pc-title-edit' + (this.isUnnamed ? ' pc-title-unnamed' : '')
                 : 'px-1';
 
             return [base, interactive].filter(Boolean).join(' ');
         },
         inputClass() {
             return this.mode === 'mobile'
-                ? 'w-full bg-1 border-2 border-blue-500 rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-300 px-2 py-1 text-color-2 leading-tight text-center'
+                ? 'w-full bg-1 border-2 border-theme-primary rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-theme-primary px-2 py-1 text-color-2 leading-tight text-center'
                 : 'border border-color-default p-1 max-w-[150px] md:max-w-xs h-8';
         }
     },

@@ -10,7 +10,7 @@ test.describe('Calendar Creation Flow', () => {
     await expect(page).toHaveTitle(/PasteCal/);
 
     // 3. Check for "Claim URL" button
-    const claimButton = page.getByRole('button', { name: /Claim/i });
+    const claimButton = page.getByRole('button', { name: /Save & share/i });
     await expect(claimButton).toBeVisible();
 
     // 4. Create Calendar (Click Claim without typing slug -> Random ID)
@@ -98,8 +98,8 @@ test.describe('Add Event Icon Visibility', () => {
     // Open mobile menu
     await menuButton.click();
 
-    // Verify "Quick Add Event" is visible in mobile menu
-    const mobileQuickAdd = page.getByText('Quick Add Event');
+    // Verify "Quick add event" is visible in mobile menu
+    const mobileQuickAdd = page.getByText('Quick add event');
     await expect(mobileQuickAdd).toBeVisible();
   });
 });

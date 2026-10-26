@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- /account: the signed-in owner's plan (Plus = id 'pro', Pro = id 'unlimited'), billing, calendars, @name and short links, and account delete.
+     Data: GET /api/account; changes: /api/names/* (cloudflare/src/Names.js), /api/pro/portal, /api/auth/*,
+     /api/account/delete (Accounts.js). No analytics here. -->
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Your account · pastecal</title>
+<link rel="icon" href="/favicon.ico">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<link rel="stylesheet" href="/site.css">
+<style>
+:root { --site-max: 720px }
+body { margin: 0; background: var(--pc-surface); color: var(--pc-text); font: var(--pc-fs-md)/1.5 var(--pc-font); }
+main { box-sizing: border-box; max-width: var(--site-max); margin: 0 auto; padding: 24px 16px 0; }
+h1 { margin: 8px 0 2px; font-size: var(--pc-fs-3xl); line-height: 1.2; letter-spacing: -.01em; }
+.who { margin: 0 0 20px; color: var(--pc-text-muted); overflow-wrap: anywhere; }
+.card { background: var(--pc-bg); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); padding: 20px; margin: 0 0 16px; }
+.card h2 { margin: 0 0 4px; font-size: var(--pc-fs-lg); line-height: 1.3; }
+.card > p, .muted { color: var(--pc-text-muted); margin: 4px 0 0; }
+.card .plan { font-size: var(--pc-fs-xl); font-weight: 600; margin: 2px 0 0; color: var(--pc-text); }
+.card .meter { margin: 6px 0 0; color: var(--pc-text-2); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+select:focus-visible, a:focus-visible, .check input:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); }
+.field input:focus, .field input:focus-visible { outline: none; box-shadow: none; }
+form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.field { display: inline-flex; align-items: center; min-width: 0; flex: 1 1 260px; height: var(--pc-h-md); border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-bg); overflow: hidden; }
+.field:focus-within { box-shadow: var(--pc-focus-ring); border-color: var(--pc-link); }
+.field .pre { padding: 0 2px 0 10px; color: var(--pc-text-muted); white-space: nowrap; }
+.field input { flex: 1; min-width: 40px; height: 100%; border: 0; outline: none; background: transparent; color: var(--pc-text); font: inherit; padding: 0 10px 0 0; }
+.field input.solo { padding-left: 10px; }
+select { height: var(--pc-h-md); max-width: 100%; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-bg); color: var(--pc-text); font: inherit; padding: 0 8px; }
+.err, .card .err { color: var(--pc-danger); margin: 8px 0 0; }
+.ok, .card .ok { color: var(--pc-success); margin: 8px 0 0; }
+.err:empty { display: none; }
+.big-link { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--pc-link); text-decoration: none; overflow-wrap: anywhere; }
+.list { list-style: none; margin: 12px 0 0; padding: 0; }
+.list > li { padding: 12px 0; border-top: 1px solid var(--pc-line); }
+.list > li:first-child { border-top: 0; padding-top: 4px; }
+.cal-top { display: flex; align-items: center; gap: 10px; }
+.cal-title { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.chip { flex: none; font-size: var(--pc-fs-xs); font-weight: 600; padding: 3px 9px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); color: var(--pc-text-2); white-space: nowrap; }
+.chip.on { background: var(--pc-success-soft); color: var(--pc-success); }
+.chip.warn { background: var(--pc-warning-soft); color: var(--pc-warning); }
+.cal-links { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--pc-fs-md); }
+.cal-links a { color: var(--pc-text-2); text-decoration: none; overflow-wrap: anywhere; }
+.cal-links a:hover { color: var(--pc-link); }
+.cal-edit { margin-top: 8px; padding: 12px; border-radius: var(--pc-radius-control); background: var(--pc-soft); }
+.cal-edit form.inline { margin-top: 0; }
+.check { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--pc-fs-md); cursor: pointer; }
+.check input { accent-color: var(--pc-link); width: 16px; height: 16px; margin: 0; }
+.short-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.short-name { font-weight: 600; overflow-wrap: anywhere; color: var(--pc-link); text-decoration: none; }
+.short-name:hover { text-decoration: underline; }
+.short-row .grow { flex: 1 1 200px; color: var(--pc-text-muted); min-width: 0; overflow-wrap: anywhere; }
+.short-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.ok:empty { display: none; }
+.danger-zone { background: transparent; border-style: dashed; }
+.danger-zone h2 { color: var(--pc-text); }
+.del-facts { margin: 8px 0 0; padding-left: 20px; color: var(--pc-text-2); }
+.del-facts li { margin: 4px 0; }
+#delCals { margin-top: 12px; }
+.signin { max-width: 440px; margin: 6vh auto 0; }
+[hidden] { display: none !important; }
+@media (max-width: 480px) { h1 { font-size: var(--pc-fs-2xl); } .card { padding: 16px; } .row-actions .pc-btn:not(.pc-btn--link) { flex: 1 1 auto; } }
+</style>
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+<main id="main" data-clarity-mask="true" data-hj-suppress>
+  <p class="muted" id="loading">One moment.</p>
+
+  <!-- Signed out -->
+  <section id="out" class="card signin" hidden data-testid="account-signed-out">
+    <h1>Your account</h1>
+    <p>Sign in to see your account. We'll email you a link. No password.</p>
+    <form class="inline" id="signinForm" novalidate>
+      <span class="field"><input class="solo" id="signinEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email" required></span>
+      <button class="pc-btn pc-btn--primary" type="submit" id="signinBtn">Send sign-in link</button>
+    </form>
+    <p class="err" id="signinErr" role="alert"></p>
+    <p class="ok" id="signinSent" hidden data-testid="account-link-sent">Check your email. The link signs you in and brings you back here.</p>
+  </section>
+
+  <!-- Signed in -->
+  <div id="in" hidden data-testid="account-signed-in">
+    <h1>Your account</h1>
+    <p class="who"><span id="email" data-testid="account-email"></span> · <button class="pc-btn pc-btn--link" type="button" id="signout" data-testid="account-signout">Sign out</button></p>
+
+    <section class="card" data-testid="account-plan-card">
+      <h2>Plan</h2>
+      <p class="plan" id="plan" data-testid="account-plan"></p>
+      <p class="meter" id="meter" data-testid="account-meter" hidden></p>
+      <p class="muted" id="planNote" hidden></p>
+      <div class="row-actions">
+        <button class="pc-btn" type="button" id="billing" hidden data-testid="account-billing">Manage billing</button>
+        <a class="pc-btn" href="/pricing" id="seePlans" hidden>See plans</a>
+      </div>
+      <p class="err" id="planErr" role="alert"></p>
+    </section>
+
+    <section class="card" id="nameCard" hidden data-testid="account-name-card">
+      <h2>Your name</h2>
+      <div id="noHandle" hidden>
+        <p>One name for all your calendars, like <b>pastecal.com/@yourname/soccer</b>. You can claim it once.</p>
+        <form class="inline" id="handleForm" novalidate>
+          <span class="field"><span class="pre">pastecal.com/@</span><input id="handleInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" aria-label="Your name" placeholder="yourname" data-testid="handle-input"></span>
+          <button class="pc-btn pc-btn--primary" type="submit" data-testid="handle-claim">Claim</button>
+        </form>
+      </div>
+      <div id="hasHandle" hidden>
+        <a class="big-link" id="handleLink" target="_blank" rel="noopener" data-testid="handle-link-own"></a>
+        <p id="handleNote">Your public page lists the calendars you choose to show. Links under your name open the view-only calendar.</p>
+        <div id="newCal">
+          <h2 style="margin-top:18px" id="newCalH">New calendar</h2>
+          <p id="newCalNote">Upgraded and locked to you, at its own pastecal.com/@you/… link. As many as you like; they don't count toward your 5.</p>
+          <form class="inline" id="newCalForm" novalidate>
+            <span class="field"><span class="pre" id="newCalPre"></span><input id="newCalInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" aria-label="Short name" placeholder="soccer" data-testid="newcal-input"></span>
+            <button class="pc-btn pc-btn--primary" type="submit" data-testid="newcal-create">Create</button>
+          </form>
+        </div>
+      </div>
+      <p class="err" id="nameErr" role="alert" data-testid="name-error"></p>
+    </section>
+
+    <section class="card" id="shortCard" hidden data-testid="account-short-card">
+      <h2 id="shortH">Short links</h2>
+      <p>Your own <b>pastecal.com/name</b> for any of your calendars. It opens the view-only calendar; you and your editors keep the edit link. Change where one points any time.</p>
+      <ul class="list" id="shortList"></ul>
+      <form class="inline" id="shortForm" novalidate>
+        <span class="field"><span class="pre">pastecal.com/</span><input id="shortInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" aria-label="Short name" placeholder="name" data-testid="short-input"></span>
+        <select id="shortCal" aria-label="Calendar" data-testid="short-calendar"></select>
+        <button class="pc-btn pc-btn--primary" type="submit" data-testid="short-add">Add</button>
+      </form>
+      <p class="muted" id="shortNote">If Pro ends, your short links keep working but can't be changed. We hold them for you for 90 days after it ends, then release them for anyone to use.</p>
+      <p class="err" id="shortErr" role="alert" data-testid="short-error"></p>
+      <p class="ok" id="shortOk" role="status" aria-live="polite" data-testid="short-ok"></p>
+    </section>
+
+    <section class="card" data-testid="account-calendars-card">
+      <h2>Your calendars</h2>
+      <p id="calsEmpty" hidden>Calendars you upgrade show up here.</p>
+      <ul class="list" id="calList"></ul>
+    </section>
+
+    <section class="card danger-zone" data-testid="account-delete-card">
+      <h2>Delete account</h2>
+      <p>Erases your email, sign-in links and sessions. Your calendars and their events stay.</p>
+      <div class="row-actions" id="delStart"><button class="pc-btn" type="button" id="delOpen" data-testid="delete-open">Delete account…</button></div>
+      <div id="delBilling" hidden data-testid="delete-needs-cancel">
+        <p class="err">You still have an active subscription<span id="delUntil"></span>. Cancel it in Manage billing first, then come back once it has ended.</p>
+        <div class="row-actions"><button class="pc-btn" type="button" id="delPortal">Manage billing</button><button class="pc-btn pc-btn--link" type="button" id="delCancel1">Never mind</button></div>
+      </div>
+      <form id="delConfirm" hidden novalidate data-testid="delete-confirm">
+        <p>When your account is gone:</p>
+        <ul class="del-facts" data-testid="delete-facts">
+          <li id="delPaused"><b>Paused calendars stay read-only for good.</b> Nobody can reopen them, you included. To open one to everyone instead, open it and choose <b>Open to everyone</b> before you delete.</li>
+          <li id="delOpenCals"><b>Open calendars</b> stay editable by anyone with their edit link.</li>
+          <li id="delAt">Your <b>@links</b> keep opening the view-only calendars for 90 days, then stop. Your @name is never given to anyone else.</li>
+          <li id="delShort">Your <b>short links</b> say “This link has ended” for 90 days. Then anyone can take the names.</li>
+        </ul>
+        <div id="delCals" data-testid="delete-calendars">
+          <p class="muted">Save these edit links. Each is the only way back to its calendar:</p>
+          <ul class="list" id="delCalList"></ul>
+        </div>
+        <label class="muted" for="delInput" style="display:block;margin-top:12px">Type <b>delete</b> to confirm</label>
+        <div class="row-actions" style="margin-top:6px">
+          <span class="field" style="flex:0 1 220px"><input class="solo" id="delInput" autocomplete="off" autocapitalize="none" spellcheck="false" data-testid="delete-input"></span>
+          <button class="pc-btn pc-btn--danger" type="submit" id="delGo" disabled data-testid="delete-go">Delete account</button>
+          <button class="pc-btn pc-btn--link" type="button" id="delCancel2">Cancel</button>
+        </div>
+      </form>
+      <p class="err" id="delErr" role="alert"></p>
+    </section>
+  </div>
+
+  <section id="deleted" class="card signin" hidden data-testid="account-deleted">
+    <h1>Your account is deleted</h1>
+    <p>You're signed out everywhere. Your calendars are still at their links.</p>
+    <div class="row-actions"><a class="pc-btn pc-btn--primary" href="/">Make a calendar</a></div>
+  </section>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var api = function (method, path, body) {
+    return fetch(path, { method: method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, d: d }; }); })
+      .catch(function () { return { status: 0, d: {} }; });
+  };
+  var OFFLINE = 'We couldn’t reach pastecal. Check your connection and try again.';
+  // One date everywhere (this page, the Share panel, the logo menu, the emails): "October 24, 2027", in UTC.
+  var day = function (t) { if (!t) return ''; var ms = t < 1e12 ? t * 1000 : t; return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
+  var daysLeft = function (t) { var ms = (t < 1e12 ? t * 1000 : t) - Date.now(); return Math.max(0, Math.ceil(ms / 86400000)); };
+  var ACTIVE = { active: 1, trialing: 1, past_due: 1 };
+  var el = function (tag, attrs, kids) {
+    var n = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === 'text') n.textContent = attrs[k]; else if (k === 'class') n.className = attrs[k]; else n.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  };
+  // How links read: pastecal.com (or the preview site's own name); a local copy still says pastecal.com.
+  var host = /(^|\.)pastecal\.com$/.test(location.hostname) ? location.hostname.replace(/^www\./, '') : 'pastecal.com';
+  var A = null;
+
+  function show(which) {
+    ['loading', 'out', 'in', 'deleted'].forEach(function (id) { $(id).hidden = id !== which; });
+    // The site header's "Account" link follows this hint cookie (the session itself is HttpOnly).
+    try { document.cookie = which === 'in' ? 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax' : 'pc_in=; Path=/; Max-Age=0; SameSite=Lax'; } catch (e) { /* no hint */ }
+    var acct = $('siteAccount'); if (acct) acct.hidden = which !== 'in';
+  }
+
+  function load() {
+    return api('GET', '/api/account').then(function (r) {
+      if (r.status === 401) { show('out'); return; }
+      if (r.status !== 200) { $('loading').textContent = r.status === 0 ? OFFLINE : 'Something went wrong. Reload the page to try again.'; return; }
+      A = r.d; render(); show('in');
+    });
+  }
+
+  // ---- plan ----
+  function planLine() {
+    var u = A.unlimited, s = A.singles || [];
+    if (A.plan === 'unlimited') return 'Pro · ' + (u.cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(u.currentPeriodEnd);
+    var live = s.filter(function (x) { return ACTIVE[x.status]; });
+    if (live.length) {
+      var t = live.filter(function (x) { return x.status === 'trialing'; })[0];
+      if (t && live.length === 1) { var n = daysLeft(t.trialEnd || t.currentPeriodEnd); return 'Plus trial · ' + n + (n === 1 ? ' day left' : ' days left'); }
+      if (live.length === 1) return 'Plus · ' + (live[0].cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(live[0].currentPeriodEnd);
+      return 'Plus · ' + live.length + ' calendars';
+    }
+    if (u) return 'Pro · ended' + (u.endedAt ? ' ' + day(u.endedAt) : '');
+    if (s.length) return 'Plus · ended';
+    return 'Free';
+  }
+  function hasActiveBilling() {
+    return A.plan !== null || (A.singles || []).some(function (x) { return ACTIVE[x.status]; });
+  }
+
+  function render() {
+    $('email').textContent = A.email;
+    $('plan').textContent = planLine();
+    var unl = A.plan === 'unlimited', lapsed = !unl && A.unlimited;
+    $('meter').hidden = !unl;
+    // An account from when Pro had 10 may hold more than the limit: those stay, nothing more can be added.
+    if (unl) $('meter').textContent = 'Upgraded calendars: ' + Math.min(A.proCount, A.proLimit) + ' of ' + A.proLimit
+      + (A.proCount > A.proLimit ? ' (plus ' + (A.proCount - A.proLimit) + ' from before; they stay)' : '')
+      + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
+    $('planNote').hidden = !lapsed;
+    if (lapsed) $('planNote').textContent = 'Your links keep working. Renew Pro to add or change names.';
+    $('billing').hidden = !A.hasBilling;
+    $('seePlans').hidden = A.plan !== null;
+    $('seePlans').textContent = lapsed ? 'Renew Pro' : 'See plans';
+
+    // Your name
+    $('nameCard').hidden = !(unl || A.handle);
+    $('noHandle').hidden = !!A.handle || !unl;
+    $('hasHandle').hidden = !A.handle;
+    if (A.handle) {
+      $('handleLink').textContent = host + '/@' + A.handle;
+      $('handleLink').href = '/@' + A.handle;
+      $('newCalH').textContent = 'New calendar under @' + A.handle;
+      $('newCalPre').textContent = '@' + A.handle + '/';
+      $('newCalNote').textContent = 'Upgraded and locked to you, at its own ' + host + '/@' + A.handle + '/… link. As many as you like; they don\u2019t count toward your ' + A.proLimit + '.';
+      $('newCal').hidden = !unl;
+    }
+
+    // Short links
+    var shorts = A.shortNames || [];
+    $('shortCard').hidden = !(unl || shorts.length);
+    $('shortH').textContent = 'Short links · ' + shorts.length + ' of ' + A.shortLimit;
+    var lockable = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
+    $('shortForm').hidden = !unl || shorts.length >= A.shortLimit || !lockable.length;
+    var held = shorts.map(function (x) { return x.endedAt; }).filter(Boolean).sort()[0];
+    $('shortNote').textContent = held
+      ? 'Your Pro plan has ended, so these can\u2019t be changed, only released. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
+      : 'If Pro ends, your short links keep working but can\u2019t be changed. We hold them for you for ' + A.holdDays + ' days after it ends, then release them for anyone to use.';
+    var mine = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
+    var sel = $('shortCal'); sel.textContent = '';
+    mine.forEach(function (c) { sel.appendChild(el('option', { value: c.id, text: c.title })); });
+    var list = $('shortList'); list.textContent = '';
+    shorts.forEach(function (x) {
+      var cal = A.calendars.filter(function (c) { return c.id === x.calendarId; })[0];
+      var picker = null;
+      var rel = el('button', { type: 'button', class: 'pc-btn pc-btn--link', 'data-testid': 'short-release', text: 'Release' });
+      rel.addEventListener('click', function () {
+        if (!window.confirm('Release ' + host + '/' + x.name + '? It stops working, and anyone can take the name.')) return;
+        change('/api/names/short/release', { name: x.name }, 'shortErr');
+      });
+      var row = el('div', { class: 'short-row' }, [
+        el('a', { class: 'short-name', href: '/' + x.name, target: '_blank', rel: 'noopener', text: host + '/' + x.name }),
+        el('span', { class: 'grow', text: '→ ' + (cal ? cal.title : 'a calendar') })]);
+      // Moving a link that may be printed on flyers: Change opens a picker, and only Save moves it.
+      if (unl && mine.length > 1) {
+        var chg = el('button', { type: 'button', class: 'pc-btn pc-btn--link', 'data-testid': 'short-change', text: 'Change' });
+        var re = el('select', { 'aria-label': 'Point ' + host + '/' + x.name + ' at', 'data-testid': 'short-remap' });
+        mine.forEach(function (c) { var o = el('option', { value: c.id, text: c.title }); if (c.id === x.calendarId) o.selected = true; re.appendChild(o); });
+        var save = el('button', { type: 'button', class: 'pc-btn pc-btn--primary', 'data-testid': 'short-remap-save', text: 'Save' });
+        var cancel = el('button', { type: 'button', class: 'pc-btn pc-btn--link', 'data-testid': 'short-remap-cancel', text: 'Cancel' });
+        picker = el('div', { class: 'short-pick', 'data-testid': 'short-pick' }, [re, save, cancel]); picker.hidden = true;
+        var sync = function () { save.disabled = re.value === x.calendarId; };
+        re.addEventListener('change', sync); sync();
+        chg.addEventListener('click', function () { picker.hidden = false; chg.hidden = true; rel.hidden = true; re.focus(); });
+        cancel.addEventListener('click', function () { re.value = x.calendarId; sync(); picker.hidden = true; chg.hidden = false; rel.hidden = false; });
+        save.addEventListener('click', function () {
+          var to = A.calendars.filter(function (c) { return c.id === re.value; })[0];
+          save.disabled = true; save.textContent = 'Saving…';
+          change('/api/names/short/remap', { name: x.name, calendarId: re.value }, 'shortErr').then(function (d) {
+            if (d) { $('shortOk').textContent = host + '/' + x.name + ' now opens ' + (to ? to.title : 'that calendar') + '.'; return; }
+            save.disabled = false; save.textContent = 'Save';
+          });
+        });
+        row.appendChild(chg);
+      }
+      row.appendChild(rel);
+      list.appendChild(el('li', { 'data-testid': 'short-row' }, picker ? [row, picker] : [row]));
+    });
+
+    renderCalendars(unl);
+  }
+
+  var LABEL = { unlimited: 'Included in Pro', locked: 'Locked', trial: 'Trial', paused: 'Paused', open: 'Open', unknown: '…' };
+  var open = {};
+  function renderCalendars(unl) {
+    var list = $('calList'); list.textContent = '';
+    $('calsEmpty').hidden = A.calendars.length > 0;
+    A.calendars.forEach(function (c) {
+      // Pro: which ones use one of the 5 (A.proLimit), and which live under the @name (unlimited).
+      var label = c.state === 'trial' && c.trialEnd ? 'Trial · ' + daysLeft(c.trialEnd) + ' days left'
+        : c.state === 'unlimited' ? (c.atName && A.handle ? 'Pro · under @' + A.handle : 'Pro · 1 of your ' + A.proLimit) : LABEL[c.state];
+      var chip = el('span', { class: 'chip' + (c.state === 'paused' ? ' warn' : c.state === 'open' ? '' : ' on'), 'data-testid': 'cal-status', text: label });
+      var top = el('div', { class: 'cal-top' }, [el('span', { class: 'cal-title', text: c.title }), chip]);
+      var links = el('div', { class: 'cal-links' }, [el('a', { href: '/' + encodeURIComponent(c.id), 'data-testid': 'cal-open', text: 'Open' })]);
+      if (c.atName && A.handle) links.appendChild(el('a', { href: '/@' + A.handle + '/' + c.atName, target: '_blank', rel: 'noopener', 'data-testid': 'cal-at-link', text: host + '/@' + A.handle + '/' + c.atName }));
+      (c.shortNames || []).forEach(function (n) { links.appendChild(el('a', { href: '/' + n, target: '_blank', rel: 'noopener', text: host + '/' + n })); });
+      var li = el('li', { 'data-testid': 'cal-row', 'data-cal': c.id }, [top, links]);
+      // @name for this calendar: add, rename, remove, show on my page.
+      if (A.handle && (c.atName || (unl && c.state !== 'open'))) {
+        var edit = el('button', { type: 'button', class: 'pc-btn pc-btn--link', 'data-testid': 'cal-at-edit', text: c.atName ? 'Edit @' + A.handle + ' link' : 'Put under @' + A.handle });
+        links.appendChild(edit);
+        var box = el('div', { class: 'cal-edit', 'data-testid': 'cal-at-box' }); box.hidden = !open[c.id];
+        if (unl) {
+          var input = el('input', { autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false', maxlength: '40', 'aria-label': 'Short name', placeholder: 'name', 'data-testid': 'cal-at-input' });
+          input.value = c.atName || '';
+          var f = el('form', { class: 'inline', novalidate: '' }, [el('span', { class: 'field' }, [el('span', { class: 'pre', text: '@' + A.handle + '/' }), input]),
+            el('button', { class: 'pc-btn pc-btn--primary', type: 'submit', 'data-testid': 'cal-at-save', text: 'Save' })]);
+          f.addEventListener('submit', function (e) { e.preventDefault(); change('/api/names/link', { calendarId: c.id, name: input.value.trim() }, 'err-' + c.id); });
+          box.appendChild(f);
+        }
+        if (c.atName) {
+          var cb = el('input', { type: 'checkbox', 'data-testid': 'cal-show' }); cb.checked = c.show;
+          cb.addEventListener('change', function () { change('/api/names/show', { calendarId: c.id, show: cb.checked }, 'err-' + c.id); });
+          var showRow = el('label', { class: 'check' }, [cb, 'Show on my page (' + host + '/@' + A.handle + ')']);
+          var rm = el('button', { type: 'button', class: 'pc-btn pc-btn--link', 'data-testid': 'cal-at-remove', text: 'Remove link' });
+          rm.style.marginLeft = '16px';
+          rm.addEventListener('click', function () { change('/api/names/unlink', { calendarId: c.id }, 'err-' + c.id); });
+          box.appendChild(el('div', {}, [showRow, rm]));
+        }
+        box.appendChild(el('p', { class: 'err', id: 'err-' + c.id, role: 'alert' }));
+        edit.addEventListener('click', function () { open[c.id] = box.hidden; box.hidden = !box.hidden; });
+        li.appendChild(box);
+      }
+      list.appendChild(li);
+    });
+  }
+
+  function change(path, body, errId) {
+    var err = $(errId); if (err) err.textContent = '';
+    if ($('shortOk')) $('shortOk').textContent = '';
+    return api('POST', path, body).then(function (r) {
+      if (r.status === 200 && r.d.ok) return load().then(function () { return r.d; });
+      var msg = r.d.message || (r.status === 0 ? OFFLINE : r.status === 401 ? 'Sign in again.' : r.d.error === 'not-owner' ? 'That calendar isn’t yours.' : 'Something went wrong. Try again in a minute.');
+      if ($(errId)) $(errId).textContent = msg;
+      return null;
+    });
+  }
+
+  // ---- forms ----
+  $('handleForm').addEventListener('submit', function (e) {
+    e.preventDefault(); change('/api/names/handle', { handle: $('handleInput').value.trim() }, 'nameErr');
+  });
+  $('newCalForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Creating…';
+    var name = $('newCalInput').value.trim();
+    api('POST', '/api/names/calendar', { name: name }).then(function (r) {
+      btn.disabled = false; btn.textContent = 'Create';
+      if (r.status === 200 && r.d.ok) {
+        try { sessionStorage.setItem('pastecal_open_share', r.d.calendarId); } catch (x) { /* Share opens by hand */ }
+        location.href = '/' + encodeURIComponent(r.d.calendarId);
+        return;
+      }
+      $('nameErr').textContent = r.d.message || (r.status === 0 ? OFFLINE : 'Something went wrong. Try again in a minute.');
+    });
+  });
+  $('shortForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    change('/api/names/short', { name: $('shortInput').value.trim(), calendarId: $('shortCal').value }, 'shortErr');
+  });
+  var portal = function (errId) {
+    api('POST', '/api/pro/portal', {}).then(function (r) {
+      if (r.status === 200 && r.d.url) { location.href = r.d.url; return; }
+      $(errId).textContent = r.status === 0 ? OFFLINE : 'We couldn’t open billing. Try again in a minute.';
+    });
+  };
+  $('billing').addEventListener('click', function () { portal('planErr'); });
+  $('delPortal').addEventListener('click', function () { portal('delErr'); });
+  $('signout').addEventListener('click', function () { api('POST', '/api/auth/signout', {}).then(function () { show('out'); }); });
+
+  // Delete: active billing must be canceled first; then a typed "delete".
+  var delReset = function () { $('delStart').hidden = false; $('delBilling').hidden = true; $('delConfirm').hidden = true; $('delInput').value = ''; $('delGo').disabled = true; $('delErr').textContent = ''; };
+  $('delOpen').addEventListener('click', function () {
+    $('delStart').hidden = true;
+    if (hasActiveBilling()) {
+      var u = A.plan === 'unlimited' && A.unlimited;
+      $('delUntil').textContent = u && u.cancelAtPeriodEnd ? ' until ' + day(u.currentPeriodEnd) : '';
+      $('delBilling').hidden = false;
+    } else { renderDeleteFacts(); $('delConfirm').hidden = false; $('delInput').focus(); }
+  });
+  // What happens to each thing the account has, and every calendar's edit link to keep.
+  function renderDeleteFacts() {
+    var cals = A.calendars.filter(function (c) { return c.state !== 'unknown'; });
+    $('delPaused').hidden = !cals.some(function (c) { return c.state === 'paused'; });
+    $('delOpenCals').hidden = !cals.some(function (c) { return c.state === 'open'; });
+    $('delAt').hidden = !A.handle;
+    $('delShort').hidden = !(A.shortNames || []).length;
+    $('delCals').hidden = !cals.length;
+    var list = $('delCalList'); list.textContent = '';
+    cals.forEach(function (c) {
+      var what = c.state === 'paused' ? 'Paused: stays read-only' : c.state === 'open' ? 'Open: anyone with the link can edit' : 'Locked';
+      list.appendChild(el('li', { 'data-testid': 'delete-cal' }, [
+        el('div', { class: 'cal-top' }, [el('span', { class: 'cal-title', text: c.title }), el('span', { class: 'chip' + (c.state === 'paused' ? ' warn' : ''), text: what })]),
+        el('div', { class: 'cal-links' }, [el('a', { href: '/' + encodeURIComponent(c.id), 'data-testid': 'delete-cal-link', text: host + '/' + c.id })])]));
+    });
+  }
+  $('delCancel1').addEventListener('click', delReset);
+  $('delCancel2').addEventListener('click', delReset);
+  $('delInput').addEventListener('input', function () { $('delGo').disabled = $('delInput').value.trim().toLowerCase() !== 'delete'; });
+  $('delConfirm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if ($('delGo').disabled) return;
+    $('delGo').disabled = true; $('delGo').textContent = 'Deleting…';
+    api('POST', '/api/account/delete', {}).then(function (r) {
+      if (r.status === 200 && r.d.ok) { show('deleted'); return; }
+      $('delGo').disabled = false; $('delGo').textContent = 'Delete account';
+      $('delErr').textContent = r.d.message || (r.status === 0 ? OFFLINE : 'Something went wrong. Try again in a minute.');
+    });
+  });
+
+  // Signed out: the same magic link as everywhere, back to /account.
+  $('signinForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var email = $('signinEmail').value.trim();
+    $('signinErr').textContent = '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { $('signinErr').textContent = 'Enter an email address, like you@example.com.'; $('signinEmail').focus(); return; }
+    $('signinBtn').disabled = true; $('signinBtn').textContent = 'Sending…';
+    api('POST', '/api/auth/start', { email: email, next: '/account' }).then(function (r) {
+      $('signinBtn').disabled = false; $('signinBtn').textContent = 'Send sign-in link';
+      if (r.status === 200 && r.d.ok) { $('signinForm').hidden = true; $('signinSent').hidden = false; return; }
+      $('signinErr').textContent = r.d.error || (r.status === 0 ? OFFLINE : 'Something went wrong. Try again in a minute.');
+    });
+  });
+
+  load();
+})();
+</script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body>
+</html>

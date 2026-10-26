@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact · pastecal</title>
+<meta name="description" content="Send pastecal a question, a problem, an idea, or a report about a calendar.">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/contact">
+<meta property="og:title" content="Contact · pastecal">
+<meta property="og:description" content="Send pastecal a question, a problem, an idea, or a report about a calendar.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<style>
+/* The contact form (POST /api/contact, cloudflare/src/Contact.js): .pc-field and .pc-btn from components.css. */
+.lead { color: var(--pc-text-muted) }
+.cform, .thanks { margin: 24px 0 8px; padding: 22px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
+.cform { display: flex; flex-direction: column; gap: 16px }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.field label { font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
+.opt { font-weight: var(--pc-fw-regular); color: var(--pc-text-muted) }
+.cform textarea.pc-field { min-height: 132px; line-height: 1.45 }
+.cform .bad { border-color: var(--pc-danger) }
+.hint, .warn { margin: 0; font-size: var(--pc-fs-md); color: var(--pc-text-muted) }
+.cform[hidden], .thanks[hidden] { display: none }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
+.send { align-self: flex-start }
+.status { margin: -4px 0 0; font-weight: var(--pc-fw-semibold) }
+.status:empty { display: none }
+.status.err { color: var(--pc-danger) }
+.thanks p { margin: 0 0 8px; font-weight: var(--pc-fw-semibold); font-size: var(--pc-fs-2xl) }
+@media (max-width: 480px) { .cform { padding: 16px } .send { align-self: stretch } }
+</style>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+<main>
+<h1>Contact</h1>
+<p class="lead">Most answers are on the <a href="/help">Help page</a>, and ideas are welcome in <a href="https://github.com/kazad/pastecal/discussions">GitHub Discussions</a>.</p>
+
+<form id="contactForm" class="cform" novalidate>
+  <div class="field">
+    <label for="type">What's this about?</label>
+    <select id="type" name="type" class="pc-field pc-field--lg">
+      <option value="question">Question</option>
+      <option value="broken">Something's broken</option>
+      <option value="idea">Idea</option>
+      <option value="billing">Billing</option>
+      <option value="report">Report a calendar</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="message">Message</label>
+    <textarea id="message" class="pc-field pc-field--lg" name="message" rows="5" maxlength="2000" placeholder="What's going on?" data-clarity-mask="true" data-hj-suppress></textarea>
+  </div>
+  <div class="field">
+    <label for="calendar">Calendar link <span class="opt" id="calOpt">optional</span></label>
+    <input id="calendar" class="pc-field pc-field--lg" name="calendar" type="url" inputmode="url" autocomplete="off" maxlength="300" placeholder="pastecal.com/your-calendar" data-clarity-mask="true" data-hj-suppress>
+    <p class="warn" id="warn" hidden>Don't enter passwords or card details on a calendar page. pastecal's sign-in page is pastecal.com/signin.</p>
+  </div>
+  <div class="field">
+    <label for="email">Your email <span class="opt">optional</span></label>
+    <input id="email" class="pc-field pc-field--lg" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" data-clarity-mask="true" data-hj-suppress>
+    <p class="hint">Only if you want a reply.</p>
+  </div>
+  <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+  <button class="pc-btn pc-btn--primary pc-btn--lg send" type="submit" id="sendBtn">Send</button>
+  <p class="status" id="status" role="status"></p>
+</form>
+<div class="thanks" id="thanks" hidden>
+  <p>Thanks. We'll take a look.</p>
+  <button type="button" id="again" class="pc-link">Send another</button>
+</div>
+</main>
+<script src="/utils/analytics.js"></script>
+<script>
+(() => {
+  const opened = performance.now();         // the fill-time check uses the page's own clock, not the server's
+  const $ = (id) => document.getElementById(id);
+  const form = $('contactForm'), type = $('type'), cal = $('calendar'), msg = $('message'), email = $('email'), status = $('status'), btn = $('sendBtn');
+  const LINK = /^(?:https?:\/\/)?(?:www\.)?pastecal\.com\/(?:view\/)?[A-Za-z0-9_-]{1,100}\/?(?:[?#].*)?$/i;
+
+  const showType = () => {
+    const report = type.value === 'report';
+    $('calOpt').hidden = report; $('warn').hidden = !report;
+    btn.textContent = report ? 'Send report' : 'Send';
+  };
+  // /contact?type=report&cal=<id or view/id>: the "Report" link on a calendar fills these in.
+  try {
+    const q = new URLSearchParams(location.search), t = q.get('type'), c = q.get('cal') || '';
+    if ([...type.options].some(o => o.value === t)) type.value = t;
+    if (c && c.length <= 200 && /^(view\/)?[A-Za-z0-9_-]+$/.test(c.replace(/^\/+/, ''))) cal.value = 'pastecal.com/' + c.replace(/^\/+/, '');
+  } catch (e) { /* old browser: the form still works */ }
+  showType();
+  type.addEventListener('change', showType);
+
+  const fail = (text, field) => {
+    status.className = 'status err'; status.textContent = text;
+    if (field) { field.classList.add('bad'); field.focus(); }
+  };
+  form.addEventListener('input', (e) => e.target.classList.remove('bad'));
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const link = cal.value.trim(), report = type.value === 'report';
+    if (report && !link) return fail("Paste the calendar's link, like pastecal.com/your-calendar.", cal);
+    if (link && !LINK.test(link)) return fail("That isn't a pastecal calendar link. Paste one like pastecal.com/your-calendar, or leave it empty.", cal);
+    if (!msg.value.trim()) return fail('Write a message.', msg);
+    if (email.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) return fail('Check the email address, or leave it empty.', email);
+    const body = { type: type.value, calendar: link, message: msg.value, email: email.value.trim(), website: $('website').value, elapsed: Math.round(performance.now() - opened) };
+    btn.disabled = true; status.className = 'status'; status.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || !out.ok) throw new Error(out.error || "Couldn't send it. Check your connection and try again.");
+      try { window.Analytics && Analytics.track('contact_submitted', { type: body.type }); } catch (err) { /* never block the thanks */ }
+      form.reset(); showType(); status.textContent = '';
+      form.hidden = true; $('thanks').hidden = false;
+    } catch (err) {
+      fail(err.message && err.message !== 'Failed to fetch' ? err.message : "Couldn't send it. Check your connection and try again.");
+    }
+    btn.disabled = false;
+  });
+  $('again').addEventListener('click', () => { $('thanks').hidden = true; form.hidden = false; type.focus(); });
+})();
+</script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>

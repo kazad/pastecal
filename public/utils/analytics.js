@@ -67,6 +67,19 @@ const Analytics = {
             Analytics.queue(name, params);
         },
 
+        /**
+         * Microsoft Clarity (loaded by GTM, project fu7pi5a92j). Each event becomes a Clarity
+         * custom event, so recordings and heatmaps can be filtered by it and the buying steps
+         * form a funnel. Names only: params stay with GA4 and /api/collect. A few moments
+         * also 'upgrade' the session so Clarity keeps that recording even when it samples.
+         * Calls before Clarity loads wait in the queue its own snippet drains (stub below).
+         */
+        clarity(name) {
+            if (typeof window.clarity !== 'function') return;
+            window.clarity('event', name);
+            if (Analytics.CLARITY_KEEP.includes(name)) window.clarity('upgrade', name);
+        },
+
         // Visible in devtools when debugging instrumentation.
         console(name, params) {
             if (Analytics.debug) console.log('[analytics]', name, params);
@@ -74,7 +87,21 @@ const Analytics = {
     },
 
     // Which sinks are live. Order is irrelevant; all are best-effort.
-    active: ['ga4', 'http', 'console'],
+    active: ['ga4', 'clarity', 'http', 'console'],
+
+    // Sessions Clarity should always keep: the paid funnel and the editor leak.
+    CLARITY_KEEP: ['pricing_getpro_picked', 'pro_lock_shown', 'pro_checkout_started', 'pro_checkout_failed', 'editor_abandoned'],
+
+    /**
+     * Label this visit's recording in Clarity (filters: hv, page, role). Values must be a few
+     * fixed words; never a calendar name or anything typed, since a calendar's path is its key.
+     */
+    tag(key, value) {
+        try {
+            if (!this.enabled || typeof window.clarity !== 'function') return;
+            window.clarity('set', key, String(value));
+        } catch (e) { /* observational only */ }
+    },
 
     COLLECTOR_URL: '/api/collect',
     debug: false,
@@ -192,9 +219,51 @@ const Analytics = {
     // Params attached to every event, so segmentation works without the call
     // sites having to remember to pass them.
     baseParams() {
-        return {
-            surface: window.__TEST__ ? 'test' : 'web',
-        };
+        const base = { surface: window.__TEST__ ? 'test' : 'web' };
+        // The native renderer (/beta, /nativecal) is on trial against Syncfusion: tag every
+        // event so its error rate and usage can be segmented.
+        if (/^\/(beta|nativecal)(\/|$)/.test(window.location.pathname)) base.renderer = 'native';
+        if (this._hv) base.hv = this._hv;
+        return base;
+    },
+
+    // ---- homepage experiment -------------------------------------------------
+    //
+    // One experiment at a time, to see which homepage leads more people to make and share a
+    // calendar. None is running now; the next test adds a letter below. A
+    // browser is put in a variant once and stays there, and every later event carries
+    // it as `hv` -- so a calendar made under variant B still reports hv=b when its owner
+    // comes back weeks later. That is what makes retention, not just clicks, comparable.
+    // ?hv=<letter> previews a variant without changing the stored one.
+    HOMEPAGE_VARIANTS: ['a'], // one homepage for now; add letters to run the next test
+    _hv: null,
+
+    homepageVariant() {
+        try {
+            if (this._hv) return this._hv;
+            const forced = new URLSearchParams(location.search).get('hv');
+            if (this.HOMEPAGE_VARIANTS.includes(forced)) return forced;
+            let v = null;
+            try { v = localStorage.getItem('pc_hv'); } catch (e) { /* storage blocked */ }
+            if (!this.HOMEPAGE_VARIANTS.includes(v)) {
+                v = this.HOMEPAGE_VARIANTS[Math.floor(Math.random() * this.HOMEPAGE_VARIANTS.length)];
+                try { localStorage.setItem('pc_hv', v); } catch (e) { /* in-memory for this visit */ }
+            }
+            this._hv = v;
+            this.tag('hv', v);
+            if (typeof window.gtag === 'function') window.gtag('set', 'user_properties', { homepage_variant: v });
+            return v;
+        } catch (err) {
+            return 'a';
+        }
+    },
+
+    // Read the stored variant on every page, so returning owners keep reporting it.
+    loadHomepageVariant() {
+        try {
+            const v = localStorage.getItem('pc_hv');
+            if (this.HOMEPAGE_VARIANTS.includes(v)) { this._hv = v; this.tag('hv', v); }
+        } catch (e) { /* storage blocked */ }
     },
 
     // ---- bucketing -----------------------------------------------------------
@@ -311,7 +380,9 @@ const Analytics = {
         this._firstEventSent = true;
         this.track('event_added', {
             ...(first ? { first_event_seconds: Math.round(performance.now() / 1000) } : {}),
-            source, // 'quick_add' | 'grid' | 'popup' | 'paste'
+            // Not 'source': GA4 reads an event param named source as the traffic source, which put
+            // ~6,600 sessions under 'Unassigned / grid'. How the event was made goes in add_via.
+            add_via: source, // 'quick_add' | 'grid' | 'popup' | 'paste'
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
         });
     },
@@ -319,6 +390,12 @@ const Analytics = {
     /** The event editor was closed without saving. */
     editorAbandoned() {
         this.track('editor_abandoned', {});
+    },
+
+    /** The calendar was printed (or saved as PDF from the print dialog): 'share_edit' from Share's Print button,
+     *  'browser_edit' / 'browser_view' from Ctrl+P or the browser menu. Measures whether printing is worth more work. */
+    printed(source) {
+        this.track('print', { source });
     },
 
     /** The calendar was shared or its link copied — precedes most multi-user use. */
@@ -335,11 +412,51 @@ const Analytics = {
      * this one answers "how many calendars exist", and the read-only-link flow
      * reuses the slug event names for something that is NOT a new calendar.
      */
+    /** The homepage pitch was shown, and which section of it scrolled into view. */
+    // The denominator for homepage conversion: one per visit, before anything else is read.
+    // `where` is new or returning (has calendars in this browser).
+    homepageViewed(kind) {
+        this.track('homepage_viewed', { where: kind });
+    },
+
+    tourSeen(section) {
+        this.track('tour_seen', { where: section });
+    },
+
     calendarCreated(named, calendar) {
         this.track('calendar_created', {
             named: !!named,
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
+            kind: this.calendarKind(calendar),
         });
+    },
+
+    /**
+     * What a calendar is for, from words in its title and event titles, so we learn which uses are
+     * common. Only the category leaves the browser, never the title or any event text.
+     */
+    CALENDAR_KINDS: [
+        ['guests', /\b(guest|visit|cabin|cottage|lake house|beach house|villa|airbnb|rental)/i],
+        ['space', /\b(room|rooftop|roof|space|hall|bookings?|reserv|studio|court|gym|lounge|common|garden|pool|bbq|grill|terrace|desk|parking|laundry)/i],
+        ['out', /\b(ooo|out of office|vacation|pto|wfh|leave|holiday|away|sick)/i],
+        ['shifts', /\b(shift|roster|rota|volunteer|on.?call|duty|coverage|schedule)/i],
+        ['sports', /\b(soccer|football|team|league|swim|tennis|hockey|baseball|basketball|rugby|cricket|volleyball|practice|game|tournament|match)/i],
+        ['family', /\b(family|kids?|mom|dad|custody|parent|baby|nanny|grandma|grandpa|pickup)/i],
+        ['school', /\b(school|class|course|tutor|homework|exam|college|student|lesson|semester)/i],
+        ['community', /\b(church|choir|mosque|temple|parish|ministry|community|club|meetup|association)/i],
+        ['care', /\b(care|caregiv|hospital|nurse|therapy|doctor|appointment|meds?)\b/i],
+        ['music', /\b(band|music|gig|concert|rehears|choir|recital|show)/i],
+        ['trip', /\b(trip|travel|wedding|itinerary|flight|reunion|party)/i],
+        ['work', /\b(work|office|meeting|project|sprint|release|deadline|client|team sync)/i],
+    ],
+    calendarKind(calendar) {
+        try {
+            const title = String(calendar?.title || '');
+            const events = (calendar?.events || []).slice(0, 40).map((e) => e.title || e.Subject || '').join(' ');
+            for (const [kind, rx] of this.CALENDAR_KINDS) if (rx.test(title)) return kind;
+            for (const [kind, rx] of this.CALENDAR_KINDS) if (rx.test(events)) return kind;
+            return 'other';
+        } catch (e) { return 'other'; }
     },
 
     /**
@@ -350,6 +467,50 @@ const Analytics = {
      * a dozen near-empty event names makes that harder to read, not easier.
      * Registering one custom dimension unlocks every feature at once.
      */
+    // ---- Pro funnel ------------------------------------------------------------
+    //
+    // Offer shown -> sign-in asked/sent -> checkout started (or failed, and why). `where`
+    // says which surface; no email, calendar name or key ever goes in here.
+    proLockShown(where) { this.track('pro_lock_shown', { where }); },
+    proSignInShown(where) { this.track('pro_signin_shown', { where }); },
+    proSignInSent(where) { this.track('pro_signin_sent', { where }); },
+    proCheckoutStarted(interval) { this.track('pro_checkout_started', { where: 'share_panel', interval: interval === 'month' ? 'month' : 'year' }); },
+    proCheckoutFailed(reason) { this.track('pro_checkout_failed', { where: 'share_panel', reason: String(reason).slice(0, 40) }); },
+    proEditorLinkMade(kind) { this.track('pro_editor_link', { where: kind === 'reset' ? 'reset' : 'create' }); },
+    proPortalOpened() { this.track('pro_portal_opened', { where: 'share_panel' }); },
+    // The "Lock this calendar" line on your own calendar after someone else changed it.
+    proUpsellShown() { this.track('pro_upsell_shown', { where: 'changed_since_visit' }); },
+    proUpsellClicked() { this.track('pro_upsell_clicked', { where: 'changed_since_visit' }); },
+    proUpsellDismissed() { this.track('pro_upsell_dismissed', { where: 'changed_since_visit' }); },
+    // The logo menu's Pro account section. The state only: never the email or a calendar.
+    accountMenuShown(state) { this.track('account_menu_shown', { state: state === 'signed_in' ? 'signed_in' : 'signed_out' }); },
+    accountSignInSent() { this.track('pro_signin_sent', { where: 'logo_menu' }); },
+    accountPortalOpened() { this.track('pro_portal_opened', { where: 'logo_menu' }); },
+    accountSignedOut() { this.track('account_signed_out', { where: 'logo_menu' }); },
+    // Pro stats and history (owner only), and the free calendar's teaser. Counts and surfaces only:
+    // never the calendar name, a version date, or anything about visitors.
+    proStatsViewed(where, days) { this.track('pro_stats_viewed', { where: String(where).slice(0, 20), days: [30, 90, 365].includes(days) ? days : 30 }); },
+    proHistoryViewed(where) { this.track('pro_history_viewed', { where: String(where).slice(0, 20) }); },
+    proVersionPreviewed(kind) { this.track('pro_version_previewed', { kind: kind === 'restore-point' ? 'restore-point' : 'daily' }); },
+    proVersionRestored(kind, unchanged) { this.track('pro_version_restored', { kind: kind === 'restore-point' ? 'restore-point' : 'daily', unchanged: !!unchanged }); },
+    proStatsTeaserShown() { this.track('pro_stats_teaser_shown', { where: 'stats_tab' }); },
+    proStatsTeaserClicked() { this.track('pro_stats_teaser_clicked', { where: 'stats_tab' }); },
+    // The 30-day trial: which Pro features trial users actually use. Fixed vocabularies only:
+    // never a calendar name, an email or an id. trial_feature_used fires once per feature per
+    // calendar per day (TrialUsage in components/Pro.js decides that).
+    // trial_surface, not surface: every event already carries surface ('web' | 'test', baseParams), which
+    // filters test traffic out; overriding it here would let test trials count as real ones.
+    trialStarted(surface) { this.track('trial_started', { trial_surface: ['share', 'stats', 'lock'].includes(surface) ? surface : 'share' }); },
+    // "Join the Pro beta" (billing not on yet): where it was joined from, as beta_surface for the same reason
+    // as trial_surface. Never the email or the calendar.
+    proBetaJoined(surface) { this.track('pro_beta_joined', { beta_surface: ['share', 'stats', 'lock', 'pricing'].includes(surface) ? surface : 'share' }); },
+    trialFeatureUsed(feature) {
+        if (['lock', 'editor_link', 'stats_pro', 'restore', 'history', 'settings'].includes(feature)) this.track('trial_feature_used', { feature });
+    },
+    trialConverted(interval) { this.track('trial_converted', { interval: interval === 'month' ? 'month' : 'year' }); },
+    trialLapsed(mode) { this.track('trial_lapsed', { mode: mode === 'open' ? 'open' : 'readonly' }); },
+    trialReminderClicked() { this.track('trial_reminder_clicked', {}); },
+
     featureUsed(feature, detail) {
         this.track('feature_used', {
             feature,               // 'notes' | 'colors' | 'settings' | 'event_type'
@@ -436,12 +597,7 @@ const Analytics = {
      * The write gate refused to empty a calendar, or the server rejected a save.
      */
     syncRefused(shape) {
-        this.track('sync_refused', {
-            before: shape?.before ?? 0,
-            removing: shape?.removing ?? 0,
-            code: shape?.code || 'intent_mismatch',
-            ...(shape?.message ? { message: String(shape.message).slice(0, 100) } : shape?.reason ? { reason: String(shape.reason).slice(0, 100) } : {})
-        });
+        this.track('sync_refused', { before: shape?.before ?? 0, removing: shape?.removing ?? 0 });
     },
 
     // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.
@@ -454,11 +610,17 @@ const Analytics = {
 // Silence analytics wherever the page itself is silenced, so the seam and the
 // GTM loader in index.html can never disagree.
 if (typeof window !== 'undefined') {
-    if (window.__TEST__ || window.location.search.includes('no-analytics')) {
+    // The staging copy (preview.pastecal.com) is silenced too.
+    if (window.__TEST__ || window.pcNoProdSideEffects || window.location.search.includes('no-analytics') || window.location.hostname === 'preview.pastecal.com') {
         Analytics.enabled = false;
     }
     if (window.location.search.includes('debug-analytics')) {
         Analytics.debug = true;
+    }
+    // Clarity's queue, the same stub its snippet defines: events and tags sent before GTM
+    // loads Clarity wait here, and Clarity drains them. Only where analytics is on.
+    if (Analytics.enabled && typeof window.clarity !== 'function') {
+        window.clarity = function () { (window.clarity.q = window.clarity.q || []).push(arguments); };
     }
 
     // Flush on page-hide. `visibilitychange` is the only event that fires reliably
@@ -473,6 +635,20 @@ if (typeof window !== 'undefined') {
         /* listener registration must never break page load */
     }
 
+    // Links say where they are with data-from ("home-plans") instead of ?from= in the address:
+    // the label is kept for this tab and read once by the page it leads to (pricing).
+    try {
+        document.addEventListener('click', (e) => {
+            const a = e.target && e.target.closest && e.target.closest('a[data-from]');
+            if (a) try { sessionStorage.setItem('pc_from', a.getAttribute('data-from')); } catch (err) { /* storage blocked */ }
+        }, true);
+    } catch (err) { /* never break page load */ }
+
+    Analytics.loadHomepageVariant();
+    // The page kind, never the path: a calendar's path is its edit key.
+    const path = window.location.pathname;
+    Analytics.tag('page', path === '/' ? 'home' : /^\/pricing/.test(path) ? 'pricing' : /^\/view\//.test(path) ? 'view'
+        : /^\/(beta|nativecal)(\/|$)/.test(path) ? 'beta' : 'calendar');
     window.Analytics = Analytics;
 
     // Real-user page speed, one `page_perf` event per page view, sent when the page is

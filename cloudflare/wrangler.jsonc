@@ -18,28 +18,57 @@
     "not_found_handling": "single-page-application",   // same as Firebase's "**" -> /index.html
     // Only these reach the Worker; everything else is served straight from the assets.
     "run_worker_first": [
-      "/cal/*",
-      "/api/*",
-      "/lookupCalendar",
-      "/createPublicLink",
-      "/*.ics",
-      "/view/*.ics",
-      "/beta",
-      "/beta/*",
-      "/nativecal/*"
+      // Every page path reaches the Worker: the homepage (it clears noindex there; a "/" rule in
+      // public/_headers matched locally but not on the live site, Oct 2026), /cal/*, /api/*,
+      // /lookupCalendar, /createPublicLink, the .ics feeds, /beta and /nativecal, and calendar pages
+      // (/<name>, /view/<id>), which get link-preview tags about their calendar, plus /og/* (their card
+      // image; src/preview). Calendar names never contain a dot, so static files stay with the assets:
+      // the exclusions below keep every file and asset folder off the Worker, as before.
+      "/*",
+      "!/img/*",
+      "!/vendor/*",
+      "!/components/*",
+      "!/services/*",
+      "!/models/*",
+      "!/utils/*",
+      "!/directives/*",
+      "!/js-old-components/*",
+      "!/pro/*",
+      "!/demo/*",
+      "!/dev/*",
+      "!/*.js",
+      "!/*.css",
+      "!/*.html",
+      "!/*.svg",
+      "!/*.ico",
+      "!/*.txt",
+      "!/*.webmanifest",
+      "!/*.map",
+      "!/*.woff2"
     ]
   },
+  // The preview renderer's fonts (src/vendor/fonts) are bundled as data (ArrayBuffer).
+  "rules": [{ "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }],
   "durable_objects": {
     "bindings": [
       { "name": "CALENDARS", "class_name": "CalendarRoom" },
-      { "name": "DIRECTORY", "class_name": "CalendarDirectory" }
+      { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
+      { "name": "WAITLIST", "class_name": "Waitlist" },
+      { "name": "ACCOUNTS", "class_name": "Accounts" }   // Pro owners, sessions, subscriptions (one global instance)
     ]
   },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
-  "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  // Telemetry (POST /api/collect): 60 batches a minute per IP. Its own limiter, not CREATE_LIMITER: 10 a
+  // minute would drop real telemetry from a school or office sharing one IP.
+  "ratelimits": [
+    { "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "COLLECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }
+  ],
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] }
+    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
+    { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
+    { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
   // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.
@@ -47,18 +76,80 @@
     "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
     "COPY_BACK": "*"
   },
-  "r2_buckets": [
-    {
-      "binding": "BACKUPS",
-      "bucket_name": "pastecal-backups"
-    }
-  ],
   // First-party event collector (POST /api/collect). Query with scripts/stats.sh ux.
+  // Backups: each calendar writes its own snapshot here after a change (CalendarRoom.backupToR2).
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups" }],
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events" }],
-  "triggers": {
-    "crons": ["0 * * * *"]
-  },
-  "observability": { "enabled": true }
+  // Sign-in links for Pro owners (Cloudflare Email Service). pastecal.com must be onboarded for sending.
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
+  "observability": { "enabled": true },
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
   // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
+  // Billing (Accounts.js; off with a 503 until all are set): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  // STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY; Pro Unlimited also STRIPE_PRICE_UNLIMITED_YEARLY,
+  // STRIPE_PRICE_UNLIMITED_MONTHLY (without them only its checkout answers 503). ACCOUNTS_DEV_MODE, STRIPE_API_BASE and
+  // LOCK_API_BASE are for local tests only (.dev.vars / --var); never set them here.
+
+  // STAGING: preview.pastecal.com, for friends trying Pro with Stripe TEST cards. Deploy with
+  // `wrangler deploy --env staging` (docs/pro-launch.md, "Staging"). Its own Worker name, so every
+  // Durable Object (calendars, directory, waitlist, accounts) is a separate, empty set from production.
+  // Bindings are NOT inherited by environments: every one is listed here on purpose, and
+  // test/unit/staging-config.test.js checks that this block can never reach production data.
+  "env": {
+    "staging": {
+      "name": "pastecal-staging",
+      "workers_dev": false,           // one address only: preview.pastecal.com
+      "preview_urls": false,
+      // A Custom Domain: on deploy, Wrangler creates the DNS record and certificate for this host in the
+      // pastecal.com zone (same account). It fails if a DNS record for the host already exists.
+      "routes": [{ "pattern": "preview.pastecal.com", "custom_domain": true }],
+      "assets": {
+        "directory": "../public",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        // Every path reaches the Worker, so robots.txt and X-Robots-Tag: noindex cover static pages too.
+        "run_worker_first": true
+      },
+      "durable_objects": {
+        "bindings": [
+          // The beta runs on the live site's calendars: these two are pastecal-sync's own Durable Objects,
+          // so every read and write is handled by the live server code; only the pages and this Worker's
+          // routing are the beta's. Accounts, the waitlist and Stripe (test mode) stay separate, and
+          // checkout is off here (BETA_REAL_DATA) so a test card can never lock a real calendar.
+          { "name": "CALENDARS", "class_name": "CalendarRoom", "script_name": "pastecal-sync" },
+          { "name": "DIRECTORY", "class_name": "CalendarDirectory", "script_name": "pastecal-sync" },
+          { "name": "WAITLIST", "class_name": "Waitlist" },
+          { "name": "ACCOUNTS", "class_name": "Accounts" }
+        ]
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
+        { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
+        { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
+        { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
+      ],
+      // Its own namespace, so staging traffic never spends production's per-IP budget.
+      "ratelimits": [
+        { "name": "CREATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "COLLECT_LIMITER", "namespace_id": "2002", "simple": { "limit": 60, "period": 60 } }
+      ],
+      "vars": {
+        "SITE_URL": "https://preview.pastecal.com",   // links in emails and Stripe redirects; the allowed Origin
+        "BILLING_TEST_MODE": "1",                     // Stripe TEST keys only, and only on preview.pastecal.com
+        "BETA_REAL_DATA": "1",                        // live calendars: Pro checkout refused here (Accounts.js checkout)
+        // Never Firebase: no copy-back and nowhere to write (and no FIREBASE_SA secret on staging).
+        "FIREBASE_DB_URL": "",
+        "COPY_BACK": ""
+        // ACCOUNTS_DEV_MODE stays OFF here: it opens the outbox and the admin test hooks.
+      },
+      "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups-staging" }],
+      "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events_staging" }],
+      // Same sender as production: pastecal.com is the onboarded sending domain (runbook b1-b3).
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
+      "observability": { "enabled": true }
+      // Secrets (wrangler secret put NAME --env staging): IMPORT_SECRET (its own), STRIPE_SECRET_KEY
+      // (sandbox sk_test_/rk_test_), STRIPE_WEBHOOK_SECRET (sandbox endpoint), STRIPE_PRICE_PRO_YEARLY,
+      // STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_UNLIMITED_YEARLY and STRIPE_PRICE_UNLIMITED_MONTHLY (sandbox prices). Never FIREBASE_SA.
+    }
+  }
 }

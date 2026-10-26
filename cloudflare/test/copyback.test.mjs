@@ -68,4 +68,36 @@ await fetch(`${BASE}/cal/${other}`, { method: 'POST', body: JSON.stringify({ tit
 await sleep(6000); assert.equal(fb.store.has(other), false); assert.equal(puts(other), 0);
 step('a calendar outside COPY_BACK is never written to Firebase');
 
+// 7. A Pro-locked calendar stops mirroring: Firebase is world-writable, so it gets no copy to edit.
+const lk = await (await fetch(`${BASE}/api/admin/cal/${id}/lock`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ ownerId: 'cb-owner', plan: 'pro' }) })).json();
+assert.ok(lk.editorKey, JSON.stringify(lk));
+await sleep(4000);
+const lockedPuts = puts(id);
+T.ws.send(JSON.stringify({ t: 'auth', key: lk.editorKey }));
+await waitFor(() => T.got.find((m) => m.t === 'auth' && m.ok));
+assert.equal((await T.save('l1', [{ type: 'add', event: ev('l1', 'while locked', 24) }])).t, 'ack');
+await sleep(6000);
+assert.equal(puts(id), lockedPuts); assert.ok(!fb.store.get(id).events.some((e) => e.title === 'while locked'));
+step('a locked calendar is not copied back to Firebase, even after an editor saves');
+
+// 8. Firebase is world-writable: someone empties its copy while the calendar is locked. Unlocking
+// must not replay that onto Cloudflare; Cloudflare's copy is written over Firebase's instead.
+const keep = await cfGet(id);
+fb.browserWrite(id, { ...structuredClone(fb.store.get(id)), title: 'vandalized', events: [] });
+r = await (await fetch(`${BASE}/cal/${id}/from-firebase`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify(fb.store.get(id)) })).json();
+assert.equal(r.error, 'locked');
+await fetch(`${BASE}/api/admin/cal/${id}/unlock`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}` }, body: '{}' });
+await waitFor(() => fb.store.get(id).title === keep.calendar.title && fb.store.get(id).events.length === keep.calendar.events.length);
+const after8 = await cfGet(id);
+assert.equal(after8.calendar.title, keep.calendar.title);
+assert.equal(titles(after8.calendar.events), titles(keep.calendar.events));
+assert.ok(after8.calendar.events.some((e) => e.title === 'while locked'));
+assert.equal(titles(fb.store.get(id).events), titles(after8.calendar.events));
+// And afterwards the two-way copy is normal again: a pc.com edit comes through.
+const cur8 = structuredClone(fb.store.get(id)); cur8.events.push(ev('p8', 'after unlock', 25)); fb.browserWrite(id, cur8);
+r = await (await fetch(`${BASE}/cal/${id}/from-firebase`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify(cur8) })).json();
+assert.equal(r.ok, true);
+assert.ok((await cfGet(id)).calendar.events.some((e) => e.title === 'after unlock'));
+step('Firebase edits made while locked (even emptying it) are not replayed on unlock; Cloudflare\'s copy is written over Firebase, then sync resumes');
+
 T.ws.close(); fb.close(); console.log(`\n${n} checks passed`); process.exit(0);

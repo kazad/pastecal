@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The template for pastecal.com/@handle and its "Nothing here" page: the Worker (cloudflare/src/Names.js)
+     fills #handle-main and the title. Opened directly, it says nothing is here. -->
+<title>pastecal</title>
+<link rel="icon" href="/favicon.ico">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<link rel="stylesheet" href="/site.css">
+<style>
+:root { --site-max: 640px }
+body { margin: 0; background: var(--pc-surface); color: var(--pc-text); font: var(--pc-fs-lg)/1.5 var(--pc-font); }
+main { box-sizing: border-box; max-width: var(--site-max); margin: 40px auto 0; padding: 0 16px; min-height: 50vh; }
+h1 { margin: 0; font-size: var(--pc-fs-3xl); line-height: 1.2; letter-spacing: -.01em; }
+.h-sub { margin: 4px 0 24px; color: var(--pc-text-muted); }
+.h-muted { color: var(--pc-text-muted); }
+.h-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.h-list a { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card);
+  background: var(--pc-bg); color: inherit; text-decoration: none; transition: border-color .15s; }
+.h-list a:hover { border-color: var(--pc-link); }
+.h-list a:focus-visible, .h-btn:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); }
+.h-title { font-weight: 600; overflow-wrap: anywhere; }
+.h-path { color: var(--pc-text-muted); font-size: var(--pc-fs-md); overflow-wrap: anywhere; }
+.h-btn { display: inline-flex; align-items: center; height: 40px; padding: 0 18px; border-radius: var(--pc-radius-pill); background: var(--pc-primary); color: var(--pc-on-primary); font-weight: var(--pc-fw-bold); text-decoration: none; }
+</style>
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+
+<main id="handle-main">
+  <h1>Nothing here</h1>
+  <p class="h-muted">There's no calendar at this address.</p>
+</main>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body>
+</html>

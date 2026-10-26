@@ -9,11 +9,11 @@
 //
 // Column layout (keep in sync with scripts/stats.sh ux; Analytics Engine columns are positional):
 //   index1 = event name
-//   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached
+//   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached | blob8 homepage variant
 //   double1 ttfb_ms | double2 fcp_ms | double3 lcp_ms | double4 load_ms | double5 cls | double6 first_event_seconds | double7 count
 
 export const MAX_BODY_BYTES = 16 * 1024;
-export const MAX_EVENTS = 50;
+export const MAX_EVENTS = 20;           // the page sends at most 12 at a time (analytics.js BATCH_SIZE)
 
 const NAME = /^[a-z0-9_]{1,40}$/;
 const str = (v, n = 60) => (v == null ? '' : String(v).slice(0, n));
@@ -37,8 +37,11 @@ export function toDataPoints(body, country = '') {
                 str(p.browser, 12),
                 str(p.device, 12),
                 str(country, 4),
-                str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
+                // detail; the trial_* events' one value each (feature, interval, mode, trial_surface) too,
+                // contact_submitted's type, subscribe_nudge's action and pro_beta_joined's beta_surface (last, so no earlier event's detail moves)
+                str(p.add_via ?? p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where ?? p.feature ?? p.interval ?? p.mode ?? p.trial_surface ?? p.type ?? p.action ?? p.beta_surface, 40),
                 str(p.cached, 4),
+                str(p.hv, 8),
             ],
             doubles: [num(p.ttfb_ms), num(p.fcp_ms), num(p.lcp_ms), num(p.load_ms), num(p.cls), num(p.first_event_seconds), 1],
         });
@@ -51,6 +54,12 @@ export async function handleCollect(request, env) {
     const done = new Response(null, { status: 204 });
     try {
         if (!env.EVENTS) return done;
+        // Per IP (COLLECT_LIMITER, wrangler.jsonc): a page sends one batch every ~10 s at most, so
+        // anything faster is not a person. Over the limit, the batch is dropped -- still a 204.
+        if (env.COLLECT_LIMITER) {
+            const { success } = await env.COLLECT_LIMITER.limit({ key: 'collect:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+            if (!success) return done;
+        }
         const text = await request.text();
         if (text.length > MAX_BODY_BYTES) return done;
         const points = toDataPoints(JSON.parse(text), request.cf?.country);

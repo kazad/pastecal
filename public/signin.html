@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The sign-in link carries its token in the #fragment. No analytics here, no referrer sent on,
+     and the fragment is cleared before anything else runs, so the token is never recorded.
+     Opening the link never signs anyone in by itself: the page asks /api/auth/peek which email the
+     link is for, and only a click on Continue uses it (/api/auth/verify). Someone else's link, sent
+     to you, cannot quietly sign you in to their account, and link scanners don't use it up. -->
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Sign in · pastecal</title>
+<meta name="description" content="Sign in to manage your pastecal calendars.">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/signin">
+<meta property="og:title" content="Sign in · pastecal">
+<meta property="og:description" content="Sign in to manage your pastecal calendars.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<script>
+  var signinToken = (location.hash.match(/[#&]t=([A-Za-z0-9_-]+)/) || [])[1] || null;
+  if (location.hash) history.replaceState(null, '', location.pathname);
+</script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<style>
+:root { --bg: var(--pc-canvas); --surface: var(--pc-raised); --ink: var(--pc-text); --muted: var(--pc-text-muted); --line: var(--pc-line); --blue: var(--pc-primary); --bad: var(--pc-danger); --ui: var(--pc-font); }   /* tokens.css */
+body { margin: 0; background: var(--bg); color: var(--ink); font: var(--pc-fs-lg)/1.5 var(--ui); }
+main { max-width: 420px; margin: 8vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); }
+h1 { font-size: var(--pc-fs-2xl); margin: 0 0 8px; }
+p { margin: 8px 0; color: var(--muted); }
+p.bad { color: var(--bad); }
+.pc-btn { margin-top: 16px }
+.who { color: var(--ink); font-weight: 600; word-break: break-all; }
+[hidden] { display: none !important; }
+@media (max-width: 480px) { main { margin: 24px 16px; } }
+</style>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+
+<main>
+  <h1 id="title">Sign in</h1>
+  <p id="msg">One moment.</p>
+  <button class="pc-btn pc-btn--primary pc-btn--lg" id="confirm" type="button" hidden>Continue</button>
+  <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/" hidden>Continue</a>
+</main>
+<script>
+(function () {
+  var title = document.getElementById('title'), msg = document.getElementById('msg'), go = document.getElementById('go'), confirm = document.getElementById('confirm');
+  function fail(text) { title.textContent = 'That link didn’t work'; msg.textContent = text; msg.className = 'bad'; confirm.hidden = true; go.textContent = 'Back to pastecal'; go.hidden = false; }
+  // This browser's pastecal id (services/AuthorSignal.js), if it has one: a trial link's verify starts the
+  // trial only for an editor of record of that calendar.
+  function browserId() { try { return localStorage.getItem('pastecal_browser_id') || ''; } catch (e) { return ''; } }
+  function post(path) {
+    return fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: signinToken, author: browserId() }) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+  }
+  var offline = function () { fail('We couldn’t reach pastecal. Check your connection and open the link again.'); };
+  if (!signinToken) return fail('This page needs the link from your sign-in email. Open the email and tap the link again.');
+  post('/api/auth/peek').then(function (res) {
+    if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
+    var who = document.createElement('span'); who.className = 'who'; who.textContent = res.d.email;
+    who.setAttribute('data-hj-suppress', ''); who.setAttribute('data-clarity-mask', 'true');
+    // A link from "Start 30-day free trial" (or the reminder's Keep, or checkout) says what Continue does next.
+    var after = { trial: ' and start your free 30-day Plus trial', keep: ' and keep Plus', buy: ' and finish upgrading' }[res.d.kind] || '';
+    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, after + '?');
+    if (res.d.kind === 'trial') confirm.textContent = 'Start my trial';
+    confirm.hidden = false; confirm.focus();
+  }).catch(offline);
+  confirm.addEventListener('click', function () {
+    confirm.disabled = true; confirm.textContent = 'Signing in…';
+    post('/api/auth/verify').then(function (res) {
+      if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
+      confirm.hidden = true;
+      try { document.cookie = 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax'; } catch (e) { /* the header's Account link waits */ }
+      title.textContent = 'You’re signed in';
+      msg.textContent = 'You’re signed in.';
+      go.href = res.d.next || '/';
+      go.hidden = false;
+      if (res.d.next) {
+        try { sessionStorage.setItem('pastecal_signed_in_to', res.d.next); } catch (e) { /* storage blocked: Share opens by hand */ }
+        location.replace(res.d.next);
+      }
+    }).catch(offline);
+  });
+})();
+</script>
+<script src="/utils/preview.js"></script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body>
+</html>

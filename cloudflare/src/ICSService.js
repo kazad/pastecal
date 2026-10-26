@@ -11,12 +11,33 @@ export const ICSService = {
     // Line breaks are normalized to LF before escaping. A CR (bare, or the first half of a
     // pasted CRLF) would otherwise reach the feed raw, and a CR inside a content line ends
     // it early for strict parsers, truncating the text and garbling the next property.
+    // Other control characters (C0 except tab, and DEL) have no place in a text value and are
+    // dropped.
     escapeText(text) {
         return String(text ?? '').replace(/\r\n?/g, '\n')
+            .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
             .replace(/\\/g, '\\\\')
             .replace(/;/g, '\\;')
             .replace(/,/g, '\\,')
             .replace(/\n/g, '\\n');
+    },
+
+    // A UID is written raw, so anything that could end the line or break the value (controls,
+    // whitespace, non-ASCII, and the TEXT specials \ ; ,) is percent-encoded, as is % itself so
+    // the encoding stays unambiguous. Deterministic, so an override's UID still equals its
+    // series' UID; every id real calendars hold (uuids, numbers) passes through unchanged, so
+    // subscribers never see a changed UID.
+    safeUid(value) {
+        return String(value ?? '').replace(/[^\x21-\x7e]|[\\;,%]/gu, (ch) =>
+            Array.from(new TextEncoder().encode(ch), (b) => '%' + b.toString(16).toUpperCase().padStart(2, '0')).join(''));
+    },
+
+    // RFC 5545 3.3.10. A stored rule is only emitted if it is made of the characters a recurrence
+    // rule can contain; anything else (a CR/LF, a quote, a stray property) means the rule is
+    // dropped and the event is published once, rather than letting the value reach the feed.
+    safeRule(rule) {
+        const r = String(rule ?? '').trim();
+        return /^[A-Z0-9=;,:+\-]+$/.test(r) ? r : null;
     },
 
     // RFC 5545 3.1: content lines longer than 75 octets are folded with CRLF + a space.
@@ -189,7 +210,7 @@ export const ICSService = {
         return assigned;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots, occurrence) {
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '') {
         if (occurrence === undefined && event.recurrenceID) {
             const stamp = this.occurrenceOriginal(event);
             const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
@@ -197,6 +218,7 @@ export const ICSService = {
             occurrence = slot ? { slot, allDay: shape.allDay } : null;
         }
         const isOccurrence = !!event.recurrenceID && !!occurrence;
+        const rule = event.recurrencerule && !event.recurrenceID ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), !!event.isAllDay)) : null;
 
         const allDay = !!event.isAllDay;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
@@ -215,18 +237,22 @@ export const ICSService = {
 
         const eventLines = [
             'BEGIN:VEVENT',
-            `UID:${uid}`,
+            `UID:${this.safeUid(uid)}`,
             `DTSTAMP:${dtstamp}`,
             `DTSTART${dateParam}:${start}`,
             `DTEND${dateParam}:${end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
-            `DESCRIPTION:${this.escapeText(event.description)}`
+            // The calendar's VIEW link (never the edit link: a calendar app shows notes to anyone who sees
+            // the event): the bare link on the notes' last line (Google shows only notes), and URL: (Apple's
+            // own link field). Quiet, but every follower can find the calendar, and make their own.
+            `DESCRIPTION:${this.escapeText([event.description || '', viewUrl].filter(Boolean).join('\n\n'))}`
         ];
+        if (viewUrl) eventLines.push(`URL:${viewUrl}`);
 
         if (isOccurrence) {
             eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : ''}:${occurrence.slot}`);
-        } else if (event.recurrencerule && !event.recurrenceID) {
-            eventLines.push(`RRULE:${this.seriesRule(event.recurrencerule, allDay)}`);
+        } else if (rule) {
+            eventLines.push(`RRULE:${rule}`);
 
             const shape = this.seriesShape(event);
             const exdates = [...new Set(this.exceptionDates(event)
@@ -239,7 +265,8 @@ export const ICSService = {
         return eventLines.map(line => this.foldLine(line)).join('\r\n');
     },
 
-    generateICS(calendarData, id) {
+    // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock).
+    generateICS(calendarData, id, opts = {}) {
         const raw = calendarData?.events;
         const allEvents = Array.isArray(raw)
             ? raw
@@ -257,14 +284,14 @@ export const ICSService = {
 
         const events = renderable.map(event => this.createEventBlock(event, dtstamp,
             event.recurrenceID ? null : overridden.get(event.id),
-            event.recurrenceID ? (occurrences.get(event) || null) : undefined));
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || ''));
 
         const name = this.escapeText(calendarData?.title || id);
 
         const header = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
-            `PRODID:-//PasteCal//${id}//EN`,
+            `PRODID:-//PasteCal//${this.escapeText(id)}//EN`,
             'CALSCALE:GREGORIAN',
             'METHOD:PUBLISH',
             `X-WR-CALNAME:${name}`,

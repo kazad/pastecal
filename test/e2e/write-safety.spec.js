@@ -21,7 +21,7 @@ async function freshCalendar(page) {
   await page.goto('/');
   const slug = `test-safety-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await page.locator('input[placeholder="your-name"]').fill(slug);
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
   await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
   return slug;
@@ -52,7 +52,7 @@ const serverTitles = (page) => page.evaluate(`(async () => {
 test('the gate refuses a write that would empty a calendar with no delete action', async ({ page }) => {
   await freshCalendar(page);
   await seed(page, ['A', 'B', 'C']);
-  await expect.poll(() => serverTitles(page)).toEqual(['A', 'B', 'C', 'Sample event']);
+  await expect.poll(() => serverTitles(page)).toEqual(['A', 'B', 'C', 'Your event here']);
 
   // Wait for the subscription to deliver our own write back, so _lastSeen is the
   // 4-event state and the gate has a baseline to compare against.
@@ -72,7 +72,7 @@ test('the gate refuses a write that would empty a calendar with no delete action
   await expect.poll(() => page.evaluate(`window.__refused`), { timeout: 5_000 }).not.toBeNull();
   expect(await page.evaluate(`window.__refused.before`)).toBe(4);
   await page.waitForTimeout(1_000);
-  expect(await serverTitles(page)).toEqual(['A', 'B', 'C', 'Sample event']);
+  expect(await serverTitles(page)).toEqual(['A', 'B', 'C', 'Your event here']);
 
   // And the screen is put back on its own: a refusal that left the user looking at an
   // emptied calendar until they thought to reload would be its own kind of data loss.
@@ -82,7 +82,7 @@ test('the gate refuses a write that would empty a calendar with no delete action
 test('a smaller loss is refused too: the gate is not limited to full wipes', async ({ page }) => {
   await freshCalendar(page);
   await seed(page, ['A']);   // + Sample event = 2
-  await expect.poll(() => serverTitles(page)).toEqual(['A', 'Sample event']);
+  await expect.poll(() => serverTitles(page)).toEqual(['A', 'Your event here']);
   await page.waitForFunction(`(CalendarDataService._lastSeen[${VM}.calendar.id] || []).length === 2`, null, { timeout: 10_000 });
 
   await page.evaluate(`(() => { window.__refused = null; CalendarDataService.onSyncRefused = (x) => { window.__refused = x; }; })()`);
@@ -90,7 +90,7 @@ test('a smaller loss is refused too: the gate is not limited to full wipes', asy
 
   await expect.poll(() => page.evaluate(`window.__refused`), { timeout: 5_000 }).not.toBeNull();
   await page.waitForTimeout(1_000);
-  expect(await serverTitles(page)).toEqual(['A', 'Sample event']);
+  expect(await serverTitles(page)).toEqual(['A', 'Your event here']);
 });
 
 test('a delete still in flight does not license a wipe behind it', async ({ page }) => {
@@ -114,11 +114,11 @@ test('a delete still in flight does not license a wipe behind it', async ({ page
 test('deleting events one at a time down to zero is not refused', async ({ page }) => {
   await freshCalendar(page);
   await seed(page, ['A', 'B', 'C']);
-  await expect.poll(() => serverTitles(page)).toEqual(['A', 'B', 'C', 'Sample event']);
+  await expect.poll(() => serverTitles(page)).toEqual(['A', 'B', 'C', 'Your event here']);
   await page.waitForFunction(`(CalendarDataService._lastSeen[${VM}.calendar.id] || []).length === 4`, null, { timeout: 10_000 });
 
   // Through the scheduler, which is the path that declares intent.
-  for (const t of ['A', 'B', 'C', 'Sample event']) {
+  for (const t of ['A', 'B', 'C', 'Your event here']) {
     await page.evaluate(`(() => { const s = window.scheduleObj; s.deleteEvent(s.eventsData.find(e => e.Subject === ${JSON.stringify(t)})); })()`);
     await page.waitForTimeout(700);
   }

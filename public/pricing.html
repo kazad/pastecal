@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing · pastecal</title>
+<meta name="description" content="pastecal is free to use. Plus upgrades one calendar for $29 a year: its name is reserved for you and you choose who edits. Pro is $96 a year for 5 upgraded calendars with short names and unlimited under your own name. Teams ($490 a year) is in development.">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/pricing">
+<meta property="og:title" content="Pricing · pastecal">
+<meta property="og:description" content="pastecal is free to use. Plus upgrades one calendar for $29 a year: its name is reserved for you and you choose who edits. Pro is $96 a year for 5 upgraded calendars with short names and unlimited under your own name. Teams ($490 a year) is in development.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<script>document.documentElement.setAttribute('data-billing', 'pending')</script>
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<style>
+/* Layout: a centered hero, four plan cards (Plus, plan id 'pro', is the one on sale, so it
+   carries the emphasis; Pro, plan id 'unlimited', and Teams are not yet), the Get Plus picker, one compare table,
+   a short in-development list, then the waitlist and questions. */
+:root {
+  /* This page's names, on the design tokens (tokens.css): the app's colors in both themes. */
+  --bg: var(--pc-canvas); --surface: var(--pc-raised); --ink: var(--pc-text); --muted: var(--pc-text-muted); --line: var(--pc-line);
+  --blue: var(--pc-primary); --blue-ink: var(--pc-on-primary); --blue-soft: color-mix(in srgb, var(--pc-primary) 8%, var(--pc-bg));
+  --ok: var(--pc-success); --soon: var(--pc-warning); --soon-bg: var(--pc-warning-soft);
+  --ui: var(--pc-font);
+}
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: var(--pc-fs-lg)/1.55 var(--ui); margin: 0 }
+.col { max-width: var(--pc-page-max); margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px 64px }
+h2 { font-size: var(--pc-fs-section); letter-spacing: -.01em; margin: 64px 0 14px; text-wrap: balance }
+
+.hero { text-align: center; padding: 40px 0 0 }
+.hero h1 { margin: 0 auto; max-width: 32ch; font-size: var(--pc-fs-hero); line-height: 1.07; letter-spacing: -.02em; text-wrap: balance }
+.hero h1 mark { background: none; color: inherit }
+.lead { margin: 16px auto 0; max-width: 56ch; color: var(--muted); font-size: var(--pc-fs-xl); text-wrap: balance }
+
+.plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 40px; align-items: stretch }
+.plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 24px 20px 20px; display: flex; flex-direction: column }
+.plan.pro { border: 2px solid var(--blue) }
+.badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); border-radius: var(--pc-radius-pill); padding: 3px 10px }
+.badge.new { background: color-mix(in srgb, var(--ok) 14%, var(--surface)); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent) }
+.plans-pick { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 12px }
+.plans-pick[hidden] { display: none }
+.unl-buy { margin-top: 20px }
+.unl-buy p { color: var(--muted); margin: 0 0 12px; max-width: 64ch }
+.unl-buy .cta { display: inline-flex }
+.explain { max-width: 760px; color: var(--muted); line-height: 1.6; margin: 4px 0 18px }
+.explain b { color: var(--ink) }
+.plan .size { margin: 2px 0 6px; font-size: var(--pc-fs-md); line-height: 1.45 }
+.badge.dev { background: var(--soon-bg); color: var(--soon) }
+.plan h3 { margin: 0; font-size: var(--pc-fs-xl) }
+.who { color: var(--muted); font-size: var(--pc-fs-md); margin: 4px 0 0; min-height: 2.9em }
+.price { margin: 14px 0 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap }
+.price strong { font-size: var(--pc-fs-4xl); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums }
+.price span { color: var(--muted); font-size: var(--pc-fs-md) }
+.per { color: var(--muted); font-size: var(--pc-fs-sm); margin: 4px 0 0; min-height: 2.8em }
+.plan ul { list-style: none; padding: 0; margin: 16px 0 20px; display: grid; gap: 8px; font-size: var(--pc-fs-md); flex: 1; align-content: start }
+.plan li { position: relative; padding-left: 22px; text-wrap: pretty }
+.plan .size, .plan .who, .plan .per { text-wrap: pretty }
+.plan li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: var(--pc-fw-bold) }
+.plan ul:has(+ .coming) { flex: 0 0 auto; margin-bottom: 4px }
+.plan .coming { flex: 1 1 auto; margin: 10px 0 0; color: var(--muted); font-size: var(--pc-fs-sm); line-height: 1.45 }
+.plan code, td code { font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font-mono); background: var(--bg); padding: 1px 5px; border-radius: var(--pc-radius-sm); white-space: nowrap }
+.cta { display: flex; align-items: center; justify-content: center; text-align: center; border-radius: var(--pc-radius-pill); min-height: var(--pc-h-lg); padding: 0 18px; font: var(--pc-fw-bold) var(--pc-fs-lg)/1.2 var(--ui); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer }
+.cta.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
+.cta:hover { filter: brightness(1.06) }
+
+.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 4px 24px 22px; scroll-margin-top: 16px }
+.howto h2 { margin: 20px 0 8px }
+.howto-sub { color: var(--muted); margin: 0 0 14px; max-width: 64ch }
+.intervals { display: flex; flex-wrap: wrap; gap: 10px }
+.intervals[hidden] { display: none }
+.interval { position: relative; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--pc-radius-pill); padding: 9px 16px; cursor: pointer; font-weight: 400 }
+.interval.on { border-color: var(--blue); background: var(--blue-soft) }
+.interval input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none }
+.interval:has(input:focus-visible) { outline: 2px solid var(--blue); outline-offset: 2px }
+.interval em { font-style: normal; font-size: var(--pc-fs-xs); font-weight: 700; color: var(--ok) }
+.pick-h { font-size: var(--pc-fs-md); color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
+.pick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 8px 8px 8px 14px; min-width: 0 }
+.pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
+.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: var(--pc-fs-sm); overflow: hidden; text-overflow: ellipsis }
+.pick-list .cta { flex: none; min-height: 38px; padding: 0 14px }
+.pick-tag { display: inline-block; margin-left: 8px; font-size: var(--pc-fs-xs); font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: var(--pc-radius-pill); padding: 1px 8px; vertical-align: 1px }
+.pick-paste { display: flex; flex-direction: column; margin-top: 20px; gap: 6px }
+.pick-row { display: flex; gap: 8px }
+.pick-row input { flex: 1 1 auto; min-width: 0; height: var(--pc-h-lg); border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: var(--pc-fs-lg) }
+.pick-row .cta { flex: none }
+.pick-err { color: var(--soon); font-size: var(--pc-fs-md); margin: 0; min-height: 0 }
+.pick-err:empty, .pick-found:empty { display: none }
+.pick-found { color: var(--ok); font-size: var(--pc-fs-md); font-weight: 600; margin: 0 }
+.pick-new { color: var(--muted); font-size: var(--pc-fs-lg); margin: 16px 0 0 }
+.pick-new a { color: var(--blue); font-weight: 600 }
+
+.gridwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card) }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: var(--pc-fs-md) }
+th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top }
+thead th { font-size: var(--pc-fs-md); background: var(--surface) }
+thead th:not(:first-child), td:not(:first-child) { text-align: center; width: 15% }
+thead th.pro, td.pro { background: var(--blue-soft) }
+tr.group td { background: var(--bg); font-size: var(--pc-fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: var(--pc-fw-bold) }
+tbody tr:last-child td { border-bottom: 0 }
+.y { color: var(--ok); font-weight: var(--pc-fw-bold) }
+.n { color: var(--muted) }
+td small { display: block; color: var(--muted); font-size: var(--pc-fs-sm); font-weight: 400 }
+.beta-tag { display: inline-block; font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-bold); letter-spacing: .02em; color: var(--blue); background: var(--blue-soft); border-radius: var(--pc-radius-pill); padding: 0 7px; margin-left: 6px; vertical-align: 2px; white-space: nowrap }   /* = .pc-pill--beta */
+.plan-name { display: flex; align-items: baseline; gap: 2px; line-height: 1.55 }
+.plan-name .beta-tag { margin-left: 8px; vertical-align: 0; line-height: 1.5 }
+/* Billing: set from GET /api/pro/config. Until it answers, the Plus button and Get Plus wait unseen;
+   off (Plus can't be bought yet), the button joins the beta list and Get Plus is gone. */
+html[data-billing="pending"] .plan.pro .cta, html[data-billing="pending"] #unlCta, html[data-billing="pending"] #get-pro { visibility: hidden }
+html[data-billing="off"] #get-pro { display: none }
+html:not([data-billing="off"]) .if-billing-off, html:not([data-billing="on"]) .if-billing-on { display: none }
+.swipe { display: none; font-size: var(--pc-fs-md); color: var(--muted); margin: -6px 0 10px }
+.legend { font-size: var(--pc-fs-sm); color: var(--muted); margin: 10px 0 0 }
+.mark { margin-left: 6px; color: var(--muted); font-weight: var(--pc-fw-bold) }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+.beta-line { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: var(--pc-fs-md) }
+/* The full comparison: closed by default, opens in place (and on #compare). */
+.compare { margin-top: 48px; scroll-margin-top: 16px }
+.compare > summary { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); color: var(--ink); border-radius: var(--pc-radius-sm) }
+.compare > summary::-webkit-details-marker { display: none }
+.compare > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-3px); transition: transform .15s }
+.compare[open] > summary::after { transform: rotate(-135deg) translateY(-1px) }
+.compare > summary:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.compare[open] > summary { margin-bottom: 12px }
+
+
+.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative; scroll-margin-top: 16px }
+.wait h2 { margin: 0 0 6px }
+.wait p { margin: 0; color: var(--muted) }
+form { display: flex; flex-direction: column; gap: 14px }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+label { font-size: var(--pc-fs-md); font-weight: 600 }
+.opt { font-weight: 400; color: var(--muted) }
+input[type=email], select, textarea { width: 100%; height: var(--pc-h-lg); border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: var(--pc-fs-lg) }
+textarea { height: auto; min-height: 84px; padding: 11px 14px; resize: vertical; line-height: 1.45 }
+select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-position: right 12px center; background-size: 16px 16px; background-repeat: no-repeat }   /* the chevron select.pc-field uses */
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue) }
+.formrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
+#waitBtn { min-height: 48px; font-size: var(--pc-fs-lg) }
+.wait-ideas { margin-top: 12px !important; font-size: var(--pc-fs-lg) }
+.done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
+
+.faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
+details { border-bottom: 1px solid var(--line); padding-block: 12px }
+summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px }
+summary::-webkit-details-marker { display: none }
+summary::after { content: ""; flex: none; width: 8px; height: 8px; margin: 7px 4px 0 0; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform var(--pc-dur) var(--pc-ease) }
+details[open] summary::after { transform: rotate(-135deg); margin-top: 11px }
+details p { color: var(--muted); margin: 8px 0 0 }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }
+
+@media (max-width: 980px) {
+  .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px }
+  }
+@media (max-width: 860px) {
+  .faq, .wait { grid-template-columns: minmax(0, 1fr) }
+  .wait { gap: 20px; padding: 22px }
+}
+@media (max-width: 640px) {
+  .plans { grid-template-columns: minmax(0, 1fr) }
+  .plan.pro { order: -1 }
+  .who, .per { min-height: 0 }
+  .hero { padding-top: 24px }
+  .howto { padding: 4px 16px 18px }
+  /* The compare table scrolls inside its own box; the feature column stays put so each row keeps its name. */
+  table { min-width: 620px; font-size: var(--pc-fs-md) }
+  th, td { padding: 10px 10px }
+  thead th:first-child, tbody td:first-child:not([colspan]) { position: sticky; left: 0; z-index: 1; background: var(--surface); width: 168px; min-width: 168px; box-shadow: 1px 0 0 var(--line) }
+  tr.group td span { position: sticky; left: 10px; display: inline-block }
+  .swipe { display: block }
+}
+</style>
+<!-- Analytics, as on the calendar pages (index.html): GA4 and Clarity through GTM. Off in tests,
+     with ?no-analytics, and on preview.pastecal.com. Google gets /pricing and campaign params
+     only, and a referrer from pastecal itself becomes the bare origin, because a calendar's
+     path is its edit key. Calendar names and the paste box are masked in recordings. -->
+    <!-- Europe (EU/EEA/UK/CH and nearby): no third-party trackers, so no cookie banner is needed. Read from the
+         browser's time zone because most pages are served without the Worker; it errs toward not tracking.
+         First-party cookieless analytics (/api/collect) and calendar stats still count everyone. -->
+    <script>
+        window.pcInEurope = (function () {
+            try { return /^(Europe\/|Atlantic\/(Canary|Madeira|Azores|Reykjavik|Faroe)|Africa\/Ceuta|Arctic\/)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
+            catch (e) { return false; }
+        })();
+    </script>
+<script>
+(function (w, d) {
+  if (w.__TEST__ || w.pcInEurope || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com') return;
+  w.dataLayer = w.dataLayer || [];
+  w.gtag = w.gtag || function () { w.dataLayer.push(arguments); };
+  var q = new URLSearchParams(location.search), keep = new URLSearchParams();
+  q.forEach(function (v, k) { if (/^utm_[a-z]+$|^gclid$/.test(k)) keep.set(k, v); });
+  var ref = d.referrer;
+  try { if (ref && new URL(ref).host === location.host) ref = location.origin + '/'; } catch (e) { ref = ''; }
+  w.gtag('set', { page_location: location.origin + '/pricing' + (keep.toString() ? '?' + keep : ''), page_path: '/pricing', page_referrer: ref });
+  w.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+  var add = function (src) { var s = d.createElement('script'); s.async = true; s.src = src; d.head.appendChild(s); };
+  add('https://www.googletagmanager.com/gtm.js?id=GTM-WTP9VTM');
+  // gtag.js for the custom events (utils/analytics.js); GTM already sends the page view.
+  add('https://www.googletagmanager.com/gtag/js?id=G-4J99GY9KE6');
+  w.gtag('js', new Date());
+  w.gtag('config', 'G-4J99GY9KE6', { send_page_view: false });
+})(window, document);
+</script>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+
+<div class="col">
+  <section class="hero">
+    <h1>Free for everyone who uses&nbsp;it. <mark>Upgrade</mark> when it&rsquo;s yours to&nbsp;run.</h1>
+    <p class="lead">Share a calendar with a link. Nobody signs up and nobody pays per person. Upgrades are for the person who keeps the calendar running.</p>
+  </section>
+
+  <div class="plans">
+    <div class="plan">
+      <h3>Free</h3>
+      <p class="who">Trips, families and small groups.</p>
+      <div class="price"><strong>$0</strong></div>
+      <p class="per">No account, no card.</p>
+      <ul>
+        <li>Unlimited calendars</li>
+        <li>Unlimited people, no login required</li>
+        <li>Edit, view-only, calendar app and embed links</li>
+        <li>Undo and daily backups</li>
+        <li>Basic stats: views this week, followers</li>
+      </ul>
+      <a class="cta" href="/" data-plan="free">Make a calendar</a>
+    </div>
+
+    <div class="plan pro">
+      <span class="badge">Beta</span>
+      <h3>Plus</h3>
+      <p class="size"><b>1 upgraded calendar</b></p>
+      <p class="who">For the one calendar you run: a team, a class, a shift schedule.</p>
+      <div class="price"><strong>$29</strong><span>per year</span></div>
+      <p class="per">That's about $2.42 a month.</p>
+      <ul>
+        <li>Everything in Free</li>
+        <li>Its name is reserved for you</li>
+        <li>You choose who edits, with editor links you share</li>
+        <li>Full stats: views and visitors by day, followers, places</li>
+        <li>Full history, and restore any version</li>
+        <li>Just a small “Made with pastecal” line</li>
+      </ul>
+      <p class="coming">Coming: subcalendars, secret events, suggested events, your logo and theme.</p>
+      <a id="proCta" class="cta primary" href="#get-pro" data-plan="pro">Get Plus</a>
+    </div>
+
+    <div class="plan">
+      <span class="badge">Beta</span>
+      <h3>Pro</h3>
+      <p class="size"><b>5 upgraded calendars</b>, plus unlimited under your @name</p>
+      <p class="who">For everyone who runs more than one calendar.</p>
+      <div class="price"><strong>$96</strong><span>per year</span></div>
+      <p class="per">That's $8 a month, billed yearly. Or $10 month to month.</p>
+      <ul>
+        <li>Everything in Plus, on every calendar</li>
+        <li>Short view-only links like pastecal.com/soccer, and unlimited like pastecal.com/@you/soccer</li>
+        <li>Point each short link at any of your calendars</li>
+        <li>One subscription</li>
+      </ul>
+      <p class="coming">Coming: co-owners.</p>
+      <a id="unlCta" class="cta primary" href="#get-pro" data-plan="unlimited">Get Pro</a>
+    </div>
+
+    <div class="plan">
+      <span class="badge dev">In development</span>
+      <h3>Teams</h3>
+      <p class="who">Clubs, schools, buildings and offices.</p>
+      <div class="price"><strong>$490</strong><span>per year</span></div>
+      <p class="per">Or $49 a month, for the whole group.</p>
+      <ul>
+        <li>Everything in Pro</li>
+        <li>25 short names</li>
+        <li>Up to 10 admins</li>
+        <li>Your logo</li>
+        <li>No pastecal branding</li>
+        <li>A year of who changed what</li>
+        <li>Invoices in your organization's name</li>
+      </ul>
+      <a class="cta" href="#waitlist" data-plan="teams" data-wait="teams">Join the waitlist</a>
+    </div>
+  </div>
+
+  <p class="beta-line" data-testid="beta-line">Plus and Pro are in beta. Early members keep their price.</p>
+
+  <section class="howto" id="get-pro" aria-labelledby="getProH">
+    <h2 id="getProH">Get Plus</h2>
+    <p class="howto-sub" id="howtoSub">Plus upgrades one calendar. Pick it and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
+    <div class="plans-pick" role="radiogroup" aria-label="Plan">
+      <label class="interval on"><input type="radio" name="tier" value="single" checked><span><b>Plus</b>, one calendar</span></label>
+      <label class="interval"><input type="radio" name="tier" value="unlimited"><span><b>Pro</b>, 5 upgraded calendars plus unlimited under your @name</span></label>
+    </div>
+    <div class="intervals" id="singleInterval"><p class="interval-one"><b>$29 a year</b>, per calendar</p></div>
+    <div class="intervals" id="unlIntervals" role="radiogroup" aria-label="Billing" hidden>
+      <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$96 a year</b> <em>Save 20%</em></span></label>
+      <label class="interval"><input type="radio" name="interval" value="month"><span><b>$10 a month</b></span></label>
+    </div>
+    <div class="unl-buy" id="unlBuy" hidden>
+      <p>After paying, claim your @name on your account page, then open any calendar you run and upgrade it from its <b>Plus</b> tab. One click, no new checkout. Already on Plus? Those calendars move to Pro, and Stripe credits their unused time.</p>
+      <button type="button" class="cta primary" id="unlGo">Continue to payment</button>
+      <p class="pick-err" id="unlErr" role="alert"></p>
+    </div>
+    <div id="pickCals" hidden data-clarity-mask="true" data-hj-suppress>
+      <h3 class="pick-h">Your calendars on this device</h3>
+      <ul class="pick-list" id="pickList"></ul>
+    </div>
+    <form class="pick-paste" id="pasteForm" novalidate data-clarity-mask="true" data-hj-suppress>
+      <label for="calLink" id="pasteLabel">Paste your calendar's link</label>
+      <div class="pick-row">
+        <input id="calLink" type="url" inputmode="url" autocomplete="off" placeholder="pastecal.com/your-calendar">
+        <button type="submit" class="cta primary">Continue</button>
+      </div>
+      <p class="pick-found" id="pasteFound" aria-live="polite"></p>
+      <p class="pick-err" id="pasteErr" role="alert"></p>
+    </form>
+    <p class="pick-new">No calendar yet? <a href="/" data-from="pricing-getpro">Make one</a>, press Save &amp; share, then open its <b>Plus</b> tab.</p>
+  </section>
+
+  <details class="compare" id="compare">
+  <summary data-testid="compare-toggle">Compare every feature</summary>
+  <p class="explain">Every plan makes unlimited free calendars. <b>An upgraded calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Plus</b> gives you one. <b>Pro</b> gives you 5 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
+  <p class="swipe">Swipe the table to see every plan.</p>
+  <div class="gridwrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Plus</th><th>Pro</th><th>Teams</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="5"><span>Upgraded calendars</span></td></tr>
+        <tr><td>With a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>5</td><td>25</td></tr>
+        <tr><td>Under your own name<small>Like <code>pastecal.com/@you/soccer</code>. Opens the view-only calendar</small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited</td><td>Unlimited</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
+        <tr><td>Free calendars<small>Anyone with the edit link can change them</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Control</span></td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Co-owners and admins <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
+        <tr><td>Suggested events <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Secret events <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Subcalendars <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Layers like “Games” and “Practice” people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Safety</span></td></tr>
+        <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Daily backups</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Full history, and restore any earlier version</td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>A year of who changed what <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>The name of the admin next to each change</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Insight</span></td></tr>
+        <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Calendar stats<small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Where people are<small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>More stats <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Followers by calendar app, busiest hours, and where visits come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Anonymous stats<small>No names recorded</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Look</span></td></tr>
+        <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Your logo and theme <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Your name, logo and colors on the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>No pastecal branding <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>On the calendar and in embeds. Plus and Pro show one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="5"><span>Help and billing</span></td></tr>
+        <tr><td>Help page and GitHub Discussions</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Invoices in your organization's name <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="legend" data-testid="compare-legend">Rows marked ◦ are coming soon, at no extra cost. Everything else works today.</p>
+  </details>
+
+  <section class="wait" id="waitlist" aria-labelledby="waitH">
+    <div class="wait-copy">
+      <h2 id="waitH">Join the waitlist</h2>
+      <p id="waitFor">For Teams and the features in development. We'll email you once, when they open.</p>
+      <p class="wait-ideas">Have an idea, or something pastecal should do better? Add it to the form. We read every one.</p>
+    </div>
+    <form id="waitForm" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" data-clarity-mask="true" data-hj-suppress id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="formrow">
+        <div class="field">
+          <label for="plan">Plan</label>
+          <select id="plan" name="plan"><option value="teams">Teams, $490 a year or $49 a month</option><option value="unlimited">Pro, $96 a year or $10 a month</option><option value="pro">In-development Plus features</option><option value="unsure">Not sure</option></select>
+        </div>
+        <div class="field">
+          <label for="use">Mostly for</label>
+          <select id="use" name="use"><option>Sports or a club</option><option>Work or a team</option><option>School or a class</option><option>Family</option><option>Something else</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="ideas">Ideas or thoughts <span class="opt">optional</span></label>
+        <textarea id="ideas" name="ideas" rows="3" maxlength="2000" placeholder="What would make an upgrade worth it for you?"></textarea>
+      </div>
+      <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+      <button class="cta primary" type="submit" id="waitBtn">Join the waitlist</button>
+      <p class="done" id="done" role="status"></p>
+    </form>
+  </section>
+
+  <h2>Questions</h2>
+  <div class="faq">
+    <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Plus and Pro add features for people who run a calendar.</p></details>
+    <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Plus for one upgraded calendar. Pro if you run several. Teams, in development, for an organization.</p></details>
+    <details><summary>Why do Plus and Pro say Beta?</summary><p>Plus and Pro are in beta. Early members keep their price. Everything on their cards works today, except what's listed as coming.</p></details>
+    <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
+    <details><summary>Do I need an account to upgrade?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
+    <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Plus, free, with no card. <span class="if-billing-off">While Plus is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Plus tab.</span> When it ends, nothing is charged and it goes back to a free calendar anyone with the edit link can change, unless you keep Plus ($29 a year) or choose read-only in its Plus tab.</p></details>
+    <details><summary>How do I cancel?</summary><p>Sign in and open Manage billing. You can cancel there any time.</p></details>
+    <details><summary>What happens if I cancel?</summary><p>Your plan lasts until the end of the period you paid for. Then each calendar stays, with everything in it, and does what you chose under “If your plan ends” in its Plus tab: read-only (the default: everyone can still view it, nobody edits until you decide) or open to everyone, a free calendar anyone with the edit link can change.</p></details>
+    <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays upgraded meanwhile. If the subscription ends unpaid, the calendar keeps all its events and does what you chose under “If your plan ends” (read-only by default).</p></details>
+    <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 30 days of changes. An upgraded calendar keeps the full history and lets you restore any earlier version.</p></details>
+    <details><summary>What is Pro?</summary><p>5 upgraded calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. Short links and @links open the view-only calendar; you and your editors keep the edit link. $96 a year or $10 month to month: one subscription, and each calendar upgrades with one click from its Plus tab. Already on Plus? Your calendars move to Pro and Stripe credits the unused time.</p></details>
+    <details><summary>What is Teams?</summary><p>Everything in Pro, with 25 short names, up to 10 admins, your logo, no pastecal branding, a year of who changed what and invoices in your organization's name, for $490 a year or $49 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
+    <details><summary>Can I move an upgrade to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
+    <details><summary>Can I see who looked at my calendar?</summary><p>No. You see how many people viewed it, follow it and where they are, but never who.</p></details>
+  </div>
+</div>
+
+<script src="/utils/analytics.js"></script>
+<script>
+// Pro interest, first-party only (/api/collect): who looks at pricing and from where, which
+// plan they reach for, and who joins. The homepage variant (hv) rides along on each event.
+const pcTrack = (name, params) => { try { window.Analytics && Analytics.track(name, params); } catch (e) {} };
+// Which link brought them: the data-from label it carried (utils/analytics.js keeps it for this tab,
+// so the address stays clean), else an outside link, else typed or bookmarked.
+let cameFrom = null;
+try { cameFrom = sessionStorage.getItem('pc_from'); sessionStorage.removeItem('pc_from'); } catch (e) { /* storage blocked */ }
+pcTrack('pricing_viewed', { where: cameFrom || (document.referrer ? 'link' : 'direct') });
+document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click', () => pcTrack('pricing_plan_clicked', { kind: a.dataset.plan })));
+</script>
+<script>
+(() => {
+  const form = document.getElementById('waitForm'), done = document.getElementById('done'), btn = document.getElementById('waitBtn');
+  // The plan cards' Join the waitlist: preselect that plan, then the email field is next.
+  document.querySelectorAll('[data-wait]').forEach(a => a.addEventListener('click', () => {
+    document.getElementById('plan').value = a.dataset.wait;
+    setTimeout(() => document.getElementById('email').focus({ preventScroll: true }), 350);
+  }));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) { done.style.color = 'var(--soon)'; done.textContent = 'Enter an email address, like you@example.com.'; email.focus(); return; }
+    const body = Object.fromEntries(new FormData(form)); body.page = location.pathname;
+    btn.disabled = true; done.style.color = ''; done.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || !out.ok) throw new Error(out.error || "That didn't save. Please try again in a moment.");
+      const beta = body.plan === 'pro' && document.documentElement.dataset.billing === 'off';
+      done.textContent = beta ? (out.returning ? "You're still on the list. We'll email you when your trial is ready." : "You're on the list. We'll email you when your trial is ready.")
+        : out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when it opens.";
+      pcTrack('waitlist_joined', { kind: body.plan, returning: !!out.returning });
+      if (beta) pcTrack('pro_beta_joined', { beta_surface: 'pricing' });
+      form.reset();
+    } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }
+    btn.disabled = false;
+  });
+})();
+</script>
+
+<script>
+// Get Pro: Pro belongs to one calendar, so pick it here, then finish on that calendar. The calendar
+// page reads the intent (Pro.js ProIntent, same key and shape), opens Share at "Lock this
+// calendar" with the chosen billing selected, and takes it from sign-in to Stripe.
+(() => {
+  const read = (k) => { try { const v = JSON.parse(localStorage.getItem(k)); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+  const interval = () => (document.querySelector('input[name=interval]:checked') || {}).value || 'year';
+  document.querySelectorAll('.interval input').forEach(r => r.addEventListener('change', () =>
+    document.querySelectorAll('.interval').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
+  const ID = /^[A-Za-z0-9_-]{1,100}$/;
+  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'account', 'templates', 'features', 'index.html']);
+  const go = (id, via) => {
+    try { localStorage.setItem('pastecal_pro_intent', JSON.stringify({ id, interval: 'year', t: Date.now() })); } catch (e) { /* storage blocked: Share still opens by hand */ }
+    pcTrack('pricing_getpro_picked', { via, interval: 'year' });
+    location.href = '/' + encodeURIComponent(id);
+  };
+  // Calendars you made first, then ones you opened to edit; read-only visits can't be locked from here.
+  const seen = new Set();
+  const cals = [...read('myCalendars').map(c => ({ ...c, mine: true })), ...read('recentCalendars')]
+    .filter(c => c && typeof c.id === 'string' && ID.test(c.id) && !c.view && !/ \(View Only\)$/.test(c.title || ''))
+    .filter(c => { const k = c.id.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 6);
+  if (cals.length) {
+    const list = document.getElementById('pickList');
+    for (const c of cals) {
+      const li = document.createElement('li'), t = document.createElement('span'), sub = document.createElement('small'), b = document.createElement('button');
+      t.className = 't'; t.textContent = c.title || c.id; sub.textContent = location.host + '/' + c.id; t.appendChild(sub);
+      b.type = 'button'; b.className = 'cta primary'; b.textContent = 'Get Plus'; b.addEventListener('click', () => go(c.id, c.mine ? 'mine' : 'recent'));
+      li.append(t, b); list.appendChild(li);
+      // Already Pro, or locked by someone else: say so instead of offering to buy it again.
+      fetch('/api/pro/status?calendar=' + encodeURIComponent(c.id), { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(st => {
+        if (!st || !st.locked) return;
+        const tag = document.createElement('span'); tag.className = 'pick-tag';
+        // Signed out, the owner can't be told apart from anyone else, so it simply says it has Pro.
+        tag.textContent = 'Upgraded';
+        const a = document.createElement('a'); a.className = 'cta'; a.href = '/' + encodeURIComponent(c.id); a.textContent = 'Open'; b.replaceWith(a);
+        t.firstChild.after(tag);
+      }).catch(() => {});
+    }
+    document.getElementById('pickCals').hidden = false;
+    document.getElementById('pasteLabel').textContent = 'Or paste a calendar link';
+  }
+  const form = document.getElementById('pasteForm'), input = document.getElementById('calLink'), err = document.getElementById('pasteErr');
+  // A pasted link -> {id} or {error}.
+  const parse = (raw) => {
+    if (!raw) return { error: 'Paste the link to your calendar, like pastecal.com/your-calendar.' };
+    let id = '';
+    try {
+      const u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw.replace(/^\/+/, ''));
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'view') return { error: 'That is a read-only link. Paste the link you use to edit the calendar.' };
+      id = parts.length === 1 ? decodeURIComponent(parts[0]) : (!raw.includes('/') && !raw.includes('.') ? raw : '');
+    } catch (x) { id = ''; }
+    if (!ID.test(id) || RESERVED.has(id.toLowerCase())) return { error: 'That doesn\'t look like a calendar link. It should look like pastecal.com/your-calendar.' };
+    return { id };
+  };
+  // Name the calendar as soon as the link is pasted, so they know which one they're buying for.
+  const found = document.getElementById('pasteFound'); let lookup = 0, known = {};
+  const name = async (id) => {
+    if (id in known) return known[id];
+    try {
+      const r = await fetch('/cal/' + encodeURIComponent(id), { credentials: 'same-origin' });
+      known[id] = r.status === 404 ? null : r.ok ? (((await r.json()).calendar || {}).title || id) : undefined;
+    } catch (x) { known[id] = undefined; }
+    return known[id];
+  };
+  input.addEventListener('input', () => {
+    const n = ++lookup; err.textContent = ''; found.textContent = '';
+    const p = parse(input.value.trim()); if (!p.id) return;
+    setTimeout(async () => {
+      if (n !== lookup) return;
+      const t = await name(p.id);
+      if (n !== lookup) return;
+      if (t === null) err.textContent = 'We couldn\'t find a calendar at that link.';
+      else if (t) found.textContent = '✓ ' + t;
+    }, 350);
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); err.textContent = '';
+    const p = parse(input.value.trim());
+    if (p.error) { err.textContent = p.error; input.focus(); return; }
+    if (await name(p.id) === null) { err.textContent = 'We couldn\'t find a calendar at that link.'; input.focus(); return; }
+    go(p.id, 'paste');
+  });
+  // Plus (internally 'pro') or Pro (internally 'unlimited'). Pro belongs to the account, not one calendar: no picker, straight to
+  // Stripe (signed out works: the account is made from the email given there). Calendars lock from Share.
+  const tier = () => (document.querySelector('input[name=tier]:checked') || {}).value || 'single';
+  const pickCals = document.getElementById('pickCals'), unlBuy = document.getElementById('unlBuy'), pickNew = document.querySelector('.pick-new');
+  const showTier = () => {
+    const unl = tier() === 'unlimited';
+    document.getElementById('singleInterval').hidden = unl;
+    document.getElementById('unlIntervals').hidden = !unl;
+    document.getElementById('howtoSub').textContent = unl
+      ? 'Pro is one subscription for 5 upgraded calendars, plus unlimited under your @name. Pay with Stripe; there\'s no account to set up first.'
+      : 'Plus upgrades one calendar. Pick it and pay with Stripe. There\'s no account to set up first: yours is made from the email you give Stripe.';
+    unlBuy.hidden = !unl; form.style.display = unl ? "none" : ""; pickNew.hidden = unl; pickCals.hidden = unl || !cals.length;
+  };
+  document.querySelectorAll('input[name=tier]').forEach(r => r.addEventListener('change', showTier));
+  const pickTier = (value) => { const r = document.querySelector(`input[name=tier][value=${value}]`); r.checked = true; r.dispatchEvent(new Event('change')); };
+  const unlErr = document.getElementById('unlErr'), unlGo = document.getElementById('unlGo');
+  unlGo.addEventListener('click', async () => {
+    unlErr.textContent = ''; unlGo.disabled = true; unlGo.textContent = 'Taking you to payment…';
+    pcTrack('pricing_getpro_picked', { via: 'unlimited', interval: interval() });
+    try {
+      const r = await fetch('/api/pro/checkout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: 'unlimited', interval: interval() }) });
+      const out = await r.json().catch(() => ({}));
+      if (r.ok && out.url) { location.href = out.url; return; }
+      unlErr.textContent = out.error === 'already-unlimited' ? 'You already have Pro. Open a calendar and press Share to lock it.'
+        : r.status === 503 ? 'Pro isn\'t available right now. Nothing was charged.'
+        : out.error === 'buy-on-live' ? (out.message || 'Pro is bought on pastecal.com.')
+        : 'Something went wrong. Nothing was charged. Try again in a minute.';
+    } catch (x) { unlErr.textContent = 'We couldn\'t reach pastecal. Check your connection and try again.'; }
+    unlGo.disabled = false; unlGo.textContent = 'Continue to payment';
+  });
+  // The plan cards' buttons: bring the picker into view on that plan, and put the cursor where the next step is.
+  document.querySelector('.plan.pro [data-plan=pro]').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (document.documentElement.dataset.billing === 'off') { joinBeta(); return; }
+    pickTier('single');
+    document.getElementById('get-pro').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const first = document.querySelector('#pickList .cta') || input;
+    setTimeout(() => first.focus({ preventScroll: true }), 350);
+  });
+  document.querySelector('.plan [data-plan=unlimited]').addEventListener('click', (e) => {
+    e.preventDefault();
+    if (document.documentElement.dataset.billing === 'off' || document.documentElement.dataset.unlimited === 'off') { joinBeta('unlimited'); return; }
+    pickTier('unlimited');
+    document.getElementById('get-pro').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => unlGo.focus({ preventScroll: true }), 350);
+  });
+  if (location.hash === '#get-unlimited') pickTier('unlimited');
+})();
+</script>
+<script>
+// Plus (beta): can it be bought yet? GET /api/pro/config. Off, the Plus button is "Join the beta": it
+// goes to the waitlist form with the Pro beta chosen, and the Get Pro picker (checkout) is hidden.
+// #compare (Compare plans links): open the comparison in place.
+function openCompare() { if (location.hash === '#compare') { const d = document.getElementById('compare'); if (d && !d.open) { d.open = true; d.scrollIntoView(); } } }
+openCompare(); window.addEventListener('hashchange', openCompare);
+function joinBeta(plan) {
+  document.getElementById('plan').value = plan || 'pro';
+  document.getElementById('waitlist').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('email').focus({ preventScroll: true }), 350);
+}
+(() => {
+  const root = document.documentElement;
+  const apply = (billing, unlimited) => {
+    root.dataset.billing = billing ? 'on' : 'off';
+    // Pro is buyable only with its own price set; otherwise its button joins the beta.
+    if (!billing || !unlimited) {
+      root.dataset.unlimited = 'off';
+      document.getElementById('unlCta').textContent = 'Join the beta';
+      document.getElementById('unlCta').href = '#waitlist';
+      document.querySelector('.plans-pick').hidden = true;
+      const single = document.querySelector('input[name=tier][value=single]');
+      if (!single.checked) { single.checked = true; single.dispatchEvent(new Event('change')); }
+    }
+    if (billing) return;
+    document.getElementById('proCta').textContent = 'Join the beta';
+    document.getElementById('proCta').href = '#waitlist';
+    document.querySelector('#plan option[value=pro]').textContent = 'Plus beta, early access';
+    document.getElementById('waitFor').textContent = "For the Plus and Pro betas, and Teams. We'll email you once, when yours opens.";
+    // The account menu's "Join the beta" (and old Get Pro links) land here.
+    if (location.hash === '#get-pro' || location.hash === '#pro-beta') joinBeta();
+  };
+  // Stalled for 4 seconds: show Get Pro as before (checkout still answers 503 if billing is off).
+  const ctl = new AbortController(); setTimeout(() => ctl.abort(), 4000);
+  fetch('/api/pro/config', { credentials: 'same-origin', signal: ctl.signal }).then(r => r.ok ? r.json() : null)
+    .then(d => apply(!(d && d.billing === false), !(d && d.unlimited === false))).catch(() => apply(true, true));
+})();
+</script>
+<script src="/utils/preview.js"></script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body>
+</html>

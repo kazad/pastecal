@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · pastecal</title>
+<meta name="description" content="What pastecal stores, who can see it, and how to remove it.">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/privacy">
+<meta property="og:title" content="Privacy · pastecal">
+<meta property="og:description" content="What pastecal stores, who can see it, and how to remove it.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+<main>
+<h1>Privacy</h1>
+<p class="updated">Last updated October 23, 2026</p>
+
+<h2>Your calendar</h2>
+<p>We store what you put in a calendar so it works for everyone you share it with. Anyone with its link can see it, so give a private calendar a hard-to-guess name.</p>
+
+<h2>No login required</h2>
+<p>On the free plan you don't sign up, so we don't ask for your name or email. If you join a plan's waitlist, we use your email only to tell you about that plan.</p>
+
+<h2>Plus and Pro</h2>
+<p>If you upgrade (Plus or Pro), you're the only one with an account. We store your email, to sign you in and for billing; your subscription status, which Stripe sends us; and your sign-in sessions, saved as hashes. Emails come from login@pastecal.com: the sign-in links you ask for, and a welcome email when you upgrade, saying what your plan does and how to manage it, and notices when a trial or plan ends. We don't send newsletters from it.</p>
+<p>Stripe processes payments for us. Your card details go to Stripe, and we never see them. See <a href="https://stripe.com/privacy">Stripe's privacy policy</a>. To delete your account, click the pastecal logo and choose <b>Delete account</b>. If a plan is active, cancel it first under <b>Manage billing</b> so you aren't charged again. Deleting it removes your email, your sign-in links and your sessions. The record of what you paid stays with Stripe, without your account, for accounting.</p>
+
+<h2>Visits</h2>
+<p>We count visits to the site, using cookies, to see what's working.</p>
+<p>Each calendar also counts its own visits, for its owner's stats (Plus and Pro): views and visitors per day, how many people follow it in a calendar app, and which countries and cities visitors come from. We store only those daily counts. We never store IP addresses or browser details, and never who viewed what. To tell a returning visitor from a new one on the same day, we keep a short hash made with a random key that is thrown away each day, so one day's visitors can't be linked to the next. A city is shown only once at least 5 visitors came from it on one day, and a country once at least 3 did, so a place can't point to one person.</p>
+
+<h2>Removing something</h2>
+<p>Calendars work like a wiki: anyone with the edit link can add, change or remove events. To take a calendar down, open it, delete its events and notes, and stop sharing the link. Want full control instead? <a href="/pricing">Upgrading</a> lets you choose who edits. If a calendar shows something that shouldn't be public, <a href="/report">report it</a>.</p>
+</main><!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Stripe Checkout's success page (?session_id=...#<calendar>). No analytics here and no referrer
+     sent on, so the Checkout session id is never recorded; the query is cleared on load.
+     The lock lands when Stripe's webhook does, which can be a few seconds after this page opens,
+     so it polls /api/pro/status before making the first editor link. It never revokes a link: it makes
+     one ('Editors') only when the calendar has none, through the named-links API. -->
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>You're upgraded · pastecal</title>
+<link rel="icon" href="/favicon.ico">
+<script>
+  var proCalendar = null, proSession = null, proUnlimited = false;
+  try { proCalendar = decodeURIComponent(location.hash.slice(1)) || null; } catch (e) { proCalendar = null; }
+  try { proSession = new URLSearchParams(location.search).get('session_id'); } catch (e) { proSession = null; }
+  try { proUnlimited = new URLSearchParams(location.search).get('plan') === 'unlimited'; } catch (e) { proUnlimited = false; }
+  // First thing, before anything else on the page can read or record the address.
+  history.replaceState(null, '', location.pathname);
+</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<style>
+/* On tokens.css and components.css (.pc-btn, .pc-field), like every other page. */
+body { margin: 0; background: var(--pc-canvas); color: var(--pc-text); font: var(--pc-fs-lg)/1.5 var(--pc-font) }
+main { max-width: 480px; margin: 12vh auto 0; padding: 32px 28px; background: var(--pc-raised); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
+h1 { font-size: var(--pc-fs-2xl); margin: 0 0 6px; display: flex; align-items: center; gap: 10px }
+h1 svg { width: 22px; height: 22px; color: var(--pc-success); flex-shrink: 0 }
+h2 { font-size: var(--pc-fs-lg); margin: 24px 0 4px }
+p { margin: 8px 0; color: var(--pc-text-muted) }
+p.bad { color: var(--pc-danger) }
+.cal { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
+.row { display: flex; gap: 8px; margin-top: 10px }
+.row .pc-field { flex: 1; font-family: var(--pc-font-mono); font-size: var(--pc-fs-sm) }
+#go { margin-top: 24px }
+#share { margin-top: 10px }
+.small { font-size: var(--pc-fs-md) }
+[hidden] { display: none !important }
+@media (max-width: 520px) { main { margin: 16px; padding: 24px 20px } }
+</style>
+</head>
+<body>
+<main>
+  <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Plus is on</span></h1>
+  <p id="msg">Your payment went through. Locking <span class="cal" id="calname">your calendar</span>…</p>
+
+  <p id="signin-note" class="small" hidden></p>
+  <section id="linkbox" hidden>
+    <h2>Your editor link</h2>
+    <p class="small">Share this with people who should be able to edit. Anyone else sees a read-only calendar.</p>
+    <div class="row">
+      <input id="link" class="pc-field pc-field--lg" type="text" readonly aria-label="Editor link" data-hj-suppress data-clarity-mask="true">
+      <button id="copy" type="button" class="pc-btn pc-btn--primary pc-btn--lg">Copy</button>
+    </div>
+    <button id="share" type="button" class="pc-btn pc-btn--secondary" hidden>Send it to your editors</button>
+    <p class="small">You can make more links, or turn one off, from the Plus tab on your calendar.</p>
+  </section>
+
+  <!-- Pro (plan=unlimited): the @name is what Pro adds, and nothing else teaches it -->
+  <section id="nextName" hidden data-testid="done-next-name">
+    <h2>Next: claim your name</h2>
+    <p class="small">One name for all your calendars, like <b>pastecal.com/@yourname/soccer</b>. Then make calendars under it, as many as you like. Links under your name open the view-only calendar.</p>
+    <a class="pc-btn pc-btn--primary pc-btn--lg" href="/account" data-testid="done-claim-name">Claim your @name</a>
+  </section>
+
+  <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/">Back to your calendar</a>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var go = $('go'), msg = $('msg');
+  function api(method, path, body) {
+    var init = { method: method, credentials: 'same-origin', headers: {} };
+    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(path, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d }; }); },
+      function () { return { status: 0, data: {} }; });
+  }
+  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
+  // An email that already has an account gets a sign-in link instead (the server decides).
+  var existingAccount = false;
+  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
+    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
+      existingAccount = true;
+      var who = document.createElement('b'); who.textContent = r.data.email;
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage your plan.');
+      $('signin-note').hidden = false;
+    }
+    return r;
+  });
+  // The site header shows "Account" while this browser is signed in (a hint cookie; the session is HttpOnly).
+  claimed.then(function () { return api('GET', '/api/me'); }).then(function (r) {
+    try {
+      if (r.status === 200) document.cookie = 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax';
+      else if (r.status === 401) document.cookie = 'pc_in=; Path=/; Max-Age=0; SameSite=Lax';
+    } catch (e) { /* no hint */ }
+  });
+  if (proUnlimited) { $('title').textContent = 'Pro is on'; $('nextName').hidden = false; }
+  if (!proCalendar) {
+    // Pro bought from the pricing page: no calendar yet. Next is the @name (account page); each calendar
+    // also upgrades with one click from its Plus tab.
+    if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
+    msg.textContent = proUnlimited ? 'Your payment went through. To upgrade a calendar you run, open it and choose its Plus tab. No new checkout.'
+      : 'Open your calendar and open its Plus tab to see your plan.';
+    go.textContent = 'Back to pastecal';
+    if (proUnlimited) go.hidden = true;
+    return;
+  }
+  var calPath = '/' + encodeURIComponent(proCalendar);
+  go.href = calPath;
+  // Its name as this browser knows it (the calendar list), else its address.
+  var calName = proCalendar;
+  try {
+    ['myCalendars', 'recentCalendars'].forEach(function (k) {
+      (JSON.parse(localStorage.getItem(k) || '[]') || []).forEach(function (c) {
+        if (calName === proCalendar && c && c.id && String(c.id).toLowerCase() === proCalendar.toLowerCase() && c.title) calName = String(c.title).replace(/ \(View Only\)$/, '');
+      });
+    });
+  } catch (e) { /* storage blocked: the address it is */ }
+  $('calname').textContent = calName;
+
+  function locked() {
+    var span = document.createElement('span'); span.className = 'cal'; span.textContent = calName;
+    msg.textContent = ''; msg.append(span, ' is locked. Only you and people with your editor link can change it.');
+    // This page never turns off a link the owner may already have sent out: it makes the first
+    // link only when the calendar has none, and otherwise points to Share.
+    // pastecal_editor_link:<cal> is the plain link the Share panel shows; pastecal_done_link:<cal> also
+    // keeps its id, so this page re-shows a link only while it is still live.
+    var shareName = 'pastecal_editor_link:' + proCalendar.toLowerCase(), storeName = 'pastecal_done_link:' + proCalendar.toLowerCase();
+    function show(link) {
+      $('link').value = link; $('linkbox').hidden = false;
+      // The phone's share sheet (Messages, WhatsApp, email) with a message ready to send.
+      var note = 'Here is the link to edit ' + calName + ' on pastecal. Anyone else sees it read-only.';
+      var b = $('share'); b.hidden = false;
+      if (navigator.share) {
+        b.onclick = function () { navigator.share({ title: calName, text: note, url: link }).catch(function () {}); };
+      } else {
+        // No share sheet (most desktops): copy a ready-to-send message instead.
+        b.textContent = 'Copy a message for your editors';
+        b.onclick = function () {
+          var msgText = note + '\n' + link;
+          navigator.clipboard.writeText(msgText).then(function () { b.textContent = 'Message copied'; }, function () { $('link').focus(); $('link').select(); });
+        };
+      }
+    }
+    function signInHint(r) {
+      if (existingAccount) return;             // the sign-in note above already says what to do
+      if (r.status === 401) msg.append(' Sign in from your calendar’s Plus tab to make an editor link.');
+      else msg.append(' Make an editor link from your calendar’s Plus tab.');
+    }
+    api('GET', '/api/pro/editor-links?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
+      if (r.status !== 200 || !Array.isArray(r.data)) return signInHint(r);
+      if (r.data.length) {
+        // Made by this page earlier in this browser, and still live (not revoked since): show it again.
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(storeName) || 'null'); } catch (e) { saved = null; }
+        var live = saved && saved.id && r.data.some(function (l) { return l.id === saved.id; });
+        if (live && typeof saved.link === 'string') return show(saved.link);
+        msg.append(' Your editor links are in the Plus tab on your calendar.');
+        return;
+      }
+      api('POST', '/api/pro/editor-links', { calendarId: proCalendar, label: 'Editors' }).then(function (c) {
+        if (c.status !== 200 || !c.data.url_fragment_key) return signInHint(c);
+        var link = location.origin + calPath + '#k=' + c.data.url_fragment_key;
+        try {
+          localStorage.setItem(shareName, link);
+          localStorage.setItem(storeName, JSON.stringify({ id: c.data.id, link: link }));
+        } catch (e) { /* shown here anyway */ }
+        show(link);
+      });
+    });
+  }
+
+  // The webhook may land a few seconds after Stripe sends people here: ask every 1.5s for up to ~20s.
+  var tries = 0;
+  (function poll() {
+    api('GET', '/api/pro/status?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
+      if (r.status === 200 && r.data.locked) return claimed.then(locked);
+      if (++tries < 14) return setTimeout(poll, 1500);
+      $('title').textContent = 'Still setting up';
+      msg.textContent = 'Your payment went through, and the lock is still on its way. Refresh this page in a minute, or open your calendar’s Plus tab.';
+    });
+  })();
+
+  $('copy').addEventListener('click', function () {
+    var input = $('link'), btn = this;
+    function selectIt() { input.focus(); input.select(); btn.textContent = 'Press ⌘C / Ctrl+C'; }
+    try {
+      navigator.clipboard.writeText(input.value).then(function () { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy'; }, 2000); }, selectIt);
+    } catch (e) { selectIt(); }
+  });
+})();
+</script>
+<script src="/utils/preview.js"></script>
+</body>
+</html>

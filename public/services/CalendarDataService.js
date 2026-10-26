@@ -1,8 +1,12 @@
 // CalendarDataService - Firebase database operations for calendars
 class CalendarDataService {
     static connected = false;
-    static db = firebase.database().ref('/calendars');
-    static db_readonly = firebase.database().ref('/calendars_readonly');
+    // Made on first use, not when this file loads: the first ref opens a WebSocket to the PRODUCTION
+    // database, and a page on the Cloudflare backend (local copies, staging, the live site) never needs it.
+    static get db() { return this._db || (CalendarDataService._db = firebase.database().ref('/calendars')); }
+    static get db_readonly() { return this._dbReadonly || (CalendarDataService._dbReadonly = firebase.database().ref('/calendars_readonly')); }
+    static set db(ref) { CalendarDataService._db = ref; }                 // tests hand in a fake
+    static set db_readonly(ref) { CalendarDataService._dbReadonly = ref; }
 
     // Firebase Realtime Database rejects any payload containing `undefined` — the *entire*
     // write fails. Historically this caused silent save failures (notably the IsAllDay field
@@ -292,6 +296,8 @@ class CalendarDataService {
             const result = await this.lookupCalendar(slug);
             console.log('Function result:', result);
 
+            // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+            if (result.data?.ended) { window.location.replace('/link-ended/' + encodeURIComponent(slug)); return; }
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL
@@ -460,7 +466,7 @@ class CalendarDataService {
     // Server time, estimated from Firebase's measured clock offset, so a laptop with a wrong
     // clock cannot stamp an edit hours into the future.
     static _serverNow() {
-        if (this._timeOffset === undefined && typeof firebase !== 'undefined' && firebase.database) {
+        if (this._timeOffset === undefined && typeof firebase !== 'undefined' && firebase.database && !(typeof window !== 'undefined' && window.pcNoProdSideEffects)) {
             this._timeOffset = 0;
             try { firebase.database().ref('.info/serverTimeOffset').on('value', (s) => { this._timeOffset = s.val() || 0; }); } catch (e) { /* keep 0 */ }
         }
@@ -850,7 +856,7 @@ class CalendarDataService {
     static checkExists(id, callback_yes, callback_no) {
         // Names the site itself routes (pastecal.com/beta/..., /view/..., /nativecal/...) are
         // "taken": a calendar claimed under one would have an address that opens something else.
-        if (['beta', 'nativecal', 'view', 'dev'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
         this.db.child(id).once('value', async data => {
             if (data.val()) { callback_yes(); return; }
             try {

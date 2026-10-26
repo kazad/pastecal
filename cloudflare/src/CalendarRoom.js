@@ -21,18 +21,65 @@
  *                   {t:'hello'}                           "send me the snapshot again" (after a conflict or reconnect)
  *   server -> tab   {t:'ack', id, v}                      to the sender
  *                   {t:'change', v, commands}             to every other tab
- *                   {t:'error', id, code, message}        refused; nothing was stored
+ *                   {t:'error', id, code, message}        refused; nothing was stored (code 'locked': a Pro lock)
+ *   tab -> server   {t:'auth', key}                       an editor link's key for a locked calendar (never in a URL)
+ *   server -> tab   {t:'auth', ok, canEdit, locked, role} the answer; also sent (ok:false, reason) when that link
+ *                                                         is revoked ('link-revoked') or all are replaced ('key-rotated')
+ *   server -> tab   {t:'pro', settings}                   the owner changed proSettings (sent to every tab, views too)
+ * Snapshots also carry {locked, pro, canEdit, role, proSettings}. role is 'owner' | 'editor' | 'viewer'
+ * (an unlocked calendar: 'editor' for everyone with the edit name). proSettings is null unless locked.
  *
  * HTTP: GET /cal/<id> the calendar (404 = no such calendar); HEAD /cal/<id> same, no body;
  * POST /cal/<id> creates the calendar from {title, options, events} -- ONLY when the room
  * is empty (409 otherwise), names and events validated, size-limited (the Worker also
  * rate-limits it per IP). PUT /cal/<id>/import replaces everything (secret required).
  *
+ * Pro lock: while `lock` holds a row, only the owner (X-PC-User on the WebSocket upgrade, set by
+ * the Worker from a session, never by a client) and sockets that sent a live editor link's key may
+ * change the calendar; every other write path (saves, meta, /import, /from-firebase) is refused. Lock
+ * routes (see LOCK_ROUTES) answer only http://internal/... requests from Worker code; the Worker's
+ * public /cal/ forwarder never passes them.
+ *
+ * Roles on a locked calendar:
+ *   owner  -- everything: events, notes, title, categories, options, AND the owner-only list:
+ *             editor links, proSettings, lock/unlock, billing (the last two live in Accounts/Stripe).
+ *   editor -- holds an editor link: events, notes, title, categories, options (calendar content).
+ *             Title is content, so editors may change it. Never the owner-only list.
+ *   viewer -- everyone else (edit name without a key, or a view link): read only.
+ * Owner-only operations never travel over the socket: they are internal routes the Worker calls
+ * only after checking the owner's session (Accounts.js), and the room re-checks ownerId itself.
+ * Unlocked calendars: anyone with the edit name edits everything, as always.
+ *
+ * Editor links: up to 20 live links per calendar, each with a label and only its key's SHA-256
+ * stored. Revoking one drops the sockets that used it to read-only at once. A socket's attachment
+ * holds the link id in `keyId` (the name predates links: a legacy single key became a link with
+ * the same id, so sockets authorized before the migration keep working).
+ *
+ * After Pro (lapsed): when billing ends a subscription it unlocks with {lapse:true}. The calendar is
+ * then free again, and by default PAUSED: nobody edits (owner, editor links, edit name alike), views
+ * and feeds read as before, and every other write path (/import, /from-firebase, the copy-back) is
+ * closed too, as under a lock. The owner chose this ahead of time or chooses it now (set-lapsed-mode,
+ * 'readonly' | 'open', default 'readonly'): 'open' makes it a normal free calendar at once. Only the
+ * paused calendar's owner can lock it again (a resubscribe), so nobody else can buy it away. An admin
+ * unlock (no lapse flag) is a plain unlock, as before. Stored in lapse(owner, mode, lapsed_at):
+ * lapsed_at NULL is only the owner's choice, made while still locked.
+ *
+ * proSettings: owner-written display settings ({theme, branding, hideBranding}, see
+ * mergeProSettings), stored in pro_settings, NOT in `options` (any tab writes options). Sent at the
+ * top level of snapshots and GET /cal while locked; never accepted from a save or meta.
+ *
  * Storage (this object's own SQLite): meta(k, v), events(k, pos, data), history(v, at,
- * source, commands).
+ * source, commands), lock(owner, plan, locked_at, key_hash, key_id), editor_links(id, label,
+ * key_hash, created_at, last_used_at, revoked_at), pro_settings(owner, data, updated_at), and the
+ * lapse(owner, mode, lapsed_at), and the stats_* tables (counts only; see RoomInsight.js, which also restores earlier versions). The lock
+ * lives apart from `options` because any tab can write options; owner ids and key hashes never leave
+ * these tables. lock.key_hash/key_id are the legacy single key, moved into editor_links on load.
  */
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
+import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
+import { planName } from './Plans.js';
+import { validZone } from './preview/time.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -43,9 +90,125 @@ export const LIMITS = {
     maxMessage: 512 * 1024,      // one save message
     copyBackDelayMs: 3000,       // after the last save, before writing to Firebase
     maxCreate: 1024 * 1024,      // the body of a first save (POST /cal/<id>)
+    maxId: 200,                  // event id / recurrenceID; longest real: 38 (Oct 21 backup)
+    maxType: 64,                 // event type (category) when stored as text; real ones: "1".."8", "undefined"
+    maxCalendar: 2 * 1024 * 1024, // JSON chars of title + options + events; largest real: ~1.03 MB, 2,550 events (Oct 21 backup)
 };
 
 const json = (x) => JSON.stringify(x);
+
+// Option keys only the server may decide. Tabs write options through ordinary saves, so a client
+// that sent {pro:true} would hide branding, and {locked:false} would read as unlocked.
+// The Pro display settings (theme, branding) are owner-only: they live in proSettings, so the same
+// names in options are dropped from every tab, editor or not.
+const SERVER_ONLY_OPTIONS = /^(locked|lock|pro|plan|owner|ownerId|editorKey.*|editorLinks?|proSettings|theme|branding|hideBranding)$/i;
+function clientOptions(o) {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
+    if (!Object.keys(o).some((k) => SERVER_ONLY_OPTIONS.test(k))) return o;
+    return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
+}
+
+// ---- The calendar's time zone (options.tz, an IANA name) ----
+// Browsers fill it in when it is unset (their own zone: Intl resolvedOptions); it is never changed
+// automatically after that (a Settings field may later send setTz). Link previews use it for clock times.
+// -> options with tz kept valid: an invalid incoming tz is dropped; a stored tz wins unless `explicit`.
+function withTz(incoming, stored, explicit = false) {
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) || !('tz' in incoming)) return incoming;
+    const out = { ...incoming };
+    const tz = validZone(out.tz);
+    const keep = stored && typeof stored.tz === 'string' && validZone(stored.tz) ? stored.tz : null;
+    if (keep && !(explicit && tz)) out.tz = keep;
+    else if (tz) out.tz = tz;
+    else if (keep) out.tz = keep;
+    else delete out.tz;
+    return out;
+}
+
+const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id', 'editor-of-record',
+    'create-editor-link', 'list-editor-links', 'revoke-editor-link', 'set-pro-settings', 'set-lapsed-mode', 'dev-legacy-key']);
+export const LAPSED_MODES = ['readonly', 'open'];
+export const PAUSED_MESSAGE = 'Editing is paused by the owner.';
+export const MAX_EDITOR_LINKS = 20;
+const MAX_AUTH_FAILS = 5;                // wrong editor keys on one socket before it is closed (1008)
+const LINK_TOUCH_MS = 3600 * 1000;          // last_used_at is written at most once an hour per link
+
+// ---- Pro display settings (owner-only) ----
+export const DEFAULT_PRO_SETTINGS = Object.freeze({
+    theme: Object.freeze({ accent: null, font: null, embedMode: 'auto' }),
+    branding: Object.freeze({ name: null, logoUrl: null }),
+    hideBranding: true,
+});
+const FONTS = ['figtree', 'system', 'serif', 'rounded'];
+const EMBED_MODES = ['auto', 'light', 'dark'];
+const isPlainObject = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+// A PARTIAL patch merged onto the current settings, field by field; every field present is
+// validated strictly and anything unknown is refused (nothing is stored on any error).
+// -> {ok:true, settings} | {ok:false, error}
+export function mergeProSettings(current, patch) {
+    if (!isPlainObject(patch)) return { ok: false, error: 'settings must be an object' };
+    const cur = current || DEFAULT_PRO_SETTINGS;
+    const out = { theme: { ...DEFAULT_PRO_SETTINGS.theme, ...cur.theme }, branding: { ...DEFAULT_PRO_SETTINGS.branding, ...cur.branding },
+        hideBranding: typeof cur.hideBranding === 'boolean' ? cur.hideBranding : true };
+    const bad = (error) => ({ ok: false, error });
+    for (const k of Object.keys(patch)) if (!['theme', 'branding', 'hideBranding'].includes(k)) return bad(`unknown setting: ${k}`);
+    if ('theme' in patch) {
+        const t = patch.theme;
+        if (!isPlainObject(t)) return bad('theme must be an object');
+        for (const k of Object.keys(t)) if (!['accent', 'font', 'embedMode'].includes(k)) return bad(`unknown setting: theme.${k}`);
+        if ('accent' in t) {
+            if (t.accent !== null && !(typeof t.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.accent))) return bad('theme.accent must be #rrggbb or null');
+            out.theme.accent = t.accent === null ? null : t.accent.toLowerCase();
+        }
+        if ('font' in t) {
+            if (t.font !== null && !FONTS.includes(t.font)) return bad(`theme.font must be one of ${FONTS.join(', ')} or null`);
+            out.theme.font = t.font;
+        }
+        if ('embedMode' in t) {
+            if (!EMBED_MODES.includes(t.embedMode)) return bad(`theme.embedMode must be one of ${EMBED_MODES.join(', ')}`);
+            out.theme.embedMode = t.embedMode;
+        }
+    }
+    if ('branding' in patch) {
+        const b = patch.branding;
+        if (!isPlainObject(b)) return bad('branding must be an object');
+        for (const k of Object.keys(b)) if (!['name', 'logoUrl'].includes(k)) return bad(`unknown setting: branding.${k}`);
+        if ('name' in b) {
+            if (b.name !== null && typeof b.name !== 'string') return bad('branding.name must be a string or null');
+            const name = b.name === null ? '' : b.name.trim();
+            if (name.length > 60) return bad('branding.name is longer than 60 characters');
+            if (CONTROL_CHARS.test(name)) return bad('branding.name has control characters');
+            out.branding.name = name || null;
+        }
+        if ('logoUrl' in b) {
+            // TODO(before the branding UI ships): a logo URL loads from the owner's server in every
+            // viewer's browser, a tracking pixel. Logos must be uploaded or proxied through pastecal first.
+            if (b.logoUrl === null || b.logoUrl === '') out.branding.logoUrl = null;
+            else {
+                if (typeof b.logoUrl !== 'string' || b.logoUrl.length > 500) return bad('branding.logoUrl must be an https URL (500 characters at most)');
+                let u; try { u = new URL(b.logoUrl); } catch { return bad('branding.logoUrl must be an https URL'); }
+                if (u.protocol !== 'https:' || !u.hostname || u.username || u.password) return bad('branding.logoUrl must be an https URL');
+                out.branding.logoUrl = u.href;
+            }
+        }
+    }
+    if ('hideBranding' in patch) {
+        if (typeof patch.hideBranding !== 'boolean') return bad('hideBranding must be true or false');
+        out.hideBranding = patch.hideBranding;
+    }
+    return { ok: true, settings: out };
+}
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+// Equal-length hex digests; no early exit, so timing says nothing about how much matched.
+function sameHex(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+    let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return d === 0;
+}
 
 export class CalendarRoom extends DurableObject {
     constructor(ctx, env) {
@@ -58,6 +221,15 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS history (v INTEGER PRIMARY KEY, at INTEGER, source TEXT, commands TEXT, entry TEXT)`);
             try { this.sql.exec(`ALTER TABLE history ADD COLUMN entry TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS lock (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, plan TEXT, locked_at INTEGER, key_hash TEXT, key_id TEXT)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS editor_links (id TEXT PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL, created_at INTEGER, last_used_at INTEGER, revoked_at INTEGER)`);
+            // suspended_for: the owner whose unlock paused this link; a re-lock by that owner turns it back on.
+            try { this.sql.exec(`ALTER TABLE editor_links ADD COLUMN suspended_for TEXT`); } catch (_) {}
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS pro_settings (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT, data TEXT, updated_at INTEGER)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS lapse (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, mode TEXT NOT NULL, lapsed_at INTEGER)`);
+            // Stats + restore tables (RoomInsight.js): additive only. If they can't be made, the calendar
+            // still opens; it just isn't counted (countHit is skipped while statsReady is false).
+            try { initInsight(this.sql); this.statsReady = true; } catch (e) { this.statsReady = false; console.error('[stats] init failed:', e && e.message); }
             this.load();
         });
     }
@@ -74,7 +246,32 @@ export class CalendarRoom extends DurableObject {
             lastEditedAt: meta.lastEditedAt || null,
             events: this.sql.exec(`SELECT data FROM events ORDER BY pos`).toArray().map((r) => JSON.parse(r.data)),
         };
+        const l = this.sql.exec(`SELECT owner, plan, locked_at, key_hash, key_id FROM lock`).toArray()[0];
+        this.lock = l ? { ownerId: l.owner, plan: l.plan, lockedAt: l.locked_at } : null;
+        if (l && l.key_hash) {
+            // A lock from before editor links held one key. It becomes a link labeled 'Editors' with the
+            // SAME id, so sockets that proved that key (attachment keyId) keep their write access.
+            const id = l.key_id || this.newLinkId();
+            if (!this.sql.exec(`SELECT 1 FROM editor_links WHERE id = ?`, id).toArray().length) {
+                this.sql.exec(`INSERT INTO editor_links (id, label, key_hash, created_at, last_used_at, revoked_at) VALUES (?, 'Editors', ?, ?, NULL, NULL)`,
+                    id, l.key_hash, l.locked_at || Date.now());
+            }
+            this.sql.exec(`UPDATE lock SET key_hash = NULL, key_id = NULL`);
+        }
+        // Live links only, in memory: canWrite checks a socket's link against this at every message.
+        // Links paused by an unlock (suspended_for) are kept apart: they authorize nothing.
+        const rows = this.sql.exec(`SELECT id, label, key_hash, created_at, last_used_at, suspended_for FROM editor_links WHERE revoked_at IS NULL ORDER BY created_at, id`).toArray();
+        const asLink = (r) => [r.id, { id: r.id, label: r.label, keyHash: r.key_hash, createdAt: r.created_at, lastUsedAt: r.last_used_at, suspendedFor: r.suspended_for || null }];
+        this.links = new Map(rows.filter((r) => !r.suspended_for).map(asLink));
+        this.suspended = new Map(rows.filter((r) => r.suspended_for).map(asLink));
+        const ps = this.sql.exec(`SELECT owner, data FROM pro_settings`).toArray()[0];
+        let settings = null; try { settings = ps ? JSON.parse(ps.data) : null; } catch { /* unreadable: defaults */ }
+        this.proStored = ps && settings ? { owner: ps.owner, settings } : null;
+        const lp = this.sql.exec(`SELECT owner, mode, lapsed_at FROM lapse`).toArray()[0];
+        this.lapse = lp ? { ownerId: lp.owner, mode: lp.mode, lapsedAt: lp.lapsed_at } : null;
     }
+    // Pro ended and the owner left it read-only (see the file header): nobody writes.
+    paused() { return !this.lock && !!this.lapse && this.lapse.lapsedAt != null && this.lapse.mode === 'readonly'; }
     setMeta(k, v) { this.sql.exec(`INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)`, k, json(v)); }
     calendar() {
         const s = this.state;
@@ -87,39 +284,364 @@ export class CalendarRoom extends DurableObject {
         return { id: viewId, title: s.title, options, lastEditedAt: s.lastEditedAt, events: s.events };
     }
 
-    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null) {
+    // ---- Pro lock -------------------------------------------------------------------------
+    // A socket's right to write is worked out at each message from what it proved (its
+    // attachment) against the lock as it is NOW, never cached: revoking a link, replacing all of
+    // them, an unlock (which pauses them) or a lock by a new owner removes the link id from
+    // this.links, so its sockets lose write access at once, even after hibernation.
+    canWrite(att) {
+        if (att.isViewOnly) return false;
+        const l = this.lock;
+        if (!l) return !this.paused();
+        return this.isOwner(att) || (!!att.keyId && this.links.has(att.keyId));
+    }
+    isOwner(att) { return !att.isViewOnly && !!this.lock && !!att.user && att.user === this.lock.ownerId; }
+    roleOf(att) { return this.isOwner(att) ? 'owner' : this.canWrite(att) ? 'editor' : 'viewer'; }
+    // Shown to everyone while locked (it is how the calendar looks); null otherwise. Settings saved
+    // by a previous owner are not inherited by a new one.
+    proSettings() {
+        if (!this.lock) return null;
+        const p = this.proStored;
+        return p && p.owner === this.lock.ownerId ? mergeProSettings(p.settings, {}).settings : mergeProSettings(null, {}).settings;
+    }
+    // What a link preview may show (the Worker's preview/route.js): title, colors, and events that can
+    // still be upcoming -- series and anything not yet ended -- WITHOUT descriptions (notes never leave
+    // for a preview), plus the start times of recent all-day events, which only say what time zone
+    // the authors are in (preview/time.js inferZone). The same for edit and view links: view-safe.
+    previewData(now) {
+        const s = this.state, cutoff = now - 2 * 86400000, out = [], allDay = [];
+        for (const e of s.events) {
+            if (!e || !e.start) continue;
+            if (e.isAllDay) allDay.push(e.start);
+            const live = (e.recurrencerule && !e.recurrenceID) || Date.parse(e.end || e.start) >= cutoff;
+            if (!live || out.length >= 3000) continue;
+            out.push({ id: e.id, title: e.title, start: e.start, end: e.end, isAllDay: !!e.isAllDay, type: e.type,
+                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null });
+        }
+        allDay.sort().reverse();
+        const ps = this.proSettings();
+        return { v: s.v, title: s.title, colors: Array.isArray(s.options && s.options.colors) ? s.options.colors.slice(0, 32) : null,
+            tz: s.options && typeof s.options.tz === 'string' ? s.options.tz : null,
+            events: out, zoneSamples: allDay.slice(0, 40), pro: !!this.lock, hideBranding: !!(ps && ps.hideBranding) };
+    }
+    snapshotFor(att) {
+        const cal = att.isViewOnly ? this.viewCalendar(att.viewId) : this.calendar();
+        return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, paused: this.paused(), canEdit: this.canWrite(att), role: this.roleOf(att), proSettings: this.proSettings() };
+    }
+    // The live link a key belongs to, or null. Hashed first; after the await everything is read
+    // synchronously, so the answer is about the links as they are now. Every link is compared
+    // (no early exit), each in constant time. While unlocked, a key matches a paused link, so the
+    // socket remembers it and can write again if the same owner re-locks.
+    async keyMatches(key) {
+        if (typeof key !== 'string' || !key || key.length > 200) return null;
+        const hash = await sha256Hex(key);
+        let hit = null;
+        for (const link of (this.lock ? this.links : this.suspended).values()) if (sameHex(hash, link.keyHash)) hit = link;
+        return hit;
+    }
+    // Was this key a link that has since been revoked? (Revoked rows are kept a while with their hashes.)
+    async keyRevoked(key) {
+        if (typeof key !== 'string' || !key || key.length > 200) return false;
+        const hash = await sha256Hex(key);
+        let hit = false;
+        for (const r of this.sql.exec(`SELECT key_hash FROM editor_links WHERE revoked_at IS NOT NULL`).toArray()) hit = sameHex(hash, r.key_hash) || hit;
+        return hit;
+    }
+    touchLink(link) {
+        const now = Date.now();
+        if (link.lastUsedAt && now - link.lastUsedAt < LINK_TOUCH_MS) return;
+        link.lastUsedAt = now;
+        this.sql.exec(`UPDATE editor_links SET last_used_at = ? WHERE id = ?`, now, link.id);
+    }
+    newLinkId() { return b64url(crypto.getRandomValues(new Uint8Array(6))); }      // 8 characters
+    async newEditorKey() {
+        const key = b64url(crypto.getRandomValues(new Uint8Array(16)));    // 128 bits
+        return { key, keyHash: await sha256Hex(key), keyId: this.newLinkId() };
+    }
+    // Synchronous: callers make the key first (the only await), then read and write.
+    createLink(label, k) {
+        let id = k.keyId;
+        while (this.links.has(id) || this.sql.exec(`SELECT 1 FROM editor_links WHERE id = ?`, id).toArray().length) id = this.newLinkId();
+        const at = Date.now();
+        this.sql.exec(`INSERT INTO editor_links (id, label, key_hash, created_at, last_used_at, revoked_at) VALUES (?, ?, ?, ?, NULL, NULL)`, id, label, k.keyHash, at);
+        // Revoked rows are kept a while (they explain a dead link), not forever.
+        this.sql.exec(`DELETE FROM editor_links WHERE revoked_at IS NOT NULL AND id NOT IN (SELECT id FROM editor_links WHERE revoked_at IS NOT NULL ORDER BY revoked_at DESC LIMIT 50)`);
+        const link = { id, label, keyHash: k.keyHash, createdAt: at, lastUsedAt: null };
+        this.links.set(id, link);
+        return link;
+    }
+    // Revoke links; sockets that used one are told at once and drop to read-only (unless they are the owner).
+    revokeLinks(ids, reason) {
+        const gone = new Set(ids.filter((id) => this.links.has(id)));
+        if (!gone.size) return;
+        const at = Date.now();
+        for (const id of gone) { this.sql.exec(`UPDATE editor_links SET revoked_at = ? WHERE id = ?`, at, id); this.links.delete(id); }
+        if (reason) this.tellRevoked(gone, reason);
+    }
+    tellRevoked(gone, reason) {
+        for (const ws of this.ctx.getWebSockets()) {
+            const att = ws.deserializeAttachment() || {};
+            if (!gone.has(att.keyId)) continue;
+            const next = { ...att, keyId: null };
+            ws.serializeAttachment(next);
+            try { ws.send(json({ t: 'auth', ok: false, reason, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) })); } catch { /* gone */ }
+        }
+    }
+    static cleanLabel(label) {
+        if (typeof label !== 'string') return null;
+        const t = label.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+        return t && t.length <= 40 ? t : null;
+    }
+    // A history row for a lock change, so a group can see why editing stopped (or came back).
+    // No owner and no key: history is served to anyone with the edit name.
+    recordLockChange(kind, label) {
+        const s = this.state, at = Date.now();
+        s.v += 1; this.setMeta('v', s.v);
+        const entry = { savedAt: at, kind, label, removed: 0, changed: 0, added: 0, removedEvents: [], changedEvents: [], addedEvents: [],
+            eventCount: s.events.length, title: s.title, options: s.options, writer: null };
+        this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`, s.v, at, kind, json([{ type: kind }]), json(entry));
+        this.sql.exec(`DELETE FROM history WHERE v NOT IN (SELECT v FROM history ORDER BY v DESC LIMIT 50)`);
+        for (const ws of this.ctx.getWebSockets()) { try { ws.send(json(this.snapshotFor(ws.deserializeAttachment() || {}))); } catch { /* gone */ } }
+    }
+
+    async lockRoute(op, request) {
+        const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
+        const ownerId = typeof body?.ownerId === 'string' ? body.ownerId.trim() : '';
+        // Any key is made BEFORE the lock is read: from here on nothing awaits, so two lock calls
+        // cannot both see "unlocked", and two link creations cannot both see 19 links.
+        const k = ['lock', 'rotate-editor-key', 'create-editor-link', 'dev-legacy-key'].includes(op) ? await this.newEditorKey() : null;
+        const l = this.lock;
+        const no = (status, error) => Response.json({ ok: false, error }, { status });
+        if (op === 'lock-status') {
+            if (!this.state.id) return no(404, 'not-found');
+            const lp = this.lapse;
+            return Response.json({ locked: !!l, ownerId: l ? l.ownerId : null, plan: l ? l.plan : null, lockedAt: l ? l.lockedAt : null,
+                title: this.state.title || null,   // for the Pro welcome email's subject
+                // After Pro: who it lapsed from and whether it is paused. lapsedMode: the owner's choice (also while locked).
+                lapsed: lp && lp.lapsedAt != null && !l ? { ownerId: lp.ownerId, mode: lp.mode, at: lp.lapsedAt } : null,
+                lapsedMode: lp && (!l || lp.ownerId === l.ownerId) ? lp.mode : 'readonly',
+                // Did the owner pick it, or is lapsedMode the default? (A trial with no choice ends open.)
+                lapsedModeChosen: !!(lp && (!l || lp.ownerId === l.ownerId)) });
+        }
+        if (op === 'editor-of-record') {
+            // For the Worker (trial, checkout, the 7-day undo): has this author uid run the calendar?
+            // An editor of record is the browser that created it (created_here), or one that edited it on
+            // at least 2 distinct days. A calendar with neither (from before authors were recorded, or
+            // edited once) falls back to its top author. The uids are never shown to anyone (GET
+            // /cal/<id>/authors is admin-only, history never carries one), so sending one is the proof.
+            if (!this.state.id) return no(404, 'not-found');
+            const uid = typeof body?.uid === 'string' ? body.uid.slice(0, 128) : '';
+            const nDays = (r) => { try { return JSON.parse(r.days).length; } catch { return 0; } };
+            const rows = this.sql.exec(`SELECT uid, first_seen, edit_count, created_here, days FROM authors`).toArray();
+            const qualifies = (r) => !!r.created_here || nDays(r) >= 2;
+            const me = uid ? rows.find((r) => r.uid === uid) : null;
+            let editor = !!(me && qualifies(me));
+            if (!editor && me && !rows.some(qualifies)) {
+                rows.sort((a, b) => nDays(b) - nDays(a) || a.first_seen - b.first_seen || b.edit_count - a.edit_count);
+                editor = rows[0].uid === uid;
+            }
+            return Response.json({ ok: true, known: rows.length > 0, editor, creator: !!(me && me.created_here) });
+        }
+        if (op === 'can-edit') {
+            // For the Worker (create-view): may this caller change the calendar?
+            if (this.paused()) return Response.json({ locked: false, paused: true, canEdit: false });
+            if (!l || (!!body.userId && body.userId === l.ownerId)) return Response.json({ locked: !!l, canEdit: true });
+            const link = await this.keyMatches(body.editorKey);
+            if (link) this.touchLink(link);
+            return Response.json({ locked: !!this.lock, canEdit: !this.lock || !!link });
+        }
+        if (op === 'set-view-id') {
+            // The Worker's create-view, already authorized: records the new read-only link.
+            const publicViewId = typeof body.publicViewId === 'string' ? body.publicViewId : '';
+            if (!this.state.id) return no(404, 'not-found');
+            if (!publicViewId || publicViewId.length > 200) return no(400, 'bad publicViewId');
+            const s = this.state;
+            if (s.options.publicViewId === publicViewId) return Response.json({ ok: true, unchanged: true });
+            const beforeOptions = s.options;
+            s.options = { ...s.options, publicViewId }; this.setMeta('options', s.options);
+            this.bump('meta', [{ type: 'meta', options: { publicViewId } }], { beforeEvents: s.events, beforeTitle: s.title, beforeOptions });
+            this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options });
+            await this.scheduleCopyBack();
+            return Response.json({ ok: true, v: s.v });
+        }
+        if (op === 'unlock') {
+            if (!l) return Response.json({ ok: true, alreadyUnlocked: true });
+            if (ownerId && ownerId !== l.ownerId) return no(409, 'locked-by-other');
+            this.sql.exec(`DELETE FROM lock`); this.lock = null;
+            // Links are paused, not revoked: an unlocked calendar is editable by everyone anyway, and a
+            // re-lock by the same owner turns them back on. A lock by anyone else revokes them.
+            this.sql.exec(`UPDATE editor_links SET suspended_for = ? WHERE revoked_at IS NULL AND suspended_for IS NULL`, l.ownerId);
+            for (const [id, link] of this.links) this.suspended.set(id, { ...link, suspendedFor: l.ownerId });
+            this.links.clear();
+            // Firebase kept its pre-lock copy, and anyone may have edited (or emptied) it since.
+            // Merging that against the pre-lock baseline would replay those edits here, so the next
+            // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
+            this.setMeta('firebaseUntrusted', true);
+            // Billing ending a subscription (lapse:true): paused unless the owner chose 'open'.
+            // A trial with no choice made ends open (a free calendar again); anything paid ends read-only.
+            const pref = this.lapse && this.lapse.ownerId === l.ownerId ? this.lapse.mode : body.trial === true ? 'open' : 'readonly';
+            if (body.lapse === true && pref === 'readonly') {
+                const at = Date.now();
+                this.sql.exec(`INSERT OR REPLACE INTO lapse (k, owner, mode, lapsed_at) VALUES (1, ?, 'readonly', ?)`, l.ownerId, at);
+                this.lapse = { ownerId: l.ownerId, mode: 'readonly', lapsedAt: at };
+            } else {
+                this.sql.exec(`DELETE FROM lapse`); this.lapse = null;
+            }
+            this.recordLockChange('unlocked', this.paused() ? `${planName(l.plan)} ended. Editing paused by the owner` : body.undo === true ? 'Upgrade undone' : 'Unlocked');
+            await this.scheduleCopyBack();
+            return Response.json({ ok: true, paused: this.paused() });
+        }
+        if (!ownerId || ownerId.length > 200) return no(400, 'ownerId required');
+        if (op === 'lock') {
+            if (!this.state.id) return no(404, 'not-found');
+            if (l && l.ownerId !== ownerId) return no(409, 'locked-by-other');
+            if (l && !body.rotate) return Response.json({ ok: true, alreadyLocked: true });   // only hashes are kept: no key to return
+            if (l) return this.rotateKey(k);
+            // Paused after Pro: only its owner gets it back (support passes takeover, see reassign).
+            if (this.paused() && this.lapse.ownerId !== ownerId && body.takeover !== true) return no(409, 'locked-by-other');
+            const plan = typeof body.plan === 'string' && body.plan ? body.plan.slice(0, 32) : 'pro';
+            const at = Date.now();
+            this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, NULL, NULL)`, ownerId, plan, at);
+            this.lock = { ownerId, plan, lockedAt: at };
+            // The owner's own choice for later is kept; anyone else's goes.
+            if (this.lapse && this.lapse.ownerId === ownerId) {
+                this.sql.exec(`UPDATE lapse SET lapsed_at = NULL`); this.lapse = { ...this.lapse, lapsedAt: null };
+            } else { this.sql.exec(`DELETE FROM lapse`); this.lapse = null; }
+            this.revokeLinks([...this.links.keys()], null);            // none should be live; never inherit any
+            // Paused links come back for the owner who paused them; anyone else's are revoked, and
+            // tabs still holding them are told, so they forget the key.
+            const stale = new Set();
+            for (const [id, link] of this.suspended) {
+                if (link.suspendedFor === ownerId) {
+                    this.sql.exec(`UPDATE editor_links SET suspended_for = NULL WHERE id = ?`, id);
+                    this.links.set(id, { ...link, suspendedFor: null });
+                } else {
+                    this.sql.exec(`UPDATE editor_links SET suspended_for = NULL, revoked_at = ? WHERE id = ?`, at, id);
+                    stale.add(id);
+                }
+            }
+            this.suspended.clear();
+            if (stale.size) this.tellRevoked(stale, 'link-revoked');
+            // Billing locks with createLink:false: there is no browser to show a key to, and the owner
+            // makes links from the calendar. The admin route still gets one 'Editors' key.
+            const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
+            this.recordLockChange('locked', `Upgraded with ${planName(plan)}`);
+            // Claim this calendar's own name (and view link) in the directory now, so a case variant
+            // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
+            this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));
+            if (this.state.options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(this.state.options.publicViewId, true, this.state.id, true));
+            return Response.json({ ok: true, editorKey: made ? k.key : null, links: this.links.size });
+        }
+        if (op === 'set-lapsed-mode') {
+            // The owner's choice for after Pro: while locked (for later), or once paused ('open' ends the pause now).
+            const mode = body.mode;
+            if (!LAPSED_MODES.includes(mode)) return no(400, 'bad-mode');
+            const lapsedOwner = !l && this.lapse && this.lapse.lapsedAt != null ? this.lapse.ownerId : null;
+            if (!l && !lapsedOwner) return no(409, 'not-locked');
+            if ((l ? l.ownerId : lapsedOwner) !== ownerId) return no(403, 'not-owner');
+            if (l) {
+                this.sql.exec(`INSERT OR REPLACE INTO lapse (k, owner, mode, lapsed_at) VALUES (1, ?, ?, NULL)`, ownerId, mode);
+                this.lapse = { ownerId, mode, lapsedAt: null };
+                return Response.json({ ok: true, mode, paused: false });
+            }
+            if (mode === 'readonly') return Response.json({ ok: true, mode, paused: true, unchanged: true });
+            this.sql.exec(`DELETE FROM lapse`); this.lapse = null;
+            this.recordLockChange('opened', 'Editing opened to everyone');      // every tab gets canEdit back
+            await this.scheduleCopyBack();
+            return Response.json({ ok: true, mode, paused: false });
+        }
+        // Everything below is owner-only, and only while locked.
+        if (!l) return no(409, 'not-locked');
+        if (l.ownerId !== ownerId) return no(403, 'not-owner');
+        if (op === 'rotate-editor-key') return this.rotateKey(k);
+        if (op === 'create-editor-link') {
+            const label = CalendarRoom.cleanLabel(body.label);
+            if (!label) return no(400, 'label must be 1-40 characters');
+            if (this.links.size >= MAX_EDITOR_LINKS) return no(409, 'too-many-links');
+            const link = this.createLink(label, k);
+            return Response.json({ ok: true, id: link.id, label: link.label, createdAt: link.createdAt, editorKey: k.key });
+        }
+        if (op === 'list-editor-links') {
+            const links = [...this.links.values()].map(({ id, label, createdAt, lastUsedAt }) => ({ id, label, createdAt, lastUsedAt }));
+            return Response.json({ ok: true, links });
+        }
+        if (op === 'revoke-editor-link') {
+            const id = typeof body.id === 'string' ? body.id : '';
+            if (!this.links.has(id)) return no(404, 'no-link');
+            this.revokeLinks([id], 'link-revoked');
+            return Response.json({ ok: true });
+        }
+        if (op === 'set-pro-settings') {
+            const cur = this.proStored && this.proStored.owner === l.ownerId ? this.proStored.settings : null;
+            const r = mergeProSettings(cur, body.settings);
+            if (!r.ok) return Response.json({ ok: false, error: 'bad-settings', message: r.error }, { status: 400 });
+            const at = Date.now();
+            this.sql.exec(`INSERT OR REPLACE INTO pro_settings (k, owner, data, updated_at) VALUES (1, ?, ?, ?)`, l.ownerId, json(r.settings), at);
+            this.proStored = { owner: l.ownerId, settings: r.settings };
+            this.broadcast({ t: 'pro', settings: r.settings });
+            return Response.json({ ok: true, settings: r.settings });
+        }
+        if (op === 'dev-legacy-key' && this.env.ACCOUNTS_DEV_MODE === '1') {
+            // Local tests only: put this lock back in the pre-links shape (one key in the lock row) and
+            // reload, so the real migration in load() runs.
+            this.sql.exec(`DELETE FROM editor_links`);
+            this.sql.exec(`UPDATE lock SET key_hash = ?, key_id = ?`, k.keyHash, 'legacy-' + k.keyId);
+            this.load();
+            return Response.json({ ok: true, editorKey: k.key, keyId: 'legacy-' + k.keyId });
+        }
+        return no(404, 'not found');
+    }
+    // Every link is revoked and one new 'Editors' link made (the old single-key "rotate"). Sockets
+    // that used any old link are told (reason 'key-rotated') and drop to read-only.
+    rotateKey(k) {
+        this.revokeLinks([...this.links.keys()], 'key-rotated');
+        this.createLink('Editors', k);
+        return Response.json({ ok: true, editorKey: k.key });
+    }
+
+    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            // Never re-point a name that leads to another live calendar. Registering is an upsert, so
+            // without this anyone could create a calendar carrying another calendar's publicViewId (it is
+            // in the view URL) and take over its /view/ link and feed -- or create a case variant of its
+            // name and take over the name's lookups. (Red team, Oct 24 2026: free calendars were open to this.)
+            const target = targetId || actualSlug;
+            // Fail closed: if we can't tell where the name leads now, or whether that calendar is locked,
+            // leave the directory alone.
+            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => null);
+            if (!cur || typeof cur.found !== 'boolean') { console.warn(`[CalendarRoom] not registering ${actualSlug}: lookup unreadable`); return; }
+            const curTarget = cur.found ? (cur.targetId || cur.actualSlug) : null;
+            if (curTarget && curTarget !== target) {
+                // The name leads to another calendar. Re-point it only if that calendar is gone (a stale entry).
+                // A view id never moves to a different calendar, even when forced: it is in a public URL, and
+                // whoever knows it could otherwise take over that /view/ page and its feed. An edit name may be
+                // reclaimed (force, from locking this calendar) from an unlocked case variant, never from a locked one.
+                if (!this.env.CALENDARS) return;
+                const st = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(curTarget))
+                    .fetch(`http://internal/cal/${encodeURIComponent(curTarget)}/lock-status`);
+                const gone = st.status === 404;
+                const locked = st.ok ? (await st.json().catch(() => null))?.locked : null;
+                const reclaim = force && !isReadOnly && locked === false;
+                if (!gone && !reclaim) {
+                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to another calendar${locked ? ' (locked)' : ''}`);
+                    return;
+                }
+            }
             await dir.fetch('http://internal/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: json({
                     actualSlug,
                     isReadOnly: !!isReadOnly,
-                    targetId: targetId || actualSlug
+                    targetId: targetId || actualSlug,
+                    ...(force ? { force: true } : {})
                 })
             });
         } catch (e) {
-            console.error('[CalendarRoom:registerInDirectoryFailed]', json({
-                actualSlug,
-                isReadOnly: !!isReadOnly,
-                targetId: targetId || actualSlug,
-                error: e.message
-            }));
+            console.error(`[CalendarRoom] registerInDirectory failed for ${actualSlug}:`, e.message);
         }
-    }
-
-    async touchDirectory() {
-        if (!this.env.DIRECTORY || !this.state.id) return;
-        try {
-            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
-            await dir.fetch('http://internal/touch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: json({ targetId: this.state.id })
-            });
-        } catch {}
     }
 
     recordAuthor(uid, isCreation = false) {
@@ -170,12 +692,13 @@ export class CalendarRoom extends DurableObject {
         this.state.events = events;
     }
 
-    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer } = {}) {
+    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, kind: kindOverride, label, countsOnly } = {}) {
         const s = this.state;
         s.v += 1;
         s.lastEditedAt = Date.now();
         this.setMeta('v', s.v);
         this.setMeta('lastEditedAt', s.lastEditedAt);
+        if (this.env.BACKUPS) this.ctx.waitUntil(this.scheduleAlarm());   // every change is backed up (see backupToR2)
 
         const before = beforeEvents || [];
         const after = s.events;
@@ -190,13 +713,19 @@ export class CalendarRoom extends DurableObject {
         }
         const addedEvents = after.filter((e) => !beforeByKey.has(keyOf(e)));
 
-        const kind = (source === 'create' || !before.length) ? 'created'
+        const kind = kindOverride ? kindOverride
+            : (source === 'create' || !before.length) ? 'created'
             : (before.length > 0 && removedEvents.length === before.length) ? 'wiped'
             : removedEvents.length ? 'shrunk'
             : changedEvents.length ? 'edited'
             : addedEvents.length ? 'added'
             : (beforeTitle && !s.title) ? 'title-cleared'
             : 'edited';
+        // A write that changed no event (settings, a renamed calendar) is not a change Recent
+        // changes can show or undo: recording it listed "0 events added" between two real
+        // edits. Same rule as Firebase's history trigger (changeKind). The version above
+        // still moves, since a tab reads any other ack as a conflict.
+        if (!removedEvents.length && !changedEvents.length && !addedEvents.length && kind !== 'title-cleared') return;
 
         const entry = {
             savedAt: s.lastEditedAt,
@@ -212,34 +741,53 @@ export class CalendarRoom extends DurableObject {
             options: beforeOptions ?? s.options ?? null,
             writer: writer || null,
         };
-        if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
+        if (label) entry.label = label;
+        // A whole-calendar replace (restore) keeps counts only: two full event lists in one row could
+        // pass SQLite's 2 MB row limit. Its undo is the R2 restore point (RoomInsight.restoreVersion).
+        if (countsOnly) { entry.removedEvents = []; entry.changedEvents = []; entry.addedEvents = []; }
+        else if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
 
         this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`,
             s.v, s.lastEditedAt, source, json(commands), json(entry));
         this.sql.exec(`DELETE FROM history WHERE v NOT IN (SELECT v FROM history ORDER BY v DESC LIMIT 50)`);
-        this.ctx.waitUntil(this.touchDirectory());
     }
 
     // ---- limits ---------------------------------------------------------------------------
-    overRate(ws) {
+    // tabOnly: count against this socket's budget alone (a failed editor key must never use up the
+    // calendar's shared budget: that would let a stranger lock the owner out).
+    overRate(ws, { tabOnly = false } = {}) {
         const now = Date.now();
         this.saves = this.saves.filter((t) => now - t < 60000);
-        if (this.saves.length >= LIMITS.savesPerMinute) return 'this calendar is saving too often';
+        if (!tabOnly && this.saves.length >= LIMITS.savesPerMinute) return 'this calendar is saving too often';
         const tab = ws.deserializeAttachment() || {};
         const mine = (tab.saves || []).filter((t) => now - t < 60000);
         if (mine.length >= LIMITS.savesPerMinutePerTab) return 'this tab is saving too often';
-        mine.push(now); this.saves.push(now);
+        mine.push(now); if (!tabOnly) this.saves.push(now);
         ws.serializeAttachment({ ...tab, saves: mine });
         return null;
     }
-    tooBig(events) {
+    // `rows` are the events to check one by one: by default all of them, but a save checks only
+    // the rows it adds or changes, so an old row that predates a rule never locks a calendar out.
+    // The count and the total size always cover the whole calendar.
+    tooBig(events, { title = this.state.title, options = this.state.options, rows = events } = {}) {
         if (events.length > LIMITS.maxEvents) return `more than ${LIMITS.maxEvents} events`;
-        for (const e of events) {
+        for (const e of rows) {
+            if (!e || typeof e !== 'object') return 'an event is not an object';
             if ((e.title || '').length > LIMITS.maxTitle) return 'an event title is too long';
-            for (const f of ['description', 'recurrenceException', 'recurrencerule']) {
+            for (const f of ['description', 'recurrenceException', 'recurrencerule', 'repeat']) {
                 if ((e[f] || '').length > LIMITS.maxField) return `an event ${f} is too long`;
             }
+            for (const f of ['id', 'recurrenceID']) {
+                const v = e[f];
+                if (v !== undefined && v !== null && typeof v !== 'string' && typeof v !== 'number') return `an event ${f} is not text`;
+                if (String(v ?? '').length > LIMITS.maxId) return `an event ${f} is too long`;
+            }
+            const t = e.type;
+            if (t !== undefined && t !== null && typeof t !== 'number' && typeof t !== 'string') return 'an event type is not a number';
+            if (typeof t === 'string' && t.length > LIMITS.maxType) return 'an event type is too long';
         }
+        const size = json(title ?? '').length + json(options ?? {}).length + json(events).length;
+        if (size > LIMITS.maxCalendar) return `this calendar is too large (over ${LIMITS.maxCalendar / 1024 / 1024} MB)`;
         return null;
     }
 
@@ -248,19 +796,58 @@ export class CalendarRoom extends DurableObject {
         const url = new URL(request.url);
         const viewId = url.searchParams.get('view') || request.headers.get('X-View-Id');
         const isViewOnly = !!viewId;
+        // /cal/<id>[/<suffix>], matched exactly. endsWith('/import') also matched a calendar NAMED
+        // "import" (PUT /cal/import replaced it with no secret), and would do the same for "lock".
+        const [, , , suffix = '', ...rest] = url.pathname.split('/');
+        if (rest.length) return new Response('not found', { status: 404 });
+        // Stats and restore (RoomInsight.js): internal-only, like the lock routes below.
+        if (INSIGHT_ROUTES.has(suffix)) {
+            if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
+            return insightRoute(this, suffix, request);
+        }
+        // Link previews (the Worker's preview/route.js): internal-only, and never counted as a view.
+        if (suffix === 'preview') {
+            if (url.hostname !== 'internal' || request.method !== 'GET') return new Response('not found', { status: 404 });
+            if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
+            return Response.json(this.previewData(Date.now()));
+        }
+        if (this.statsReady && request.headers.get('X-PC-Hit')) countHit(this, request).catch((e) => console.error('[stats] count failed:', e && e.message));   // never awaited: stats never fail or delay a request
+        if (LOCK_ROUTES.has(suffix)) {
+            // Only Worker code calls these (stub.fetch('http://internal/...')). Public requests are
+            // forwarded with their real host, and the Worker's allowlist never forwards these
+            // suffixes; read-only view forwards use the internal host but always carry ?view=.
+            if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
+            return this.lockRoute(suffix, request);
+        }
         if (request.headers.get('Upgrade') === 'websocket') {
+            // A view link to a room with no calendar (archived, never created) opens nothing, as GET answers 404.
+            if (isViewOnly && !this.state.id) return new Response('not found', { status: 404 });
             const [client, server] = Object.values(new WebSocketPair());
             this.ctx.acceptWebSocket(server);
             const author = url.searchParams.get('author');
-            server.serializeAttachment({ saves: [], isViewOnly, viewId, author });
-            if (author && !isViewOnly) this.recordAuthor(author, false);
-            const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
-            server.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
+            // X-PC-User is trusted: the Worker deletes any a client sent and sets it from a session.
+            const att = { saves: [], isViewOnly, viewId, author, user: isViewOnly ? null : request.headers.get('X-PC-User') || null };
+            server.serializeAttachment(att);
+            // Opening is not editing: an author is recorded on a save only (editor of record counts edit days).
+            server.send(json(this.snapshotFor(att)));
             return new Response(null, { status: 101, webSocket: client });
         }
+        if (request.method === 'POST' && suffix === 'archive') return Response.json(await this.archiveTestCalendar());
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
+        if (suffix === 'authors' && request.method === 'POST') {
+            // Test hook (ACCOUNTS_DEV_MODE only; the Worker already requires the admin secret for /authors):
+            // add an earlier active day to an author, so "edited on 2+ days" can be tested today.
+            if (this.env.ACCOUNTS_DEV_MODE !== '1') return Response.json({ error: 'forbidden' }, { status: 403 });
+            const b = await request.json().catch(() => ({}));
+            const r = this.sql.exec(`SELECT days FROM authors WHERE uid = ?`, String(b.uid || '')).toArray()[0];
+            if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(String(b.day || ''))) return Response.json({ error: 'no-author' }, { status: 404 });
+            let days = []; try { days = JSON.parse(r.days); } catch {}
+            if (!days.includes(b.day)) days.unshift(b.day);
+            this.sql.exec(`UPDATE authors SET days = ? WHERE uid = ?`, json(days), String(b.uid));
+            return Response.json({ ok: true, days });
+        }
         if (request.method === 'GET') {
-            if (url.pathname.endsWith('/history')) {
+            if (suffix === 'history') {
                 const rows = this.sql.exec(`SELECT v, at, source, commands, entry FROM history ORDER BY v DESC LIMIT 20`).toArray();
                 const entries = rows.map((r) => {
                     if (r.entry) {
@@ -278,7 +865,7 @@ export class CalendarRoom extends DurableObject {
                 });
                 return Response.json(entries);
             }
-            if (url.pathname.endsWith('/authors')) {
+            if (suffix === 'authors') {
                 const rows = this.sql.exec(`SELECT uid, first_seen, last_seen, edit_count, created_here, days FROM authors`).toArray();
                 const authors = rows.map((r) => ({
                     uid: r.uid,
@@ -298,9 +885,11 @@ export class CalendarRoom extends DurableObject {
             }
             if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
             const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
-            return Response.json({ v: this.state.v, calendar: cal });
+            return Response.json({ v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, paused: this.paused(), proSettings: this.proSettings() });
         }
-        if (request.method === 'POST' && !url.pathname.endsWith('/import')) {
+        // Nothing that writes ever comes through a view link (the Worker refuses it too: index.js, /cal/view).
+        if (isViewOnly && request.method !== 'GET' && request.method !== 'HEAD') return Response.json({ error: 'read only' }, { status: 405 });
+        if (request.method === 'POST' && suffix === '') {
             const text = await request.text();
             if (text.length > LIMITS.maxCreate) return Response.json({ ok: false, error: 'too big' }, { status: 413 });
             let cal; try { cal = JSON.parse(text); } catch { return Response.json({ ok: false, error: 'bad json' }, { status: 400 }); }
@@ -309,14 +898,18 @@ export class CalendarRoom extends DurableObject {
             if (r.ok) await this.scheduleCopyBack();
             return Response.json(r, { status: r.ok ? 201 : r.status });
         }
-        if (request.method === 'PUT' && url.pathname.endsWith('/import')) {
+        if (request.method === 'PUT' && suffix === 'import') {
             // Whole-calendar replace: the Firebase shadow copy, and the one-time load.
             const cal = await request.json();
-            return Response.json(this.importCalendar(cal));
+            const r = this.importCalendar(cal);
+            return Response.json(r, { status: r.status || (r.ok ? 200 : 413) });   // 423 locked, 413 a size limit
         }
-        if (request.method === 'PUT' && url.pathname.endsWith('/from-firebase')) {
+        if (request.method === 'PUT' && suffix === 'from-firebase') {
             // A live Firebase write: merged onto the current state, never a blind replace.
-            return Response.json(this.fromFirebase(await request.json()));
+            // Locked: refused with ok:false and an error, which the Firebase function logs and does not retry.
+            // Refused (a size limit): nothing is stored, and the caller is told why.
+            const r = this.fromFirebase(await request.json());
+            return Response.json(r, { status: r.status || (r.ok ? 200 : 413) });
         }
         return new Response('not found', { status: 404 });
     }
@@ -353,7 +946,7 @@ export class CalendarRoom extends DurableObject {
         if (!cal || typeof cal !== 'object') return { ok: false, status: 400, error: 'bad calendar' };
         const title = cal.title ?? '';
         if (typeof title !== 'string' || title.length > LIMITS.maxTitle) return { ok: false, status: 400, error: 'bad title' };
-        const options = cal.options ?? {};
+        const options = withTz(clientOptions(cal.options ?? {}), null);
         if (typeof options !== 'object' || Array.isArray(options) || json(options).length > LIMITS.maxField * 5) {
             return { ok: false, status: 400, error: 'bad options' };
         }
@@ -372,8 +965,17 @@ export class CalendarRoom extends DurableObject {
     }
 
     importCalendar(cal, source = 'import') {
+        // A locked calendar is replaced by no one: /import is the Firebase shadow, and Firebase is world-writable.
+        if (this.lock) return { ok: false, status: 423, error: 'locked' };
+        if (this.paused()) return { ok: false, status: 423, error: 'paused' };          // same reason, after Pro
+        cal = { ...cal, options: clientOptions(cal.options) };
+        // The Firebase shadow never carries tz: a stored zone stays (and an invalid one never lands).
+        if (cal.options && typeof cal.options === 'object' && !Array.isArray(cal.options)) {
+            const stored = this.state.options && validZone(this.state.options.tz) ? this.state.options.tz : null;
+            cal.options = stored && !('tz' in cal.options) ? { ...cal.options, tz: stored } : withTz(cal.options, this.state.options);
+        }
         const { events, renamed } = this.dedupe(cal);
-        const why = this.tooBig(events);
+        const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {} });
         if (why) return { ok: false, error: why };
         // Identical to what is stored: do nothing. This is what stops a two-way copy with
         // Firebase from bouncing one write back and forth forever (the Sep 26 shape).
@@ -404,8 +1006,19 @@ export class CalendarRoom extends DurableObject {
     // Values are copied raw, never normalized (see dedupe).
     fromFirebase(cal) {
         const s = this.state;
+        if (this.lock) return { ok: false, status: 423, error: 'locked' };   // Firebase is world-writable: no bypass through it
+        if (this.paused()) return { ok: false, status: 423, error: 'paused' };
         if (!s.id) return this.importCalendar(cal);                      // first sight: a plain copy
+        cal = { ...cal, options: clientOptions(cal.options) };
         const { events: incoming, renamed } = this.dedupe(cal);
+        if (this.sql.exec(`SELECT 1 FROM meta WHERE k = 'firebaseUntrusted'`).toArray().length) {
+            // First exchange since an unlock (see lockRoute): Firebase's copy becomes the baseline and
+            // nothing of it is applied; the copy-back then writes this calendar over it.
+            this.setMirrored(cal.title ?? '', cal.options || {}, incoming);
+            this.sql.exec(`DELETE FROM meta WHERE k = 'firebaseUntrusted'`);
+            this.ctx.waitUntil(this.scheduleCopyBack());
+            return { ok: true, unchanged: true, untrusted: true, v: s.v, events: s.events.length, renamedDuplicates: renamed };
+        }
         const title = cal.title ?? '', options = cal.options || {};
         // Rooms imported before `mirrored` existed: the import is the baseline.
         const m = this.mirrored || { title: s.title, options: s.options, events: s.events };
@@ -459,7 +1072,8 @@ export class CalendarRoom extends DurableObject {
             this.setMirrored(title, options, incoming);
             return done({ unchanged: true, v: s.v });
         }
-        const why = this.tooBig(list) || (nextTitle.length > LIMITS.maxTitle ? 'title too long' : null);
+        const why = this.tooBig(list, { title: nextTitle, options: nextOptions, rows: list.filter((e) => touched.has(EventStore.keyOf(e))) })
+            || (nextTitle.length > LIMITS.maxTitle ? 'title too long' : null);
         if (why) return { ok: false, error: why };                             // nothing stored
         const beforeEvents = s.events;
         const beforeTitle = s.title;
@@ -489,6 +1103,9 @@ export class CalendarRoom extends DurableObject {
     copyBackAllowed() {
         const id = this.state.id, list = String(this.env.COPY_BACK || '').split(',').map((x) => x.trim()).filter(Boolean);
         if (!id || !this.env.FIREBASE_DB_URL) return false;
+        // Locked calendars stop mirroring to Firebase: anyone can write there, and its edits are
+        // refused here anyway (fromFirebase). Covers both scheduling and the alarm itself.
+        if (this.lock || this.paused()) return false;
         if (!this.firebaseLocal() && !this.env.FIREBASE_SA) return false;
         return list.some((p) => p === '*' || (p.endsWith('*') ? id.startsWith(p.slice(0, -1)) : id === p));
     }
@@ -496,7 +1113,57 @@ export class CalendarRoom extends DurableObject {
 
     async scheduleCopyBack() {
         if (!this.copyBackAllowed()) return;
+        await this.scheduleAlarm();
+    }
+    // One alarm a few seconds after the last change runs both the backup and the copy-back, so a
+    // burst of saves is one of each.
+    async scheduleAlarm() {
         if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + LIMITS.copyBackDelayMs);
+    }
+
+    // ---- archiving test calendars ---------------------------------------------------------
+    // Automated tests used to create calendars on the live site (4,000+ by Oct 2026). This takes one
+    // out of service: its full state is written to R2 FIRST, and only once that write succeeded is
+    // the calendar emptied and its name dropped from the directory. Only names starting "test" are
+    // accepted, so even a leaked secret cannot archive a real calendar this way.
+    async archiveTestCalendar() {
+        const s = this.state;
+        if (!s.id) return { ok: true, missing: true };
+        if (!/^test/i.test(s.id)) return { ok: false, error: 'only test calendars can be archived' };
+        if (this.lock) return { ok: false, error: 'locked' };          // a paid calendar is never archived this way
+        if (!this.env.BACKUPS) return { ok: false, error: 'no backup bucket' };
+        const id = s.id;
+        await this.env.BACKUPS.put(`archive/test-calendars/${encodeURIComponent(id)}.json`,
+            json({ archivedAt: new Date().toISOString(), v: s.v, calendar: this.calendar() }),
+            { httpMetadata: { contentType: 'application/json' }, customMetadata: { id } });
+        for (const ws of this.ctx.getWebSockets()) { try { ws.close(1000, 'archived'); } catch { /* gone */ } }
+        await this.ctx.storage.deleteAlarm();
+        this.sql.exec('DELETE FROM events'); this.sql.exec('DELETE FROM meta'); this.sql.exec('DELETE FROM history'); this.sql.exec('DELETE FROM lock');
+        this.sql.exec('DELETE FROM editor_links'); this.sql.exec('DELETE FROM pro_settings'); this.sql.exec('DELETE FROM lapse');
+        this.mirrored = null;
+        this.load();                                                    // now empty: GET answers 404
+        if (this.env.DIRECTORY) {
+            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            await dir.fetch('http://internal/remove', { method: 'POST', body: json({ slug: id, actualSlug: id }) }).catch(() => {});
+        }
+        return { ok: true, archived: id };
+    }
+
+    // ---- backups --------------------------------------------------------------------------
+    // Each calendar backs itself up: after a change, its full state goes to R2 at
+    // snapshots/<encoded id>/<UTC date>.json -- one object per calendar per day it changed (a later
+    // change that day overwrites it). No cron and no list of calendars to walk: the old nightly job
+    // that read every calendar in one run never completed once (Oct 2026). A calendar nobody edits
+    // never changes, so its newest snapshot (or the last full snapshot) stays valid.
+    async backupToR2() {
+        const s = this.state;
+        if (!this.env.BACKUPS || !s.id) return;
+        const key = `snapshots/${encodeURIComponent(s.id)}/${new Date().toISOString().slice(0, 10)}.json`;
+        const savedAt = new Date().toISOString();
+        await this.env.BACKUPS.put(key, json({ v: s.v, savedAt, calendar: this.calendar() }), {
+            httpMetadata: { contentType: 'application/json' },
+            customMetadata: { id: s.id, v: String(s.v), events: String(s.events.length), savedAt, kind: 'daily' },   // read by GET /api/pro/versions
+        });
     }
 
     async firebaseToken() {
@@ -529,6 +1196,9 @@ export class CalendarRoom extends DurableObject {
 
     async alarm() {
         const id = this.state.id;
+        // Separate from the copy-back: a failed backup must not stop it, nor the reverse.
+        try { await this.backupToR2(); }
+        catch (e) { console.error(`backup FAILED for ${id}: ${e.message}`); await this.ctx.storage.setAlarm(Date.now() + 60000); }   // try again
         if (!id || !this.copyBackAllowed()) return;
         try {
             for (let attempt = 1; attempt <= 4; attempt++) {
@@ -549,15 +1219,10 @@ export class CalendarRoom extends DurableObject {
                 if (put.ok) return;
                 this.mirrored = before; this.setMeta('mirrored', before);
                 if (put.status !== 412) throw new Error(`write HTTP ${put.status}`);
-                console.warn('[CalendarRoom:copyBackRetry]', json({ calendarId: id, attempt, status: put.status }));
             }
             throw new Error('Firebase kept changing; gave up after 4 tries');
         } catch (e) {
-            console.error('[CalendarRoom:copyBackFailed]', json({
-                calendarId: id,
-                error: e.message,
-                stack: e.stack
-            }));
+            console.error(`copyBack FAILED for ${id}: ${e.message}`);
             await this.ctx.storage.setAlarm(Date.now() + 30000);                // try again; the state is safe here meanwhile
         }
     }
@@ -565,42 +1230,52 @@ export class CalendarRoom extends DurableObject {
     // ---- WebSocket messages ---------------------------------------------------------------
     async webSocketMessage(ws, message) {
         if (typeof message !== 'string' || message.length > LIMITS.maxMessage) {
-            console.warn('[CalendarRoom:refuse]', json({
-                calendarId: this.state.id || this.id,
-                code: 'too_big',
-                message: 'message too large',
-                length: typeof message === 'string' ? message.length : typeof message
-            }));
             return ws.send(json({ t: 'error', code: 'too_big', message: 'message too large' }));
         }
-        let m;
-        try { m = JSON.parse(message); } catch {
-            console.warn('[CalendarRoom:refuse]', json({
-                calendarId: this.state.id || this.id,
-                code: 'bad_json'
-            }));
-            return ws.send(json({ t: 'error', code: 'bad_json' }));
-        }
-        const tab = ws.deserializeAttachment() || {};
-        const author = m.author || tab.author;
-        const refuse = (code, message) => {
-            console.warn('[CalendarRoom:refuse]', json({
-                calendarId: this.state.id || this.id,
-                code,
-                message,
-                writer: m.writer || author,
-                t: m.t,
-                commandsCount: Array.isArray(m.commands) ? m.commands.length : 0,
-                seq: m.v ?? m.id
-            }));
-            return ws.send(json({ t: 'error', id: m.id, code, message }));
-        };
+        let m; try { m = JSON.parse(message); } catch { return ws.send(json({ t: 'error', code: 'bad_json' })); }
+        const refuse = (code, message) => ws.send(json({ t: 'error', id: m.id, code, message }));
 
+        const tab = ws.deserializeAttachment() || {};
         if (tab.isViewOnly && (m.t === 'save' || m.t === 'meta')) {
             return refuse('read_only', 'this link is read-only');
         }
+        // Before the rate limit and author tally: a refused tab must not use up the calendar's
+        // shared save budget (that would lock out the owner) or count as an author.
+        if ((m.t === 'save' || m.t === 'meta') && this.paused()) return refuse('paused', PAUSED_MESSAGE);
+        if ((m.t === 'save' || m.t === 'meta') && !this.canWrite(tab)) {
+            return refuse('locked', 'This calendar is locked. Only its owner and people with an editor key can change it.');
+        }
+        if (m.t === 'auth') {
+            // An editor link's key, sent over the socket: never in a URL, which logs and analytics record.
+            // Guessing: each failure counts against this socket's rate limit, and the 5th closes it (1008).
+            if ((tab.authFails || 0) >= MAX_AUTH_FAILS) return;
+            const link = tab.isViewOnly ? null : await this.keyMatches(m.key);
+            // A key revoked earlier (while this tab was closed) says so, so the tab forgets it.
+            const revoked = !link && !tab.isViewOnly && this.lock ? await this.keyRevoked(m.key) : false;
+            let next = ws.deserializeAttachment() || {};                  // re-read: the await may have let other messages in
+            if (link) { next = { ...next, keyId: link.id }; ws.serializeAttachment(next); this.touchLink(link); }
+            else if (m.key) {
+                const rate = this.overRate(ws, { tabOnly: true });     // a wrong key uses up this tab's budget
+                next = ws.deserializeAttachment() || {};
+                next = { ...next, authFails: (next.authFails || 0) + 1 }; ws.serializeAttachment(next);
+                if (next.authFails >= MAX_AUTH_FAILS) {
+                    try { ws.send(json({ t: 'auth', ok: false, reason: 'too-many-tries', locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) })); } catch { /* gone */ }
+                    try { ws.close(1008, 'too many wrong editor keys'); } catch { /* gone */ }
+                    return;
+                }
+                if (rate) return refuse('rate_limited', rate);
+            }
+            return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next), ...(revoked ? { reason: 'link-revoked' } : {}) }));
+        }
 
-        if (author && !tab.isViewOnly) this.recordAuthor(author, false);
+        // A calendar is created only by POST /cal/<id> (rate-limited per IP in the Worker). A room
+        // nobody created takes no writes over the socket, and stores nothing -- not even an author.
+        if ((m.t === 'save' || m.t === 'meta') && !this.state.id) {
+            return refuse('no_calendar', 'this calendar does not exist; create it first');
+        }
+
+        const author = m.author || tab.author;
+        if (author && this.canWrite(tab) && this.state.id) this.recordAuthor(author, false);
 
         if (m.t === 'save' || m.t === 'meta') {
             const rate = this.overRate(ws);
@@ -620,14 +1295,20 @@ export class CalendarRoom extends DurableObject {
             if (!result.added.length && !result.changed.length && !result.removed.length) {
                 return ws.send(json({ t: 'ack', id: m.id, v: this.state.v, unchanged: true }));
             }
-            const why = this.tooBig(result.events);
+            const why = this.tooBig(result.events, { rows: [...result.added, ...result.changed] });
             if (why) return refuse('too_big', why);
             const beforeEvents = this.state.events;
             const beforeTitle = this.state.title;
             const beforeOptions = this.state.options;
             const touched = new Set([...result.added, ...result.changed].map(EventStore.keyOf));
             this.storeEvents(result.events, touched);
-            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            // An editing browser names its time zone; it is stored once, only while the calendar has none.
+            const tz = validZone(m.tz);
+            if (tz && !(this.state.options && validZone(this.state.options.tz))) {
+                this.state.options = { ...(this.state.options || {}), tz };
+                this.setMeta('options', this.state.options);
+            }
+            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -638,17 +1319,22 @@ export class CalendarRoom extends DurableObject {
             const beforeEvents = s.events;
             const beforeTitle = s.title;
             const beforeOptions = s.options;
+            let nextTitle = s.title, nextOptions = s.options;
             if (typeof m.title === 'string' && m.title !== s.title) {
                 if (m.title.length > LIMITS.maxTitle) return refuse('too_big', 'title too long');
-                s.title = m.title; this.setMeta('title', s.title); changed = true;
+                nextTitle = m.title; changed = true;
             }
             if (m.options && typeof m.options === 'object') {
-                const next = { ...s.options, ...m.options };           // keys merge (publicViewId survives)
+                const next = { ...s.options, ...withTz(clientOptions(m.options), s.options, m.setTz === true) };   // keys merge (publicViewId survives); a stored tz stays
                 if (json(next).length > LIMITS.maxField * 5) return refuse('too_big', 'settings too large');
-                if (json(next) !== json(s.options)) { s.options = next; this.setMeta('options', next); changed = true; }
+                if (json(next) !== json(s.options)) { nextOptions = next; changed = true; }
             }
             if (!changed) return ws.send(json({ t: 'ack', id: m.id, v: s.v, unchanged: true }));
-            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            const why = this.tooBig(s.events, { title: nextTitle, options: nextOptions, rows: [] });
+            if (why) return refuse('too_big', why);
+            if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
+            if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
+            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();
@@ -657,21 +1343,15 @@ export class CalendarRoom extends DurableObject {
         if (m.t === 'hello') {
             // A reconnecting tab says which version it has; the snapshot was already sent on
             // connect, so this is only for the future "changes since v" optimization.
-            const cal = tab.isViewOnly ? this.viewCalendar(tab.viewId) : this.calendar();
-            return ws.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
+            return ws.send(json(this.snapshotFor(tab)));
         }
         refuse('unknown', `unknown message ${m.t}`);
     }
 
+    // Answer the close. A tab that calls close() with no code arrives as 1005, which is not a code
+    // close() accepts: it threw, so the close was never answered and the tab sat in CLOSING.
     webSocketClose(ws, code) {
         const ok = code >= 1000 && code < 5000 && ![1004, 1005, 1006, 1015].includes(code);
-        if (!ok && code !== 1000 && code !== 1001 && code !== 1005) {
-            console.warn('[CalendarRoom:webSocketClose]', json({
-                calendarId: this.state.id || this.id,
-                code,
-                wasClean: ok
-            }));
-        }
         try { ws.close(ok ? code : 1000, 'bye'); } catch { /* already closed */ }
     }
 
@@ -680,10 +1360,10 @@ export class CalendarRoom extends DurableObject {
             if (s === except) continue;
             try {
                 const att = s.deserializeAttachment() || {};
-                if (att.isViewOnly) {
-                    if (msg.t === 'snapshot') {
-                        s.send(json({ ...msg, calendar: this.viewCalendar(att.viewId) }));
-                    } else if (msg.t === 'meta') {
+                if (msg.t === 'snapshot') {
+                    s.send(json(this.snapshotFor(att)));                // per tab: view copy, canEdit
+                } else if (att.isViewOnly) {
+                    if (msg.t === 'meta') {
                         const options = { ...(msg.options || {}) };
                         delete options.publicViewId;
                         s.send(json({ ...msg, options }));

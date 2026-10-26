@@ -666,7 +666,7 @@
 
         async function runAllTests() {
             console.clear();
-            console.log('%c🧪 PASTECAL SELF-TEST SUITE', 'font-size: 20px; font-weight: bold; color: #4CAF50');        console.log('%cRunning comprehensive UI and functionality tests...', 'color: #666'); 
+            console.log('%c🧪 PASTECAL SELF-TEST SUITE', 'font-size: 20px; font-weight: bold; color: #2e7d32');        console.log('%cRunning comprehensive UI and functionality tests...', 'color: #666'); 
         console.log('━'.repeat(60)); 
 
         // Wait for page to fully load 
@@ -699,10 +699,10 @@
         const total = TEST_RESULTS.passed.length + TEST_RESULTS.failed.length; 
         const passRate = total > 0 ? ((TEST_RESULTS.passed.length / total) * 100).toFixed(1) : 0; 
 
-        console.log(`%c✅ Passed: ${TEST_RESULTS.passed.length}`, 'color: #4CAF50; font-weight: bold'); 
+        console.log(`%c✅ Passed: ${TEST_RESULTS.passed.length}`, 'color: #2e7d32; font-weight: bold'); 
         console.log(`%c❌ Failed: ${TEST_RESULTS.failed.length}`, 'color: #f44336; font-weight: bold'); 
         console.log(`%c⚠️  Warnings: ${TEST_RESULTS.warnings.length}`, 'color: #FF9800; font-weight: bold'); 
-        console.log(`%c📈 Pass Rate: ${passRate}%`, `color: ${passRate >= 90 ? '#4CAF50' : passRate >= 70 ? '#FF9800' : '#f44336'}; font-weight: bold; font-size: 14px`); 
+        console.log(`%c📈 Pass Rate: ${passRate}%`, `color: ${passRate >= 90 ? '#2e7d32' : passRate >= 70 ? '#FF9800' : '#f44336'}; font-weight: bold; font-size: 14px`); 
 
         if (TEST_RESULTS.failed.length > 0) { 
             console.log('\n%c🔍 FAILED TESTS:', 'color: #f44336; font-weight: bold'); 
@@ -721,7 +721,7 @@
         console.log('\n' + '━'.repeat(60)); 
 
         if (TEST_RESULTS.failed.length === 0) { 
-            console.log('%c🎉 ALL TESTS PASSED!', 'font-size: 16px; font-weight: bold; color: #4CAF50; background: #E8F5E9; padding: 8px'); 
+            console.log('%c🎉 ALL TESTS PASSED!', 'font-size: 16px; font-weight: bold; color: #2e7d32; background: #E8F5E9; padding: 8px'); 
         } else { 
             console.log('%c⚠️  SOME TESTS FAILED', 'font-size: 16px; font-weight: bold; color: #f44336; background: #FFEBEE; padding: 8px'); 
         } 

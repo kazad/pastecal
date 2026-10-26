@@ -43,12 +43,16 @@ function sanitizeUrl(url) {
     return sanitized;
 }
 
+// A calendar's default name is its edit key, so it comes from crypto.getRandomValues, not
+// Math.random. Bytes >= 231 (33 * 7) are skipped so every character is equally likely.
 function randomID(size = 21) {
     const alphabet = '123456789abcdefghjklmnpqrstuvwxyz';
     let id = '';
-    let i = size;
-    while (i--) {
-        id += alphabet[(Math.random() * alphabet.length) | 0];
+    while (id.length < size) {
+        const bytes = crypto.getRandomValues(new Uint8Array(size * 2));
+        for (const b of bytes) {
+            if (b < 231 && id.length < size) id += alphabet[b % 33];
+        }
     }
     return id;
 }
@@ -128,7 +132,19 @@ class RecentCalendars {
         } catch (e) { /* storage blocked or full: the list lives in memory this session */ }
     }
 
-    add(id, title, mine = false) {
+    // How a recent entry is shown and linked. Read-only visits open at /view/<id>; older
+    // entries marked that only with a " (View Only)" title suffix are read the same way.
+    static display(item) {
+        const raw = item.title || item.id;
+        const view = !!item.view || / \(View Only\)$/.test(raw);
+        const stripped = raw.replace(/ \(View Only\)$/, '');
+        // The stored default title, in sentence case (as Calendar.displayTitle shows it).
+        const title = stripped === 'New Calendar' ? 'New calendar' : stripped;
+        const path = (view ? '/view/' : '/') + item.id;
+        return { title, view, path, address: 'pastecal.com' + path };
+    }
+
+    add(id, title, mine = false, view = false) {
         const existingItem = this.items.find(item => item.id === id);
         const wasPinned = existingItem ? existingItem.pinned : false;
         // `mine` is sticky: visiting a calendar you created must never demote it
@@ -151,6 +167,7 @@ class RecentCalendars {
             title: title || id,
             pinned: wasPinned,
             mine: isMine,
+            ...(view || existingItem?.view ? { view: true } : {}),
             visitCount: visitCount,
             ...(createdAt ? { createdAt } : {}),
             lastVisited: new Date().toISOString()
@@ -483,25 +500,50 @@ window.RecentCalendars = RecentCalendars;
 // Linkify utility - converts URLs and emails in text to clickable links
 const LINKIFY_LINK_STYLE = 'color:#2563eb;text-decoration:underline;';
 
-function linkify(inputText) {
-    let replacedText, replacePattern1, replacePattern2, replacePattern3;
-
-    replacePattern1 = /(\b(https?|ftp):\/\/[^<>\s"']*[-A-Z0-9+&@#\/%=~_|])/gim;
-    replacedText = inputText.replace(replacePattern1,
-        `<a href="$1" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$1</a>`);
-
-    replacePattern2 = /(^|[^\/])(www\.[^<>\s"']+(\b|$))/gim;
-    replacedText = replacedText.replace(replacePattern2,
-        `$1<a href="http://$2" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$2</a>`);
-
-    replacePattern3 = /(([a-zA-Z0-9\-\_\.])+@[a-zA-Z\_]+?(\.[a-zA-Z]{2,6})+)/gim;
-    replacedText = replacedText.replace(replacePattern3,
-        `<a href="mailto:$1" style="${LINKIFY_LINK_STYLE}">$1</a>`);
-
-    return replacedText;
+function escapeHtml(text) {
+    return String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-// MutationObserver to linkify schedule descriptions
+// PLAIN TEXT in, safe HTML out: the text is escaped, and only http(s) URLs, www. names and email
+// addresses become links, found in ONE pass (the old three passes could match inside an href the
+// previous pass had just written, nesting tags into an attribute). Nothing else -- javascript:,
+// data:, ftp: -- is ever made a link. Trailing punctuation stays outside the link.
+const LINKIFY_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+|\bwww\.[^\s<>"'`]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gi;
+function linkify(inputText, { style = true } = {}) {
+    const text = String(inputText ?? '');
+    const css = style ? ` style="${LINKIFY_LINK_STYLE}"` : '';
+    let out = '', last = 0;
+    for (const m of text.matchAll(LINKIFY_PATTERN)) {
+        let link = m[0];
+        const trail = /[).,!?;:]+$/.exec(link);
+        if (trail) link = link.slice(0, -trail[0].length);
+        if (!link) continue;
+        const href = /^www\./i.test(link) ? `http://${link}` : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${link}` : link);
+        out += escapeHtml(text.slice(last, m.index))
+            + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(link)}</a>`;
+        last = m.index + link.length;
+    }
+    return out + escapeHtml(text.slice(last));
+}
+
+// MutationObserver to linkify schedule descriptions. Syncfusion has already rendered the
+// description as text; each text node is linkified on its own (never the element's innerHTML,
+// which would be HTML going back in as HTML).
+function linkifyElement(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+        if (node.parentElement && node.parentElement.closest('a')) continue;
+        const html = linkify(node.nodeValue);
+        if (html === escapeHtml(node.nodeValue)) continue;
+        const t = document.createElement('template');
+        t.innerHTML = html;
+        node.replaceWith(t.content);
+    }
+}
+
 function startLinkifyObserver() {
     const linkifyObserver = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
@@ -509,7 +551,7 @@ function startLinkifyObserver() {
                 const descriptionEl = document.querySelector(".e-event-popup .e-description-details");
                 if (descriptionEl && !descriptionEl.hasAttribute('data-processed')) {
                     descriptionEl.setAttribute('data-processed', 'true');
-                    descriptionEl.innerHTML = linkify(descriptionEl.innerHTML);
+                    linkifyElement(descriptionEl);
                 }
             }
         });

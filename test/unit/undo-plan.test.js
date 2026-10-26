@@ -154,5 +154,6 @@ test('Cmd+Z does nothing while a dialog is open', () => {
   const snippet = APP.slice(at, APP.indexOf('if (dialogOpen) return;', at));
   assert.match(snippet, /e-popup-open/);
   assert.match(snippet, /quickAddDialog/);
-  assert.match(snippet, /showRecentChanges/);
+  // Recent changes is a side panel beside the calendar now, not a modal: Cmd+Z keeps working there.
+  assert.doesNotMatch(snippet, /showRecentChanges/);
 });

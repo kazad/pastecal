@@ -27,7 +27,7 @@ async function freshCalendar(page) {
   await page.goto('/');
   const slug = `test-qa-fr-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await page.locator('input[placeholder="your-name"]').fill(slug);
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
   await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
   return slug;
@@ -44,7 +44,7 @@ const onServer = (page) => page.evaluate(`(async () => {
 })()`);
 
 async function openQuickAdd(page) {
-  await page.locator('text=+Event').locator('visible=true').first().click();
+  await page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first().click();
   await expect(page.getByText('Add Event by Typing')).toBeVisible();
 }
 

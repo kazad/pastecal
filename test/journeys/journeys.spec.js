@@ -48,7 +48,7 @@ async function newCalendar(browser, page, name = 'j') {
   const d = await ctx.newPage();
   await d.goto('/');
   await d.locator('input[placeholder="your-name"]').fill(slug);
-  await d.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await d.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(d).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
   await d.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await ctx.close();
@@ -203,9 +203,9 @@ const localDay = (page, iso) => page.evaluate((v) => new Date(v).getDay(), iso);
 async function openQuickAdd(page) {
   if (isPhone(page)) {
     await tap(page, page.getByRole('button', { name: 'Open menu' }));
-    await tap(page, page.getByText('Quick Add Event').locator('visible=true').first());
+    await tap(page, page.getByText('Quick add event').locator('visible=true').first());
   } else {
-    await tap(page, page.locator('text=+Event').locator('visible=true').first());
+    await tap(page, page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first());
   }
   await expect(page.getByText('Add Event by Typing')).toBeVisible();
 }
@@ -400,7 +400,7 @@ test('delete an event, then Undo brings it back; other events untouched', async 
   await tap(page, confirm);
 
   await expect.poll(() => titles(page), { timeout: 10_000 }).not.toContain('Delete me');
-  expect(await titles(page)).toContain('Sample event');
+  expect(await titles(page)).toContain('Your event here');
 
   await tap(page, page.locator('button', { hasText: /^Undo$/ }).locator('visible=true').first());
   await expect.poll(() => titles(page), { timeout: 10_000 }).toContain('Delete me');
@@ -660,7 +660,7 @@ test('delete a whole repeating series from one of its occurrences: it is gone, n
 
   await expect.poll(async () => (await onServer(page)).some(e => /Gym/.test(e.title)), { timeout: 10_000 }).toBe(false);
   await expect(page.locator('.e-appointment', { hasText: 'Gym' })).toHaveCount(0);
-  expect(await titles(page), 'the sample event is untouched').toContain('Sample event');
+  expect(await titles(page), 'the sample event is untouched').toContain('Your event here');
 });
 
 // ===========================================================================
@@ -686,11 +686,11 @@ test('an event survives quitting the browser right after creating it', async ({ 
     await p.goto('/');
     const slug = `test-quit-${Date.now()}`;
     await p.locator('input[placeholder="your-name"]').fill(slug);
-    await p.locator('button:has-text("Claim")').locator('visible=true').first().click();
+    await p.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
     await p.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
     await p.waitForTimeout(1500);
 
-    await p.locator('text=+Event').locator('visible=true').first().click();
+    await p.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first().click();
     await p.keyboard.type('Survives the quit tomorrow at 9:00', { delay: TYPE_DELAY_MS });
     await p.keyboard.press('Enter');
     await ctx.close();                                    // quit, immediately

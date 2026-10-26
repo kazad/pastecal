@@ -50,18 +50,92 @@ function track(fn) {
         } catch (err) { /* reporting must never become the failure */ }
     };
 
+    // A browser can bring back an old saved copy of the page (a restored tab) and fetch today's
+    // scripts for it, because the server ignores ?v=. The old page then lacks a script this code
+    // needs ("LockBadge is not defined", "slugFromPath is not a function") and the calendar never
+    // opens. Before the app has mounted, such an error reloads the page once, which fetches the
+    // matching copy. At most once a minute per tab, so a real bug is reported instead of looping.
+    const MISSING = /is not defined|Can't find variable|is not a function|is not a constructor|undefined is not an object/i;
+    const reloadIfStale = (message, where, ours) => {
+        try {
+            if (!ours || window.__appMounted || !MISSING.test(String(message))) return;
+            const last = Number(sessionStorage.getItem('pc-stale-reload') || 0);
+            if (Date.now() - last < 60000) return;
+            sessionStorage.setItem('pc-stale-reload', String(Date.now()));
+            track(a => a.track('stale_page_reload', { where: String(where).slice(0, 120) }));
+            setTimeout(() => location.reload(), 50);   // let the report leave first
+        } catch (err) { /* no storage: never risk a reload loop */ }
+    };
+
     window.addEventListener('error', (e) => {
         const where = e.filename
             ? `${String(e.filename).split('/').pop()}:${e.lineno || 0}`
             : 'unknown';
-        report('error', (e.error && e.error.message) || e.message, where);
+        const message = (e.error && e.error.message) || e.message;
+        report('error', message, where);
+        // Only our own files: an extension's content script failing must not reload the page.
+        reloadIfStale(message, where, String(e.filename || '').startsWith(location.origin + '/'));
     });
+    window.pcReportError = (err, where) => {
+        const message = (err && err.message) || String(err);
+        report('error', message, where);
+        reloadIfStale(message, where, true);
+    };
 
     window.addEventListener('unhandledrejection', (e) => {
         const r = e.reason;
         report('unhandledrejection', (r && (r.message || r.code)) || String(r), 'promise');
     });
 })();
+
+// ============================================================
+// "Add to my calendar" on a view link: opens its add page (/view/<id>/add), which picks this
+// device's calendar app and says what happens next. Mounted in both headers.
+// ============================================================
+// A returning viewer (2nd visit to this view link, in this browser) gets one gentle hint to subscribe.
+// It shows once: subscribing, opening the page from it, or dismissing it ends it for good.
+const SUB_NUDGE = { visits: 'pc_view_visits', done: 'pc_sub_nudge_done' };
+const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
+
+const AddToCalendar = {
+    props: { href: String, nudgeKey: String },
+    emits: ['pick'],
+    data() { return { nudge: false }; },
+    mounted() {
+        const key = this.nudgeKey;
+        if (!key) return;
+        const visits = readJSON(SUB_NUDGE.visits, {});
+        // The header renders this twice (desktop and phone rows): count the visit once per page load.
+        if (!SUB_NUDGE.counted) { SUB_NUDGE.counted = true; visits[key] = (visits[key] || 0) + 1; writeJSON(SUB_NUDGE.visits, visits); }
+        if (visits[key] >= 2 && !readJSON(SUB_NUDGE.done, []).includes(key)) {
+            this.nudge = true;
+            if (!SUB_NUDGE.shownLogged) { SUB_NUDGE.shownLogged = true; try { window.Analytics && Analytics.track('subscribe_nudge', { action: 'shown' }); } catch (e) {} }
+        }
+    },
+    methods: {
+        pick() { this.$emit('pick', 'subscribe_page'); this.endNudge('subscribed'); },
+        fromNudge() { this.endNudge('opened'); this.$emit('pick', 'subscribe_page'); window.location.href = this.href; },
+        endNudge(action) {
+            if (!this.nudge) return;
+            this.nudge = false;
+            const done = readJSON(SUB_NUDGE.done, []);
+            if (!done.includes(this.nudgeKey)) writeJSON(SUB_NUDGE.done, [...done, this.nudgeKey].slice(-200));
+            try { window.Analytics && Analytics.track('subscribe_nudge', { action }); } catch (e) {}
+        },
+    },
+    template: `
+        <div class="pc-addcal">
+            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" :href="href" target="_top" @click="pick">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
+                <span class="pc-addcal-label">Add to my calendar</span>
+            </a>
+            <div v-if="nudge" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
+                <button type="button" class="pc-addcal-nudge-text" @click.stop="fromNudge">Add it to your phone calendar. Updates show up on their own.</button>
+                <button type="button" class="pc-addcal-nudge-x" aria-label="Dismiss" @click.stop="endNudge('dismissed')">&times;</button>
+            </div>
+        </div>`,
+};
 
 // ============================================================
 // COMPONENT REGISTRY
@@ -86,7 +160,13 @@ const COMPONENT_REGISTRY = {
     'share-icon': ShareIcon,                   // Share icon SVG
     'notes-icon': NotesIcon,                   // Notes icon SVG
     'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
-    'close-icon': CloseIcon                    // Close icon SVG
+    'close-icon': CloseIcon,                   // Close icon SVG
+    'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
+    'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
+    'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
+    'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
+    'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
+    'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
 };
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
@@ -99,34 +179,33 @@ const stripBase = (path) => {
     return path;
 };
 
+// The read-only name an @link page opens (pastecal.com/@handle/<name>; Worker: cloudflare/src/Names.js), or null.
+// Only on an /@ address: anywhere else the meta would be a stray copy.
+function atViewSlug() {
+    if (!/^\/@/.test(stripBase(window.location.pathname))) return null;
+    const m = document.querySelector('meta[name="pc-view"]');
+    const v = m && m.getAttribute('content');
+    return v && /^[A-Za-z0-9_-]{1,100}$/.test(v) ? v : null;
+}
+
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
         'click-outside': clickOutside
     },
     data() {
-        const normalizedPathParts = (() => {
-            const path = stripBase(window.location.pathname);
-            return path.split('/').filter(Boolean);
-        })();
+        // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        // (On /view/<x> this is "view", on /@handle/<name> "@handle": never a calendar to open, and never the homepage.)
+        let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
+        if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
-        let urlslug = normalizedPathParts[0];
-
-        if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-            // slug is ok, normalize for consistent lookup
-            urlslug = SlugManager.normalizeSlug(urlslug);
-        } else {
-            // should redirect back to homepage if we have a bad url;
-            urlslug = null;
-        }
-
-        let id = urlslug ?? Utils.randomID(8);
+        let id = urlslug ?? Utils.randomID(10);
         let cal = new Calendar(id, "New Calendar", []);
 
         // Define default colors
         const DEFAULT_COLORS = [
-            "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
-            "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
+            "#3f51b5", "#e3165b", "#d0442f", "#2e7d32",
+            "#ff9800", "#03a9f4", "#757575", "#27282f"
         ];
 
         // Colors offered for categories 9-16, in order. Picked to stay distinguishable
@@ -152,6 +231,26 @@ const CalendarVueApp = {
 
         return {
             isReadOnly: false,
+            // Pro lock, from the live snapshot (CloudCalendarService.onLockState). lockedOut =
+            // locked (or paused after Pro ended) and this tab has no rights: the calendar is shown read-only.
+            lock: { locked: false, pro: false, paused: false, canEdit: true, proSettings: null },
+            // Inside someone else's page (an iframe) or asked to look like it (?embed).
+            embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
+            proTrialUsed: false,
+            proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
+            proUnlimitedBusy: false,
+            proUnlimitedFull: false,    // Pro with its 5 used: the card offers the owner's @name instead
+            proHandle: '',
+            editorLinkStored: '',       // the owner's last editor link made in this browser (Pro panel, localStorage): "Share to edit"
+            shareNames: null,           // the owner's own links for this calendar ({handle, atName, shortNames}, /api/pro/status): Share leads with them
+            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
+            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')
+            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
+            proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
+            proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
+            lockedOut: false,
+            lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
+            viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -175,12 +274,31 @@ const CalendarVueApp = {
             showSearch: false,
             showSettings: false,
             undoEntries: [],   // changes this calendar can undo (read from /history)
-            showRecentChanges: false,   // the recent-changes dialog
+            showProStats: false,        // Pro owner dialogs (ProInsight.js)
+            showProHistory: false,
+            insightWhere: 'share_panel',    // which surface opened them, for analytics
+            proOwner: false,            // this browser is signed in as the Pro calendar's owner
+            showPlus: false,            // the side panel's Plus tab: what an upgrade adds, or the owner's plan, editors and billing
+            plusAutoJoin: false,        // billing off and they pressed "Join the beta" elsewhere: the Plus tab opens on the email field
+            proPlan: null,              // the lock's plan id (/api/pro/status), for planName: 'pro' is Plus
+            pausedTrial: false,         // the paused calendar's ended plan was a trial (its owner's pill says 'Trial ended')
+            upgradeNotice: null,        // {day, busy}: someone else upgraded it in the last 7 days and this browser may undo it
+            showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
+            showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
+            freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, unavailable, views, viewsPrev, followers}
+            proOwnerChecked: false,     // /api/pro/status has answered for this lock, so "not the owner" is known
+            notesEditing: false,        // Notes reads by default; Edit swaps in the textarea
+            settingsScope: 'calendar',  // Settings: 'calendar' (everyone) or 'me' (this device)
+            // The side panel docks beside the calendar only on wide screens (style.css, the
+            // side panel block); narrower it floats over the calendar, so the grid keeps its width.
+            sideWide: typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1100px)').matches,
             // When this browser last opened THIS calendar, captured before the visit is
             // recorded and so still pointing at the previous visit. It is what makes the
             // changes list answer "what happened while I was away" rather than only
             // "what can I undo". Null on a first visit, where nothing is "new".
             lastSeenAt: null,
+            lastSeenKnown: false,       // lastSeenAt has been read for this visit
+            proUpsell: false,           // the "Lock this calendar" line (see maybeShowProUpsell)
             lastEditLabel: '',          // "Edited 2d ago" in the header, or '' when unknown
             lastEditExact: '',          // the full timestamp, shown on hover
             lastEditedAt: null,         // server ms of the last real edit (/history_meta)
@@ -214,9 +332,15 @@ const CalendarVueApp = {
             // Store COLORS as a component property for consistent reference
             COLORS: COLORS,
             DEFAULT_COLORS: DEFAULT_COLORS,
+            // What an unnamed category is called in the editor, the quick-add swatches,
+            // Settings and the filter dots, while its color is still the default.
             EXTRA_COLORS: EXTRA_COLORS,
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
+            searchOpenId: null,   // the search result shown open, if any
+            printFrom: null,      // 'share' while Share's Print button opens the dialog (counted in beforeprint)
+            printMonth: null, printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
+            FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
             viewTick: 0,
@@ -238,6 +362,9 @@ const CalendarVueApp = {
 
             // Read-only slug properties
             showReadOnlySlug: false,
+            copiedKey: null,            // which Share link just copied (shows a check)
+            showViewHelp: false,        // Share's "This view" explainer is open
+            creatingReadOnly: false,    // Share's "Create read-only link" is waiting on the server
             readOnlySlugInput: '',
 
             // Rename
@@ -247,6 +374,19 @@ const CalendarVueApp = {
             showClaimDialog: false,
             slugTaken: null,   // { slug, options: [free alternatives] } after a claim hits a taken name
             userHasEditedSlug: false,
+            // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
+            userAddedEvent: false,
+            sharePulse: false,
+            // "Start from" on the homepage draft (utils/templates.js): the template whose events are on it
+            // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
+            template: null,
+            templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
+            templateNudge: false,
+            templateChips: CalendarTemplates.list(),
+            // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
+            templatesOpen: (() => { try { return sessionStorage.getItem('pc_tpl_open') === '1'; } catch (e) { return false; } })(),
+            tourVariant: 'a',
+            homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
             // Mobile Menu
             showMobileMenu: false,
@@ -254,6 +394,94 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // "Week of Oct 18": what Share's "This view" link opens, read back from its own URL.
+        viewLinkTag() {
+            try {
+                const u = new URL(this.currentViewURL, location.origin);
+                const d = u.searchParams.get('date'), v = u.searchParams.get('view') || '';
+                if (!d) return 'current view';
+                const day = new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                const name = v === 'custom' ? `${u.searchParams.get('dur')} ${u.searchParams.get('unit')}` : v.charAt(0).toUpperCase() + v.slice(1);
+                return `${name}, ${day}`;
+            } catch (e) { return 'current view'; }
+        },
+        // ---- The side panel: Notes, Share, Activity, Stats, Settings (and Search, Help) ---------
+        // One panel at a time, beside the calendar. The show* flags stay the source of truth
+        // (the Escape key, analytics and history refreshes all read them); this names which is up.
+        sideTab() {
+            if (this.showRecentChanges) return 'changes';
+            if (this.showProStats || this.showStatsInfo) return 'stats';
+            if (this.showProHistory) return 'history';
+            if (this.showNotes) return 'notes';
+            if (this.showShare) return 'share';
+            if (this.showSettings) return 'settings';
+            if (this.showPlus) return 'plus';
+            if (this.showSearch) return 'search';
+            if (this.showHelp) return 'help';
+            return null;
+        },
+        // Docked: the calendar narrows to make room instead of moving down.
+        sideDocked() {
+            return !!this.sideTab && this.sideWide;
+        },
+        // The tab row is for people who can change the calendar. Viewers see one thing at a
+        // time under a plain title. Always the same five in the same order, so people learn
+        // where things are: on a draft, Share, Activity and Stats say what they will hold once
+        // it is saved. Plus: what an upgrade adds, or the owner's plan, editors and billing.
+        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling.
+        sideTabs() {
+            if (this.isReadOnly) return [];
+            return [
+                { id: 'notes', label: 'Notes' },
+                { id: 'share', label: 'Share' },
+                { id: 'changes', label: 'Activity' },
+                { id: 'stats', label: 'Stats' },
+                { id: 'plus', label: 'Plus' },
+                { id: 'settings', label: 'Settings', icon: 'settings' },
+            ];
+        },
+        // The tab that reads as selected. History (every saved version) opens from Activity, so it stays lit.
+        sideSelectedTab() {
+            return this.sideTab === 'history' ? 'changes' : this.sideTab;
+        },
+        sideShowsTabs() {
+            return this.sideTabs.some((t) => t.id === this.sideSelectedTab);
+        },
+        // Shown in the bar when there is no tab row, for the views without a heading of their own.
+        sideTitle() {
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
+        },
+        /** Why this tab can't edit a locked or paused calendar (toasts). */
+        lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
+        // Stats can show the real numbers: the owner of a Pro calendar (the server answers no one else).
+        canSeeProStats() {
+            return this.isExisting && this.lock.locked && this.proOwner;
+        },
+        // The free Stats tiles' comparison: "↑ 12%", "↓ 8%", "Same", or null with no earlier week to compare.
+        freeStatsDelta() {
+            const f = this.freeStats;
+            const d = f && !f.loading && !f.error && !f.unavailable ? ProInsightMath.delta(f.views, f.viewsPrev) : null;
+            return d && { dir: d.dir, text: d.dir === 'flat' ? d.text : (d.dir === 'up' ? '↑ ' : '↓ ') + d.text.slice(1) };
+        },
+        // A view link or locked calendar with notes opens with them pinned beside the grid.
+        viewerNotesPinnable() {
+            return !this.isLoading && this.isReadOnly && !!(this.calendar?.options?.notes || '').trim();
+        },
+        // Shown wherever the title is: the stored default "New Calendar" in sentence case.
+        displayCalendarTitle() {
+            return Calendar.displayTitle(this.calendar.title);
+        },
+
+        // Category names as shown: a label someone set, else "Type N" (see
+        // typeLabelFor). Stored labels are never rewritten.
+        displayTypeLabels() {
+            return this.COLORS.map((_, i) => this.typeLabelFor(i));
+        },
+        // Which of those a calendar actually named ("Practice"); the rest show as "Type N".
+        namedTypes() {
+            return this.COLORS.map((_, i) => this.hasTypeLabel(i));
+        },
+
         /**
          * The changes list, grouped by calendar day.
          *
@@ -287,7 +515,7 @@ const CalendarVueApp = {
             };
 
             const groups = [];
-            for (const entry of this.undoEntries) {   // already newest-first
+            for (const entry of this.visibleUndoEntries) {   // already newest-first
                 const key = dayKey(entry.savedAt);
                 let g = groups[groups.length - 1];
                 if (!g || g.key !== key) {
@@ -306,15 +534,39 @@ const CalendarVueApp = {
         /** How many changes landed since this browser last opened the calendar. */
         unseenChangeCount() {
             if (!this.lastSeenAt) return 0;
-            return this.undoEntries.filter(e => e.savedAt > this.lastSeenAt).length;
+            return this.visibleUndoEntries.filter(e => e.savedAt > this.lastSeenAt).length;
         },
+
+        /**
+         * What Recent changes lists. A free calendar shows the last FREE_CHANGES_DAYS (30: a bad edit is often
+         * noticed only when someone next checks, and "a month" reads calm where "7 days" reads like a timer); a Pro calendar shows
+         * everything the room keeps (and its owner has History for the rest). Display only:
+         * Cmd+Z still reads undoEntries, so nothing it could undo before goes missing.
+         */
+        visibleUndoEntries() {
+            if (this.lock && this.lock.locked) return this.undoEntries;
+            return ProInsightMath.withinDays(this.undoEntries, this.FREE_CHANGES_DAYS, this.serverNow());
+        },
+
+        /** This browser created the calendar (it's under "Your calendars"). */
+        // "Make one like this" under a calendar this browser didn't make (an invitation, a view link).
+        // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
+        showMakeOwn() {
+            return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
+                && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
+        },
+        isMineCalendar() {
+            const id = String((this.calendar && this.calendar.id) || '').toLowerCase();
+            return !!id && (this.recentCalendars || []).some(r => r && r.mine && String(r.id).toLowerCase() === id);
+        },
+
 
         isAutogeneratedId() {
             const id = this.calendar?.id;
             if (!id) return false;
-            // Check if ID is exactly 8 characters and contains only chars from the random alphabet (1-9, A-Z excluding I,O)
+            // Check if ID is 8 characters (names made before Oct 2026) or 10 (since) and contains only chars from the random alphabet (1-9, A-Z excluding I,O)
             // Regex: ^[1-9a-hj-np-z]+$  (case insensitive)
-            return /^[1-9a-hj-np-z]{8}$/i.test(id);
+            return /^([1-9a-hj-np-z]{8}|[1-9a-hj-np-z]{10})$/i.test(id);
         },
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
@@ -345,12 +597,10 @@ const CalendarVueApp = {
 
             if (n > 0) {
                 return named
-                    ? `${n} ${named} ${n === 1 ? 'event is' : 'events are'} hidden.`
-                    : `${n} ${n === 1 ? 'event is' : 'events are'} hidden by a filter.`;
+                    ? `${n} ${named} ${n === 1 ? 'event' : 'events'} hidden`
+                    : `${n} ${n === 1 ? 'event' : 'events'} hidden by a filter`;
             }
-            return named
-                ? `${named} events are hidden — none in this view.`
-                : 'Some event types are hidden — none in this view.';
+            return named ? `${named} events hidden` : 'Some event types hidden';
         },
 
         // Is any color switched off? Distinct from hiddenEventCount, which is 0 whenever
@@ -359,6 +609,40 @@ const CalendarVueApp = {
         // another week -- and a filter that is on while nothing says so is exactly the
         // condition behind #41. The banner keys off this, so it is shown for as long as
         // the filter is on, and reports the count only when it has one to report.
+        // The search panel's color filter: one chip per color some event uses, with how many use it.
+        // A color switched off stays listed even if unused, so it can always be switched back on.
+        filterChips() {
+            const counts = this.COLORS.map(() => 0);
+            for (const e of (this.calendar?.events || [])) {
+                if (e && e.recurrenceID) continue;   // an edited occurrence is part of its series
+                counts[this.filterSlotFor(e)]++;
+            }
+            return this.COLORS.map((color, idx) => ({ idx, color, count: counts[idx], label: this.typeLabelFor(idx) }))
+                .filter(c => c.count > 0 || this.colorFilters[c.idx] === false);
+        },
+
+        // What the search panel lists: the matches for the words typed, or, with no words and a color
+        // filter on, every event that filter shows. Hidden types are left out, as on the calendar.
+        // Upcoming first (soonest at the top), then past (most recent first). A repeating event counts
+        // as upcoming until its UNTIL date.
+        searchList() {
+            const q = (this.searchQuery || '').trim();
+            const base = q ? this.searchResults : (this.isColorFilterActive ? (this.calendar?.events || []) : []);
+            const now = Date.now();
+            const shown = base.filter(e => e && this.colorFilters[this.filterSlotFor(e)] !== false);
+            const endOf = (e) => {
+                const rule = e.recurrencerule || e.RecurrenceRule || '';
+                if (rule) {
+                    const m = /UNTIL=(\d{4})(\d{2})(\d{2})/.exec(rule);
+                    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], 23, 59) : Infinity;
+                }
+                return Date.parse(e.end || e.start) || 0;
+            };
+            const upcoming = shown.filter(e => endOf(e) >= now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+            const past = shown.filter(e => endOf(e) < now).sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+            return { upcoming, past, count: upcoming.length + past.length };
+        },
+
         isColorFilterActive() {
             return this.colorFilters.slice(0, this.COLORS.length).some(on => on === false);
         },
@@ -387,6 +671,11 @@ const CalendarVueApp = {
                 if (e.recurrencerule) return this.recurrenceOccursInRange(e, range);
                 return this.spansRange(start, ms(e.end), range);
             }).length;
+        },
+        // An unset default view is undefined in saved calendars; the select's Auto option is null.
+        calendarDefaultView: {
+            get() { return this.calendar.options.defaultView ?? null; },
+            set(v) { this.calendar.options.defaultView = v; }
         },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
@@ -423,10 +712,59 @@ const CalendarVueApp = {
             // User has edit permissions (defensive boolean coercion)
             return !Boolean(this.isReadOnly);
         },
+        // Who is looking, as a Clarity recording label: owner (signed-in Pro owner), viewer
+        // (view link or a locked calendar), editor (can change it), new (the homepage calendar).
+        recordingRole() {
+            if (this.proOwner) return 'owner';
+            if (this.isReadOnly) return 'viewer';
+            return this.isHomepageCalendar ? 'new' : 'editor';
+        },
+        // Pro trims pastecal's branding from what visitors see (view links, embeds, a locked
+        // calendar's read-only face) while the owner leaves proSettings.hideBranding on (the
+        // default). It shrinks to the "Made with pastecal · Report" line, never to nothing:
+        // removing that is a Teams feature. The owner's own editing UI keeps the branding.
+        hideBranding() {
+            if (!(this.isReadOnly && this.lock.pro)) return false;
+            const p = this.lock.proSettings;
+            return !p || p.hideBranding !== false;
+        },
+        // Which line sits under the calendar: 'viewer' (the free view link's one-line invitation),
+        // 'pro' (trimmed to "Made with pastecal"), 'embed' (a tiny corner credit inside someone's
+        // page), 'editor' (quiet links on an edit link), or '' (homepage draft, still loading).
+        pageFooter() {
+            if (this.isLoading) return '';
+            // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
+            if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
+            return this.isExisting ? 'editor' : '';
+        },
+        // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
+        // reports its view code and never reveals the edit name behind it.
+        reportUrl() {
+            return '/report?cal=' + encodeURIComponent(window.location.pathname.replace(/^\/+/, ''));
+        },
 
         // Homepage calendar (no slug and not an existing saved calendar)
+        // Returning visitors open on their calendars; the guide is one click away.
+        // The phone's template toggle names the template in use, if any.
+        templateLabel() {
+            return this.template ? CalendarTemplates.label(this.template.id) : '';   // gallery-only templates have no chip
+        },
+        homePanel() { return this.homeTab || (this.homeRecents.length ? 'recents' : 'guide'); },
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
+        },
+
+        // The homepage panel's shortcut list for returning visitors: most recently opened first.
+        homeRecents() {
+            const time = (item) => Date.parse(item.lastVisited || item.createdAt || 0) || 0;
+            return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6)
+                .map(item => ({ ...item, ...RecentCalendars.display(item), ago: item.lastVisited ? 'Opened ' + this.describeAgo(Date.parse(item.lastVisited)) : '' }));
+        },
+
+        // Headline and lead for the homepage pitch. One version for now; a later test adds more,
+        // keyed by experiment variant.
+        tourCopy() {
+            return { kicker: 'How pastecal works', title: 'Add events. Paste your link. Done.' };
         }
     },
 
@@ -436,6 +774,18 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
+        // Printing: fill the print header/footer first; the QR library loads once the page is idle, not before.
+        window.addEventListener('beforeprint', () => {
+            this.preparePrint();
+            track(a => a.printed((this.printFrom || 'browser') + (this.isReadOnly ? '_view' : '_edit')));
+            this.printFrom = null;
+        });
+        setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
+        this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
+        // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
+        if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
+        else this.proBilling = true;
 
         // Undo bookkeeping, deliberately non-reactive. (This tab's own undo stack is the
         // EventStore's.) _handledUndo and _undoneHistoryKeys let the /history fallback skip changes this session already
@@ -462,11 +812,15 @@ const CalendarVueApp = {
                 // readonly: pastecal.com/view/ID (supports alternative base paths via CAL_BASE)
                 let path = stripBase(location.pathname);
 
-                if (path?.startsWith('/view/')) {
+                // pastecal.com/@handle/<name>: the Worker serves this page with the read-only name to open
+                // (<meta name="pc-view">), so it opens exactly like /view/<that name> and the address stays.
+                const atView = atViewSlug();
+                if (path?.startsWith('/view/') || atView) {
                     // Read-only view mode
-                    const requestedSlug = path.split('/')[2];
+                    const requestedSlug = atView || path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
+            this.viewRoute = true;
 
             // Always use lookupCalendar for consistent case-insensitive handling
             (async () => {
@@ -474,12 +828,15 @@ const CalendarVueApp = {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
+                    // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                    if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
                         console.log('Found read-only calendar with slug:', actualSlug);
 
-                        CalendarDataService.subscribe_readonly(actualSlug, (c) => {
+                        CalendarDataService.subscribe_readonly(actualSlug, (c, access) => {
+                            if (access) this.lock = { locked: !!access.locked, pro: !!access.pro, canEdit: false, proSettings: access.proSettings || null };
                             this.applyRemoteCalendar(c);
                             this.ensureCalendarOptionsDefaults();
                             // Update custom view in schedule with calendar's settings
@@ -487,10 +844,12 @@ const CalendarVueApp = {
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads, but mark as read-only
+                            // The tab says which calendar this is (a short link's page is static: the server can't).
+                            if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
                             if (c.title) {
                                 // A read-only calendar you were linked to is a visit,
                                 // not something you created.
-                                this.recentManager.add(actualSlug, `${c.title} (View Only)`);
+                                this.recentManager.add(actualSlug, c.title, false, true);
                                 this.recentCalendars = this.recentManager.getAll();
                             }
 
@@ -503,16 +862,16 @@ const CalendarVueApp = {
                     } else if (result.data.found && !result.data.isReadOnly) {
                         // Found as editable calendar - show message
                         this.isLoading = false;
-                        alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                        alert('This calendar has no view-only link yet. Ask the owner to make one in Share.');
                     } else {
                         // Calendar doesn't exist at all
                         this.isLoading = false;
-                        alert('Calendar not found. Please check the URL and try again.');
+                        alert('Calendar not found. Check the link and try again.');
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
                     this.isLoading = false;
-                    alert('Failed to load calendar. Please try again later.');
+                    alert('Couldn’t load this calendar. Check your connection and reload the page.');
                 }
             })();
         } else if (this.urlslug) {
@@ -543,6 +902,50 @@ const CalendarVueApp = {
                     // calendar would rack up hundreds. Count the visit once per page
                     // load; later fires only refresh the title.
                     const firstLoad = !this.visitCounted;
+                    // Just created on the homepage: open Share so the links are right there.
+                    if (firstLoad) {
+                        try {
+                            if (sessionStorage.getItem('pastecal_open_share') === this.calendar.id) {
+                                sessionStorage.removeItem('pastecal_open_share');
+                                this.$nextTick(() => { if (!this.showShare) this.toggleShare(); });
+                            }
+                        } catch (e) { /* storage blocked: nothing to open */ }
+                        // The logo menu's "Stats" for this calendar, clicked on another page.
+                        const insight = typeof ProInsightIntent !== 'undefined' ? ProInsightIntent.take(this.calendar.id) : null;
+                        if (insight) this.$nextTick(() => this.openInsight(insight, 'logo_menu'));
+                        // A sign-in link opened in another browser carries the plan they were buying (?pro=).
+                        // It continues to payment only right after that sign-in, never from a shared link.
+                        try {
+                            const q = new URLSearchParams(location.search), plan = q.get('pro');
+                            // trial: the sign-in link already started it; the panel shows how it went (and retries, to explain a refusal).
+                            // keep: the trial reminder's Keep Pro link: just open the panel.
+                            if ((plan === 'year' || plan === 'month' || plan === 'trial' || plan === 'keep') && typeof ProIntent !== 'undefined') {
+                                const fresh = sessionStorage.getItem('pastecal_signed_in_to') || '';
+                                sessionStorage.removeItem('pastecal_signed_in_to');
+                                if (plan === 'keep') track(a => a.trialReminderClicked());     // only the day-27 email links ?pro=keep
+                                if (!ProIntent.get(this.calendar.id)) ProIntent.set(this.calendar.id, plan, plan !== 'keep' && fresh.endsWith('?pro=' + plan));
+                                q.delete('pro');
+                                history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+                            }
+                        } catch (e) { /* storage blocked: Share still opens below if the intent was kept */ }
+                        // Back from a sign-in link (trial, checkout, the reminder's Keep Plus): open the Plus tab,
+                        // where the trial or checkout continues.
+                        const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
+                        if (proIntent) {
+                            // Once: the panel reads the chosen interval as it mounts, then the intent is done.
+                            this.$nextTick(() => {
+                                if (!this.showPlus) this.openPlusTab(proIntent.surface || 'share');
+                                this.$nextTick(() => {
+                                    ProIntent.clear();
+                                    // The lock offer sits at the bottom of Share: below the fold on a phone.
+                                    setTimeout(() => {
+                                        const panel = [...document.querySelectorAll('[data-testid=pro-panel]')].find(el => el.offsetParent);
+                                        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }, 400);
+                                });
+                            });
+                        }
+                    }
                     this.visitCounted = true;
 
                     if (firstLoad) {
@@ -554,7 +957,9 @@ const CalendarVueApp = {
                         this.lastSeenAt = prior?.lastVisited
                             ? new Date(prior.lastVisited).getTime()
                             : null;
+                        this.lastSeenKnown = true;
                         this.recentManager.add(this.calendar.id, this.calendar.title);
+                        this.$nextTick(() => this.maybeShowProUpsell());
                     } else {
                         this.recentManager.touchTitle(this.calendar.id, this.calendar.title);
                     }
@@ -586,7 +991,7 @@ const CalendarVueApp = {
         } else {
             // homepage - no remote calendar to load
             this.isExisting = false;
-            this.calendar.id = Utils.randomID(8);
+            this.calendar.id = Utils.randomID(10);
             this.isLoading = false;
 
             // The claim bar is on screen with a generated name in it. This is the
@@ -595,6 +1000,23 @@ const CalendarVueApp = {
             track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
+        // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
+        // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
+        ej.base.L10n.load({
+            'en-US': {
+                schedule: {
+                    newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
+                    deleteTitle: 'Delete event', editTitle: 'Edit event',
+                    deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
+                    editSeries: 'Entire series', deleteSeries: 'Entire series',
+                    editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
+                    editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
+                    endTimezone: 'End timezone', searchTimezone: 'Search timezone',
+                    beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
+                },
+                recurrenceeditor: { on: 'Repeat on' },
+            },
+        });
         const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
         const scheduleInitTimestamp = performance.now();
         console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
@@ -614,8 +1036,20 @@ const CalendarVueApp = {
         // first render and won't reactively update if set later. (See applyGlobalSettings
         // for the post-render path used when settings change at runtime.)
         scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
-        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
         scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
+        // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
+        // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
+        // the format live, so a settings change applies on the next render.
+        if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
+            const vm = this;
+            window.pcHourLabel = (date) => {
+                const h = date.getHours();
+                if (vm.globalSettings.timeFormat === '24') return String(h);
+                return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
+            };
+            scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
+        }
 
         // Build custom view configuration dynamically
         const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
@@ -743,6 +1177,7 @@ const CalendarVueApp = {
         };
         // An editor that closes without a save is the "this was confusing or fiddly" signal.
         scheduleObj.popupClose = (args) => {
+            this.hideDraftBlock();
             if (args.type !== 'Editor') return;
             if (!this.editorSaved) track(a => a.editorAbandoned());
             this.editorSaved = false;
@@ -753,6 +1188,25 @@ const CalendarVueApp = {
         scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
 
         // color events based on type
+        // Month view day names ("Monday") get a short form ("Mon") that phones show instead
+        // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
+        scheduleObj.renderCell = (args) => {
+            // Week/Day: the corner above the time column toggles the hours before the
+            // start hour (calendar.options.extended; click handler below). It used to say
+            // "12-4 AM" whatever the start hour was, and the same when they were showing.
+            if (args.elementType === 'emptyCells' && args.element
+                && args.element.classList.contains('e-header-cells')) {
+                const label = this.earlyHoursLabel();
+                args.element.setAttribute('data-pc-label', label.text);
+                if (label.title) args.element.title = label.title;
+                return;
+            }
+            if (args.elementType !== 'monthDay' || !args.element) return;
+            const label = args.element.querySelector('span') || args.element;
+            const full = (label.textContent || '').trim();
+            if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
+        };
+
         scheduleObj.eventRendered = (args) => {
             // change color as needed
             categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
@@ -760,13 +1214,39 @@ const CalendarVueApp = {
                 args.element.firstChild.style.borderLeftColor = categoryColor;
             } else {
                 args.element.style.backgroundColor = categoryColor;
+                // Its text: dark on light colors, white on dark (style.css reads the variable).
+                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
             }
             ScheduleAdapter.showTitle(args.element, args.data);
         }
 
         // custom display for types
         scheduleObj.popupOpen = (args) => {
+            // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
+            // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
+            // series, several selected) runs unchanged. The "this event or the series?" choice stays.
+            if (args.type === 'DeleteAlert') {
+                document.body.classList.add('pc-skip-confirm');
+                requestAnimationFrame(() => {
+                    const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
+                    if (del) del.click();
+                    setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
+                });
+                return;
+            }
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+            // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
+            // label follows the title being typed (as Google Calendar does), so you see where it will land.
+            if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
+            // The popup header takes the event's color; its title and icons take the matching text color.
+            if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
+                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
+            }
+            // The date line opens the editor (click handler by appendTo below); say so on hover.
+            if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
+                const when = args.element.querySelector('.e-event-popup .e-date-time');
+                if (when) when.title = 'Change date or time';
+            }
 
 
             // One popup at a time. A double-click on a day fires Syncfusion's quick
@@ -787,6 +1267,11 @@ const CalendarVueApp = {
                 scheduleObj.closeQuickInfoPopup();
             }
 
+            if (args.type === 'Editor' && this.lockedOut) {
+                args.cancel = true;
+                this.showToast(this.lockedOutMessage, 'info');
+                return;
+            }
             if (args.type === 'Editor') {
                 this.editorSaved = false;
                 ScheduleAdapter.noteStart(args.data);
@@ -888,7 +1373,7 @@ const CalendarVueApp = {
                     let tooltip = createElement('div', {
                         id: 'type-label-hint',
                         className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Customize labels in Settings`
+                        innerHTML: `Name these colors in Settings`
                     });
                     tooltip.style.background = 'var(--panel-bg)';
                     tooltip.style.color = 'var(--text-color-1)';
@@ -1049,7 +1534,55 @@ const CalendarVueApp = {
             if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
         }, true);
 
+        // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
+        // editor, as the pencil does. People clicked it expecting to change the time, and the
+        // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
+        // links and locked calendars have none, so their date line stays plain text.
+        document.addEventListener('click', (e) => {
+            const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
+            if (!when) return;
+            const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
+            if (edit && !edit.disabled && edit.offsetParent) edit.click();
+        });
+
         scheduleObj.appendTo('#Schedule');
+
+        // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
+        // Say why, instead of leaving people clicking at a calendar that ignores them.
+        try {
+            const el = document.getElementById('Schedule');
+            if (el) el.addEventListener('dblclick', (e) => {
+                if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
+                    this.showToast(this.lockedOutMessage, 'info');
+                }
+            });
+        } catch (e) { /* no grid: nothing to explain */ }
+
+        // View links: a click on a day opens that day, as a click on its date number already
+        // does. Syncfusion's own day click opens the new-event box, which read-only mode
+        // turns off, so on a view link the click did nothing: a third of the day clicks there
+        // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
+        // A click made while an event popup or "+N more" list is open only closes it (as on an
+        // edit link); the popup is already gone by the click, so look at the press.
+        let popupAtPress = false;
+        scheduleObj.element.addEventListener('pointerdown', () => {
+            popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
+        }, true);
+        scheduleObj.element.addEventListener('click', (e) => {
+            if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
+            if (popupAtPress) {
+                // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
+                const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
+                if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
+                return;
+            }
+            const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
+            if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
+            const day = scheduleObj.getCellDetails(cell);
+            if (!day || !day.startTime) return;
+            scheduleObj.selectedDate = day.startTime;
+            scheduleObj.currentView = 'Day';
+        });
 
         // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
         // while it renders. On first load the grid is still being built (and fonts/styles may
@@ -1073,6 +1606,39 @@ const CalendarVueApp = {
                 if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
                 if (staleRetries++ < 3) relayout();
             });
+        });
+        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
+        // with empty page below, and the side panel (same grid row) follows. Rows grow, never
+        // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
+        const fitMonthRows = () => {
+            const sched = document.getElementById('Schedule');
+            const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
+            if (!rows.length) return false;
+            let h = 100;
+            if (window.innerWidth >= 1100) {
+                const rect = sched.getBoundingClientRect();
+                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
+                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                const cs = foot && getComputedStyle(foot);
+                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+                // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
+                if (document.getElementById('how')) h = Math.min(h, 116);
+            }
+            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
+            if (Math.abs(now - h) < 2) return false;
+            sched.style.setProperty('--month-cell-h', h + 'px');
+            return true;
+        };
+        scheduleObj.addEventListener('dataBound', () => {
+            requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
+        });
+        this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
+        let fitTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(fitTimer);
+            fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
         });
         const calWrap = document.getElementById('cal2_wrap');
         if (calWrap && window.ResizeObserver) {
@@ -1236,7 +1802,7 @@ const CalendarVueApp = {
             const named = dropped.map(e => e && e.title).filter(Boolean);
             const what = named.length === 1 ? `"${named[0]}"`
                 : `${dropped.length} event${dropped.length === 1 ? '' : 's'}`;
-            this.showToast(`${what} needs a start and end time — not saved`, 'error');
+            this.showToast(`${what} wasn’t saved: it needs a start and end time`, 'error');
             // The count, not the events: this is how we find out whether an entry path
             // is still producing unsaveable events without waiting for a bug report.
             track(a => a.eventsDropped(dropped.length, 'incomplete'));
@@ -1253,11 +1819,11 @@ const CalendarVueApp = {
         // that exists only on their screen is the failure mode this whole investigation
         // was about.
         CalendarDataService.onSyncPaused = ({ writes }) => {
-            this.showToast('Saving paused — reload the page to continue', 'error');
+            this.showToast('Saving paused. Reload the page to keep editing.', 'error');
             track(a => a.jsError('sync_paused', `${writes} writes in a minute`, 'sync'));
         };
         CalendarDataService.onSyncFailed = () => {
-            this.showToast('Could not save — check your connection', 'error');
+            this.showToast('Couldn’t save. Check your connection.', 'error');
             track(a => a.jsError('sync_failed', 'transaction did not commit', 'sync'));
         };
 
@@ -1273,17 +1839,23 @@ const CalendarVueApp = {
         // refused until a reload. The list keeps this write's own additions and edits,
         // and the service re-sends them along with any deletion the user named, so local
         // and server converge on the same list.
-        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code, message }) => {
-            if (code) {
-                this.showToast(`Server refused update: ${message || code}`, 'error');
-                track(a => a.syncRefused({ before, removing: 0, code, message }));
-            } else {
-                // The rows put back, not the net shrink: an addition in the same write offsets
-                // the count without making the loss any smaller.
-                const n = recovered ?? removing;
-                this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
-                track(a => a.syncRefused({ before, removing, code: 'undeclared_removal' }));
+        // Pro lock: who may change this calendar. Fired on every snapshot and editor-key answer.
+        CalendarDataService.onLockState = (s) => this.applyLockState(s);
+
+        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code }) => {
+            if (code === 'locked' || code === 'paused') {
+                // The calendar is locked or paused (or the editor link stopped working): undo the edit, say why.
+                this.showToast(code === 'paused' ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor, 'info');
+                if (Array.isArray(events)) {
+                    this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) }, { replace: true });
+                }
+                return;
             }
+            // The rows put back, not the net shrink: an addition in the same write offsets
+            // the count without making the loss any smaller.
+            const n = recovered ?? removing;
+            this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+            track(a => a.syncRefused({ before, removing }));
             if (Array.isArray(events)) {
                 this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) },
                     { replace: true });
@@ -1320,13 +1892,25 @@ const CalendarVueApp = {
         if (this.isHomepageCalendar && this.calendar.events.length == 0) {
             // Load homepage data from localStorage
             this.loadLocalStorage();
+            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject) && !CalendarTemplates.templateOf(e))) this.userAddedEvent = true;
+            this.restoreTemplate();
 
-            // If still no events after loading, create default sample event
+            // If still no events after loading, show the example event
             if (this.calendar.events.length == 0) {
-                var defaultEvent = this.calendar.defaultEvent("Sample event");
-                this.calendar.setEvents([defaultEvent]);
+                this.calendar.setEvents(this.calendar.sampleEvents());
             }
             this.updateCalendarView();
+
+            // "Use this template" on pastecal.com/templates: /?template=<id> starts the draft from it (events the
+            // visitor already added stay, as with the chips). The parameter is then dropped, so a reload doesn't redo it.
+            try {
+                const want = new URLSearchParams(location.search).get('template');
+                if (want && CalendarTemplates.label(want)) {
+                    this.$nextTick(() => { this.pickTemplate(want); track(a => a.featureUsed('template_link', want)); });
+                    const u = new URL(location.href); u.searchParams.delete('template');
+                    history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+                }
+            } catch (e) { /* a bad link opens the plain draft */ }
         }
 
         // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
@@ -1348,8 +1932,7 @@ const CalendarVueApp = {
             const modalShowing = [...document.querySelectorAll('[aria-modal="true"]')]
                 .some((m) => m.getClientRects().length > 0 && getComputedStyle(m).visibility !== 'hidden');
             const dialogOpen = modalShowing || !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal')
-                || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible)
-                || this.showRecentChanges;
+                || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
             if (dialogOpen) return;
             // Without server history there is still this session's own stack to undo.
             if (typing || (!this.isExisting && !this.store().canUndo)) return;
@@ -1378,6 +1961,8 @@ const CalendarVueApp = {
         this._escapeHandler = (e) => {
             if (e.key !== 'Escape') return;
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
+            if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
+            if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
             if (this.showClaimDialog) { this.showClaimDialog = false; return; }
             if (this.showSettings) { this.showSettings = false; return; }
             if (this.showSearch) { this.showSearch = false; return; }
@@ -1385,6 +1970,13 @@ const CalendarVueApp = {
             if (this.showHelp) { this.showHelp = false; }
         };
         window.addEventListener('keydown', this._escapeHandler);
+
+        // Whether the side panel docks (style.css uses the same 1100px line).
+        if (typeof window.matchMedia === 'function') {
+            const wide = window.matchMedia('(min-width: 1100px)');
+            const sync = () => { this.sideWide = wide.matches; };
+            if (wide.addEventListener) wide.addEventListener('change', sync); else if (wide.addListener) wide.addListener(sync);
+        }
     },
 
     beforeUnmount() {
@@ -1394,6 +1986,23 @@ const CalendarVueApp = {
     },
 
     watch: {
+        'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
+        // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
+        pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
+        // The homepage pitch is an experiment: pick (or recall) this browser's variant
+        // once the page is known to be the homepage, then report which parts of it are read.
+        isHomepageCalendar: {
+            immediate: true,
+            handler(home) {
+                if (!home || this._tourStarted) return;
+                this._tourStarted = true;
+                track(a => {
+                    this.tourVariant = a.homepageVariant();
+                    a.homepageViewed(this.homeRecents.length ? 'returning' : 'new');
+                });
+                this.$nextTick(() => this.observeTour());
+            },
+        },
         // Move focus into the Recent changes dialog when it opens and give it back to
         // whatever opened it on close, so keyboard and screen-reader users are not left
         // stranded on the page behind a modal.
@@ -1407,6 +2016,8 @@ const CalendarVueApp = {
             } else {
                 const opener = this._recentChangesOpener;
                 this._recentChangesOpener = null;
+                // Switching to another tab keeps focus in the panel; only closing gives it back.
+                if (this.sideTab) return;
                 if (opener && document.contains(opener) && typeof opener.focus === 'function') {
                     opener.focus();
                 }
@@ -1425,7 +2036,60 @@ const CalendarVueApp = {
             immediate: false, // mounted() already calls applyTheme on initial load
         },
 
+        // Who owns a Pro calendar decides who sees Stats and History. The share dialog's Pro
+        // panel reports it too, but Recent changes needs it without that dialog ever opening.
+        'lock.locked': {
+            handler(locked) {
+                this.proOwnerChecked = false;
+                if (!locked) { this.proOwner = false; this.upgradeNotice = null; this.shareNames = null; if (this.showPlus) this.refreshProTrial(); return; }
+                this.refreshProOwner();
+                this.checkUpgradeNotice();
+            },
+        },
+        // The plan ended and the owner opened it: the offer is back, without the trial it already had.
+        'lock.paused'(paused) {
+            if (!paused && this.showPlus) this.refreshProTrial();
+            this.checkPausedOwner();
+        },
+        recordingRole: {
+            handler(role) { track(a => a.tag('role', role)); },
+            immediate: true,
+        },
+        // The owner's first visit after locking: say once what changed, and where the editor link is.
+        proOwner(isOwner) {
+            // Stats opened before the owner check answered: now it can show the real numbers.
+            if (isOwner && this.showStatsInfo && this.canSeeProStats) this.openInsight('stats', 'side_panel');
+            if (!isOwner || !this.calendar || !this.calendar.id) return;
+            const key = 'pastecal_pro_welcomed:' + String(this.calendar.id).toLowerCase();
+            try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { return; }
+            this.showToast(`Upgraded with ${planName(this.proPlan)}. Everyone can view; only people with your editor link can edit.`, 'info', {
+                actionLabel: 'Editor link', action: () => { if (!this.showPlus) this.openPlusTab('share'); }, duration: 10000,
+            });
+        },
+        showPlus(open) {
+            if (!open) { this.proSurface = 'share'; this.plusAutoJoin = false; return; }
+            if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
+        },
+        showProStats(open) { this.focusInsight(open, 'proStatsPanel'); },
+        showProHistory(open) { this.focusInsight(open, 'proHistoryPanel'); },
+        // The grid re-lays out on any container resize (mounted); this is the explicit nudge
+        // for the moment the panel docks or undocks.
+        sideDocked() {
+            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+        },
+        viewerNotesPinnable: {
+            immediate: true,
+            handler(pin) {
+                if (!pin || this._notesPinned) return;
+                this._notesPinned = true;
+                // Only where it docks: over a phone's calendar it would hide what they came to see.
+                if (!this.sideWide || this.sideTab || this.notesHiddenHere()) return;
+                this.showNotes = true;
+            },
+        },
+
         showShare(newValue) {
+            if (!newValue) { this.showViewHelp = false; }
             if (newValue) {
                 this.updateCurrentViewURL();
                 this.startUpdateLinkTimer();
@@ -1592,8 +2256,10 @@ const CalendarVueApp = {
 
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
-            if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
+            // Parsed, not substring-matched: "?hv=below" contains "v=" but is not a view.
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('view') && !params.has('v')) {
+                let defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
                 const actualViewName = this.getActualViewName(defaultView);
 
                 const viewIndex = scheduleObj.views.findIndex(v => {
@@ -1687,6 +2353,10 @@ const CalendarVueApp = {
             // the new file arrives.
             const link = document.getElementById('syncfusion-theme');
             if (!link) return;
+            // A switch whose sheet is still loading is stale once the setting changes again
+            // (light -> dark -> light before the dark file arrives): drop it, or its late onload
+            // swaps in the wrong theme and leaves two sheets claiming the id.
+            if (this._themeLoading) { this._themeLoading.onload = null; this._themeLoading.remove(); this._themeLoading = null; }
             const file = dark ? 'material-dark.css' : 'material.css';
             const url = new URL(link.href, location.href);
             if (url.pathname.endsWith('/' + file)) return;
@@ -1694,7 +2364,10 @@ const CalendarVueApp = {
             const next = link.cloneNode();
             next.removeAttribute('id');
             next.href = url.href;
+            this._themeLoading = next;
             next.onload = () => {
+                if (this._themeLoading !== next) return;
+                this._themeLoading = null;
                 link.remove();
                 next.id = 'syncfusion-theme';
                 if (window.scheduleObj) window.scheduleObj.refreshLayout();
@@ -1805,20 +2478,19 @@ const CalendarVueApp = {
 
         clearLocalStorage() {
             localStorage.removeItem("calendar");
+            try { localStorage.removeItem('pastecal_template'); } catch (e) { /* nothing to clear */ }
         },
 
         resetToDefaults() {
             // Reset to a completely fresh calendar state
-            this.calendar.id = Utils.randomID(8);
+            this.calendar.id = Utils.randomID(10);
             this.calendar.title = "New Calendar";
             this.calendar.events = [];
             this.calendar.options = {
                 notes: '',
-                defaultView: 'week'
+                defaultView: 'month'
             };
-            // Add one sample event
-            var defaultEvent = this.calendar.defaultEvent("Sample event");
-            this.calendar.setEvents([defaultEvent]);
+            this.calendar.setEvents(this.calendar.sampleEvents());
             // Reset local settings to defaults
             this.initializeLocalSettings();
         },
@@ -1835,13 +2507,44 @@ const CalendarVueApp = {
                 this.calendar.import(c);
                 // Keep the draft's events/settings but not its URL name: a name typed on an
                 // earlier visit (maybe taken, maybe abandoned) shouldn't come back as the suggestion.
-                this.calendar.id = Utils.randomID(8);
+                this.calendar.id = Utils.randomID(10);
                 // Re-initialize local settings to load custom colors and labels
                 this.initializeLocalSettings();
             } else {
                 // No localStorage data (fresh start after save, or first visit)
                 this.resetToDefaults();
             }
+        },
+
+        // "Make your own copy" from a locked calendar: the events become a new unsaved draft on
+        // the homepage, under a new name, for the visitor to Save & share as their own. Nothing
+        // touches the original. A draft they already had with events of their own is kept aside
+        // (pastecal_previous_draft) rather than silently replaced.
+        // Also from Settings ("Make a copy", for next season or your own use), and, as 'style', from the
+        // "Make one like this" line under a calendar you didn't make: same colors and type names, no events.
+        makeOwnCopy(mode = 'full', from = 'locked') {
+            const src = JSON.parse(JSON.stringify(this.calendar));
+            const o = src.options || {};
+            const copy = mode === 'style'
+                ? { id: Utils.randomID(10), title: 'New Calendar', events: [],
+                    options: { ...(Array.isArray(o.colors) ? { colors: o.colors } : {}), ...(Array.isArray(o.typeLabels) ? { typeLabels: o.typeLabels } : {}) } }
+                : {
+                id: Utils.randomID(10),
+                title: `Copy of ${Calendar.displayTitle ? Calendar.displayTitle(src.title) : (src.title || 'calendar')}`,
+                events: (src.events || []).map((e) => ({ ...e, secret: undefined })),
+                options: { ...o, publicViewId: undefined },
+            };
+            try {
+                const prev = JSON.parse(localStorage.getItem('calendar') || 'null');
+                const mine = prev && Array.isArray(prev.events) && prev.events.some((e) => !Calendar.isSampleTitle(e.title || e.Subject));
+                if (mine) localStorage.setItem('pastecal_previous_draft', JSON.stringify(prev));
+                localStorage.setItem('calendar', JSON.stringify(copy));
+            } catch (e) {
+                this.showToast && this.showToast("Couldn't make a copy: this browser blocks saving.", 'error');
+                return;
+            }
+            track(a => a.featureUsed && a.featureUsed(from === 'locked' ? 'locked_copy' : `copy_${mode}_${from}`));
+            (window.top || window).location.href = '/?from=' + encodeURIComponent(from);
         },
 
         saveLocalStorage() {
@@ -1983,7 +2686,7 @@ const CalendarVueApp = {
             // A real, user-initiated change to this calendar (sync() also runs for other
             // people's edits echoing back, so it cannot be recorded there).
             if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
-            if (args.requestType === 'eventCreate') track(a => a.eventAdded('grid', this.calendar));
+            if (args.requestType === 'eventCreate') { track(a => a.eventAdded('grid', this.calendar)); this.noteHomepageEvent(); }
             if (deleting) this.offerUndo(label);
         },
 
@@ -1991,9 +2694,199 @@ const CalendarVueApp = {
         // REGION: Calendar CRUD Operations
         // ============================================================
 
-        create() {
-            // If user hasn't manually edited the slug, show intervention dialog
+        // Hide or show the homepage pitch column. Remembered in this browser, so someone who
+        // comes back to make another calendar keeps the full-width calendar.
+        toggleHomeAside() {
+            this.homeAsideHidden = !this.homeAsideHidden;
+            try { localStorage.setItem('pc_home_aside', this.homeAsideHidden ? 'hidden' : 'shown'); } catch (e) { /* this visit only */ }
+            track(a => a.track('feature_used', { feature: this.homeAsideHidden ? 'home_aside_hidden' : 'home_aside_shown' }));
+            // The calendar measures its width only on window resize; tell it the column moved.
+            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+        },
+
+        // One tour_seen per section per page view, when half of it is on screen.
+        observeTour() {
+            try {
+                const root = document.getElementById('how');
+                if (!root || typeof IntersectionObserver === 'undefined') return;
+                const seen = new Set();
+                const io = new IntersectionObserver((entries) => {
+                    for (const e of entries) {
+                        const section = e.target.dataset.tour;
+                        if (!e.isIntersecting || seen.has(section)) continue;
+                        seen.add(section);
+                        io.unobserve(e.target);
+                        track(a => a.tourSeen(section));
+                    }
+                }, { threshold: 0.5 });
+                root.querySelectorAll('[data-tour]').forEach(el => io.observe(el));
+            } catch (e) { /* observational only */ }
+        },
+
+        // The first event someone adds on the homepage: the tip has done its job, and Share
+        // gets one gentle pulse, because now a link is worth having.
+        // The example event makes room for it at the same moment.
+        noteHomepageEvent() {
+            if (!this.isHomepageCalendar || this.userAddedEvent) return;
+            this.userAddedEvent = true;
+            this.sharePulse = true;
+            setTimeout(() => { this.sharePulse = false; }, 3500);
+            // After Syncfusion finishes the add that called us.
+            setTimeout(() => {
+                if (this.dropSampleEvents()) {
+                    this.updateCalendarView();
+                    this.saveLocalStorage();
+                }
+            }, 0);
+        },
+
+        // ---- "Start from" templates (homepage draft only; utils/templates.js) ----
+
+        templateLabel(id) {
+            return CalendarTemplates.label(id);
+        },
+
+        templateDate(state) {
+            const [y, m] = String(state.date).split('-').map(Number);
+            return new Date(y, m - 1, 1, 12);
+        },
+
+        // The template's events still on the draft exactly as it made them. One the visitor changed
+        // (or one left from an earlier template) is theirs from then on, and nothing here removes it.
+        templateOwned(state = this.template) {
+            if (!state) return [];
+            const built = CalendarTemplates.build(state.id, this.templateDate(state));
+            if (!built) return [];
+            const pristine = new Map(built.events.map(e => [String(e.id), EventStore.normalize(e)]));
+            return (this.calendar.events || []).filter(e => {
+                const p = e && pristine.get(String(e.id));
+                return p && !Object.keys(EventStore.diff(EventStore.normalize(e), p)).length;
+            });
+        },
+
+        // Switching templates is instant: no "are you sure", because one Undo (toast or Cmd+Z) puts back
+        // exactly what was there, the same rule as deleting an event.
+        toggleTemplates() {
+            this.templatesOpen = !this.templatesOpen;
+            try { sessionStorage.setItem('pc_tpl_open', this.templatesOpen ? '1' : '0'); } catch (e) { /* this page view only */ }
+        },
+
+        pickTemplate(id) {
+            if (this.template && this.template.id === id) return;
+            this.applyTemplate(id);
+        },
+
+        startBlank() {
+            this.applyTemplate(null);
+        },
+
+        dismissTemplateNudge() {
+            this.templateNudge = false;
+            this._templateNudgeDismissed = true;
+        },
+
+        // Swap the draft's template events for another template's (or for none) as ONE store change,
+        // so they save like any events and one Cmd+Z puts back exactly what was there.
+        applyTemplate(id) {
+            const anchor = (window.scheduleObj && scheduleObj.selectedDate) || new Date();
+            const next = id ? { id, date: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-01` } : null;
+            const built = next && CalendarTemplates.build(id, this.templateDate(next));
+            const events = this.calendar.events || [];
+            // Every template event goes, edited or not (Undo brings them back); events the visitor made stay.
+            const fromTemplate = (e) => e && String(e.id).startsWith(CalendarTemplates.PREFIX);
+            const going = events.filter(e => fromTemplate(e) || (e && Calendar.isSampleTitle(e.title || e.Subject)));
+            // Only a switch that discards the visitor's own edits offers Undo; an untouched template has nothing to undo.
+            const editedGone = going.filter(fromTemplate).length > this.templateOwned().length;
+            const commands = going.map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
+            if (built) built.events.forEach(e => commands.push({ type: 'add', event: e }));
+            // Back to a fresh draft: the example event returns, as on a first visit.
+            else if (going.length === events.length) this.calendar.sampleEvents().forEach(e => commands.push({ type: 'add', event: e }));
+            const before = this.template;
+            if (commands.length) {
+                const label = id ? `Started from ${CalendarTemplates.label(id)}` : 'Cleared the template';
+                const r = this.store().dispatch({ type: 'batch', commands, label }, { label });
+                if (!r.ok) return;
+                // Undoing this change also puts the template before it back (undoLastLocal).
+                const stack = this.store().undoStack;
+                (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], state: before });
+            }
+            this.setTemplate(next);
+            clearTimeout(this._templateUndoTimer);
+            this.templateUndo = commands.length > 0 && editedGone;
+            if (this.templateUndo) this._templateUndoTimer = setTimeout(() => { this.templateUndo = false; }, 8000);
+            if (id) {
+                this.templateNudge = !this._templateNudgeDismissed;
+                track(a => a.featureUsed('template', id));
+            }
+        },
+
+        // Point the draft at another template (or none). Its title, notes and color names follow, but
+        // only where they still read as the last template (or a fresh draft) left them: nothing the
+        // visitor typed is replaced. Never the URL name; that stays the visitor's to pick.
+        setTemplate(next) {
+            const was = this.template && CalendarTemplates.build(this.template.id, this.templateDate(this.template));
+            const now = next && CalendarTemplates.build(next.id, this.templateDate(next));
+            const plain = (i) => `Type ${i + 1}`;
+            if (!this.calendar.options) this.calendar.options = {};
+            const o = this.calendar.options;
+            if ((this.calendar.title || Calendar.DEFAULT_TITLE) === (was ? was.title : Calendar.DEFAULT_TITLE)) this.calendar.title = now ? now.title : Calendar.DEFAULT_TITLE;
+            if ((o.notes || '').trim() === (was ? was.notes : '')) o.notes = now ? now.notes : '';
+            const labels = [...(this.localSettings.typeLabels || [])];
+            for (let i = 0; i < 8; i++) {
+                if ((labels[i] || plain(i)) === (was ? was.typeLabels[i] : plain(i))) labels[i] = now ? now.typeLabels[i] : plain(i);
+            }
+            this.localSettings.typeLabels = labels;
+            this.storeTypeLabelsInCalendarOptions();
+            this.template = next;
+            if (!next) this.templateNudge = false;
+            try {
+                if (next) localStorage.setItem('pastecal_template', JSON.stringify(next));
+                else localStorage.removeItem('pastecal_template');
+            } catch (e) { /* this visit only: its events are still ordinary draft events */ }
+        },
+
+        // A reload of a templated draft: the template is still "on" while any of its events are untouched.
+        restoreTemplate() {
+            let state = null;
+            try { state = JSON.parse(localStorage.getItem('pastecal_template') || 'null'); } catch (e) { /* none */ }
+            if (state && CalendarTemplates.label(state.id) && /^\d{4}-\d{2}-\d{2}$/.test(state.date) && this.templateOwned(state).length) {
+                this.template = state;
+                this.templateNudge = true;
+            } else {
+                try { localStorage.removeItem('pastecal_template'); } catch (e) { /* nothing stored */ }
+            }
+        },
+
+        // Remove the untouched example event. True when it was removed.
+        dropSampleEvents() {
+            const events = this.calendar.events || [];
+            const kept = events.filter(e => !(e && Calendar.isSampleTitle(e.title || e.Subject)));
+            if (!kept.length || kept.length === events.length) return false;
+            this.calendar.setEvents(kept);
+            return true;
+        },
+
+        // A link name from the calendar's title, else its first event: "Soccer Fall 2026" ->
+        // "soccer-fall-2026". Null when there is nothing better than the random name.
+        suggestedSlug() {
+            // Never from a template's title or events: the visitor picks the name, and "tigers-u10-soccer"
+            // would be taken by the second person to try the template anyway.
+            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject) && !CalendarTemplates.templateOf(e));
+            const fromTemplate = this.template && this.calendar.title === CalendarTemplates.build(this.template.id, this.templateDate(this.template)).title;
+            const source = (this.calendar.title && this.calendar.title !== 'New Calendar' && !fromTemplate) ? this.calendar.title : (own && (own.title || own.Subject));
+            if (!source) return null;
+            const slug = String(source).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+            return slug.length >= 3 ? slug : null;
+        },
+
+        // Share on a draft: ask for a name first (suggested from the title), unless one was typed.
+        // This was a second create() until Oct 2026; the later create() replaced it, so the naming
+        // dialog never appeared and Claim saved the random name straight away.
+        share() {
             if (!this.userHasEditedSlug) {
+                const suggestion = this.suggestedSlug();
+                if (suggestion) this.calendar.id = suggestion;
                 this.showClaimDialog = true;
                 // Focus input in dialog on next tick
                 this.$nextTick(() => {
@@ -2017,9 +2910,12 @@ const CalendarVueApp = {
         },
 
         create() {
+            // The example event only shows what a calendar looks like; it is never part of
+            // someone's real calendar. One they edited has a new title, so it stays.
+            if (this.isHomepageCalendar && this.userAddedEvent) this.dropSampleEvents();
             let slug = this.calendar.id;
             if (!slug) {
-                slug = Utils.randomID(8);
+                slug = Utils.randomID(10);
                 this.calendar.id = slug;
             }
 
@@ -2044,6 +2940,11 @@ const CalendarVueApp = {
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
+                // Template ids ("tpl-team-3") mean something only on the draft. Saved, each event gets an id
+                // of its own, or two calendars made from one template would share iCal UIDs in a subscriber's app.
+                if (this.calendar.events.some(e => CalendarTemplates.templateOf(e))) {
+                    this.calendar.setEvents(this.calendar.events.map(e => CalendarTemplates.templateOf(e) ? { ...e, id: Utils.uuidv4() } : e));
+                }
                 CalendarDataService.createWithId(slug, this.calendar, () => {
                     // The calendar now exists on the server. Fired separately from
                     // the slug events below because those answer "did they choose a
@@ -2065,6 +2966,7 @@ const CalendarVueApp = {
                             event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
                         }));
                     }
+                    if (this.template) track(a => a.featureUsed('template_saved', this.template.id));
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();
                     // Record in recents here rather than relying on the post-redirect
@@ -2073,12 +2975,119 @@ const CalendarVueApp = {
                     // recents cap — this list is the only way back without a login.
                     this.recentManager.add(slug, this.calendar.title, true);
                     this.recentCalendars = this.recentManager.getAll();
-                    this.showToast('Calendar created!', 'success');
+                    this.showToast('Calendar saved', 'success');
+                    try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
                     window.location.href = "/" + slug;
                 });
             });
         },
 
+        // The desktop name box is as wide as the name, so its dashed underline ends where the name does
+        // and the pencil sits right after it. Measured, because letters differ in width.
+        fitSlugBox() {
+            try {
+                const el = document.getElementById('slug');
+                if (!el) return;
+                const ctx = this._slugCtx || (this._slugCtx = document.createElement('canvas').getContext('2d'));
+                ctx.font = getComputedStyle(el).font;
+                const w = ctx.measureText(el.value || el.placeholder || '').width;
+                el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
+            } catch (err) { /* layout nicety only */ }
+        },
+        /** Share's Print button: the browser's print dialog (which also saves a PDF), counted as 'share'. */
+        printCalendar() {
+            this.printFrom = 'share';
+            try { window.print(); } catch (e) { this.printFrom = null; }
+        },
+
+        // Before printing: the dates on screen, the view link (never the edit link: a printout gets passed around)
+        // and its QR code, if the small QR library has loaded (it loads once the page is idle; see mounted).
+        preparePrint() {
+            try {
+                this.printMonth = this.buildPrintMonth();
+                const view = this.isReadOnly ? (location.origin + location.pathname) : (this.shareViewURL() || this.getReadOnlyURL() || '');
+                this.printLink = view ? view.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '';
+                this.printDate = new Date().toLocaleDateString();
+                this.printQr = '';
+                // The QR opens the subscribe page (this phone's calendar app, one tap); the printed text is the view link.
+                const scan = this.subscribePageURL() || view;
+                if (scan && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(scan.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
+            } catch (e) { /* print without the footer extras */ }
+        },
+
+        // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
+        // As many events as fit in a day on paper; the rest are "+N more".
+        buildPrintMonth() {
+            const sch = window.scheduleObj;
+            if (!sch || !sch.getEvents) return null;
+            const sel = new Date(sch.selectedDate || Date.now());
+            const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
+            const fdow = Number(sch.firstDayOfWeek) || 0;
+            const start = new Date(first); start.setDate(1 - ((first.getDay() - fdow + 7) % 7));
+            const last = new Date(sel.getFullYear(), sel.getMonth() + 1, 0);
+            const weeks = Math.ceil(((last - start) / 864e5 + 1) / 7);
+            const end = new Date(start); end.setDate(start.getDate() + weeks * 7);
+            const loc = navigator.language || 'en-US';
+            const en = /^en/i.test(loc);
+            const time = (d) => { const t = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' }); return en ? t.replace(':00', '').replace(/\s?([AP])M/i, (m, x) => x.toLowerCase() + 'm') : t; };
+            const evs = (sch.getEvents(start, end, true) || []).map((e) => ({ s: new Date(e.StartTime), e: new Date(e.EndTime), all: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type }))
+                .sort((a, b) => (b.all - a.all) || (a.s - b.s));
+            const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            const out = [];
+            for (let w = 0; w < weeks; w++) {
+                const row = [];
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(start); d.setDate(start.getDate() + w * 7 + i);
+                    const t = d.getTime(), next = new Date(d); next.setDate(d.getDate() + 1);
+                    const on = evs.filter((e) => e.all ? (day0(e.s) <= t && t < Math.max(day0(e.e), day0(e.s) + 1)) : (e.s < next && e.e > d && (day0(e.s) === t || e.e - e.s > 864e5 || day0(e.s) < t)));
+                    // What fits in a day (mm): a one-line event is ~5.3, a wrapped one ~8.6 (about 24 characters a line);
+                    // past that, the last ones become "+N more".
+                    const room = (146 / weeks) - 5.5;
+                    const tall = (e) => ((e.all ? 0 : 7) + e.title.length > 24 ? 8.6 : 5.3);
+                    let used = 0, fit = 0;
+                    for (const e of on) { const h = tall(e); const moreLine = fit + 1 < on.length ? 4 : 0; if (used + h + moreLine > room) break; used += h; fit++; }
+                    const shown = on.slice(0, fit);
+                    row.push({ key: t, num: d.getDate() === 1 ? d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) : d.getDate(), inMonth: d.getMonth() === sel.getMonth(),
+                        events: shown.map((e) => { const color = this.getTypeColor(e.type); return { title: e.title, time: e.all || day0(e.s) !== t ? '' : time(e.s), color, on: ScheduleAdapter.onColor(color) }; }),
+                        more: on.length - shown.length });
+                }
+                out.push(row);
+            }
+            const dows = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d.toLocaleDateString(loc, { weekday: 'short' }); });
+            return { label: sel.toLocaleDateString(loc, { month: 'long', year: 'numeric' }), dows, weeks: out };
+        },
+
+        showDraftBlock(popup) {
+            try {
+                this.hideDraftBlock();
+                const cells = [...document.querySelectorAll('#Schedule .e-work-cells.e-selected-cell, #Schedule .e-all-day-cells.e-selected-cell')];
+                if (!cells.length) return;
+                cells.forEach((c, i) => c.classList.add('pc-draft-cell', i === 0 ? 'pc-draft-head' : 'pc-draft-more', ...(i === cells.length - 1 ? ['pc-draft-tail'] : [])));
+                const root = document.getElementById('Schedule');
+                const input = popup && popup.querySelector('input.e-subject, .e-subject');
+                const label = () => root.style.setProperty('--draft-label', JSON.stringify((input && input.value.trim()) || 'New event'));
+                label();
+                if (input) { input.addEventListener('input', label); this._draftOff = () => input.removeEventListener('input', label); }
+            } catch (e) { /* a nicety: never in the way of adding the event */ }
+        },
+        hideDraftBlock() {
+            document.querySelectorAll('#Schedule .pc-draft-cell').forEach((c) => c.classList.remove('pc-draft-cell', 'pc-draft-head', 'pc-draft-more', 'pc-draft-tail'));
+            if (this._draftOff) { this._draftOff(); this._draftOff = null; }
+        },
+
+        // Clicking the name selects all of it, so typing replaces the random name instead of appending.
+        // At once, not on a timer: a fast typist beat the timer and appended. A click focuses on mouse
+        // down, and the mouse up would collapse the selection, so that one mouse up is cancelled.
+        selectSlug(e) {
+            const el = e && e.target;
+            if (!el || !el.setSelectionRange) return;
+            try { el.setSelectionRange(0, el.value.length); } catch (err) { /* */ }
+            this._slugKeepSelection = true;
+        },
+        keepSlugSelection(e) {
+            if (this._slugKeepSelection && e.type === 'mouseup') e.preventDefault();
+            this._slugKeepSelection = false;   // one mouse up, or a blur, ends it
+        },
         handleSlugInput() {
             this.userHasEditedSlug = true;
             this.slugTaken = null;
@@ -2114,7 +3123,7 @@ const CalendarVueApp = {
         },
 
         randomizeId() {
-            this.calendar.id = Utils.randomID(8);
+            this.calendar.id = Utils.randomID(10);
             // Reset edited state if they randomize (treat as "auto" again, or maybe not? 
             // Let's keep it as "not edited" so they get the review dialog if they just clicked shuffle
             // Actually, if they clicked shuffle, they interacted. 
@@ -2128,13 +3137,13 @@ const CalendarVueApp = {
             let newId = this.newCalendarId.trim();
             // basic validation (alphanumeric, hyphens)
             if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
-                alert("Invalid name. Use letters, numbers, dashes, and underscores.");
+                alert("That name won’t work. Use letters, numbers, dashes and underscores.");
                 return;
             }
 
             // Check if current name is same as new name
             if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
-                alert("New name must be different from current name.");
+                alert("That’s already this calendar’s name.");
                 return;
             }
 
@@ -2182,18 +3191,11 @@ const CalendarVueApp = {
 
         getTypes() {
             // First check if we have custom labels in calendar.options.typeLabels
-            if (this.calendar?.options?.typeLabels?.length > 0) {
-                return Array(this.COLORS.length).fill().map((_, i) => {
-                    let id = i + 1;
-                    let title = this.calendar.options.typeLabels[i] || `Type ${id}`;
-                    return { text: title, value: id, iconCss: `e-color-${id}` };
-                });
-            }
-
-            // Fallback to default labels if no custom labels are found
+            // An untouched label shows as "Type N" (typeLabelFor).
             return Array(this.COLORS.length).fill().map((_, i) => {
                 let id = i + 1;
-                return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` };
+                // Syncfusion renders item text as HTML, and labels are set by anyone with the edit link.
+                return { text: escapeHtml(this.typeLabelFor(i)), value: id, iconCss: `e-color-${id}` };
             });
         },
 
@@ -2246,36 +3248,30 @@ const CalendarVueApp = {
         // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
         // sounds like information while conveying none. Fall back to the dot's own color
         // instead, which is at least something the user can see on screen.
+        // A color the calendar has named ("Practice"), not just "Type N".
+        hasTypeLabel(index) {
+            const label = this.calendar?.options?.typeLabels?.[index];
+            return !!label && !/^Type \d+$/.test(label);
+        },
         typeLabelFor(index) {
             const custom = this.calendar?.options?.typeLabels;
             const label = custom && custom[index];
             if (label && !/^Type \d+$/.test(label)) return label;
-            return this.colorNameFor(index);
+            return `Type ${index + 1}`;   // not the color's name: "Sky" told people nothing
         },
 
-        // Nearest plain-English name for a palette color, so a dot has a spoken label
-        // even when its type was never given one.
-        colorNameFor(index) {
-            const hex = (this.COLORS[index] || '').replace('#', '');
-            if (hex.length !== 6) return `Type ${index + 1}`;
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
-            const max = Math.max(r, g, b), min = Math.min(r, g, b);
-            if (max - min < 30) return max > 160 ? 'Light gray' : (max < 80 ? 'Black' : 'Gray');
-
-            let hue;
-            const d = max - min;
-            if (max === r) hue = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-            else if (max === g) hue = ((b - r) / d + 2) * 60;
-            else hue = ((r - g) / d + 4) * 60;
-
-            const names = [
-                [15, 'Red'], [45, 'Orange'], [70, 'Yellow'], [160, 'Green'],
-                [200, 'Teal'], [250, 'Blue'], [290, 'Purple'], [340, 'Pink'], [360, 'Red'],
-            ];
-            return (names.find(([limit]) => hue <= limit) || [0, 'Red'])[1];
+        // The Week/Day corner toggle for the hours before the start hour (see renderCell).
+        earlyHoursLabel() {
+            const start = this.globalSettings.startHour || '05:00';
+            const hour = parseInt(start, 10) || 0;
+            if (!hour) return { text: '', title: '' };   // nothing is hidden
+            const at = this.globalSettings.timeFormat === '24'
+                ? start : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+            return this.calendar?.options?.extended
+                ? { text: 'Hide early', title: `Hide the hours before ${at}` }
+                : { text: 'Earlier', title: `Show the hours before ${at}` };
         },
+
 
         updateCurrentViewURL() {
             const currentView = scheduleObj.currentView;
@@ -2296,7 +3292,9 @@ const CalendarVueApp = {
                 viewParam = viewLower;
             }
 
-            const baseURL = SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
+            // The owner of a calendar with an @link or short link: "This view" starts from that view-only link too.
+            const named = !this.isReadOnly && this.shareNames ? this.shareViewURL() : null;
+            const baseURL = named || SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
             // baseURL is null only if read-only mode somehow lacks a slug (server race + no
             // /view/<slug> in the URL). Fall back to the current href so we never leak the edit id.
             this.currentViewURL = baseURL
@@ -2332,7 +3330,14 @@ const CalendarVueApp = {
         getSubscribeICSURL() {
             // No fallback to the editable feed: these URLs go to Google, Microsoft and the OS,
             // so without a read-only link the subscribe buttons hide (their v-if) instead.
-            return this.getReadOnlyICSURL();
+            const own = this.getReadOnlyICSURL();
+            if (own) return own;
+            // A view link's calendar never carries its publicViewId (the server strips it): the
+            // feed is the address being viewed, plus .ics.
+            if (!this.viewRoute) return null;
+            const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
+            return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
         },
 
         /**
@@ -2344,6 +3349,12 @@ const CalendarVueApp = {
          * click does nothing at all -- which is why the named app buttons and the
          * plain feed URL stay visible next to it.
          */
+        /** The add-to-calendar page for the read-only feed (/view/<id>/add): Add to my calendar, Share, the printed QR. */
+        subscribePageURL() {
+            const feed = this.getSubscribeICSURL();
+            return feed ? feed.replace(/\.ics$/i, '/add') : null;
+        },
+
         getWebcalURL() {
             const url = this.getSubscribeICSURL();
             if (!url) return null;
@@ -2362,10 +3373,22 @@ const CalendarVueApp = {
             if (!url) return null;
             return 'https://outlook.live.com/calendar/0/addfromweb?url='
                 + encodeURIComponent(url)
-                + '&name=' + encodeURIComponent(this.calendar.title || 'PasteCal');
+                + '&name=' + encodeURIComponent(this.calendar.title || 'pastecal');
         },
 
         /** Records which subscribe path was used, so the rate is measurable. */
+        // A paused calendar opens in the view-only layout, which has no Share button. Its owner still needs
+        // the "Plus ended" choices (Open to everyone / Keep Plus), so ask the server whether this is the owner.
+        async checkPausedOwner() {
+            if (!this.lock.paused || !this.calendar || !this.calendar.id) { this.pausedOwner = false; return; }
+            try {
+                const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
+                const st = r.ok ? await r.json() : null;
+                this.pausedOwner = !!(st && st.lapsedOwner);
+                if (this.pausedOwner) { this.proPlan = st.plan || null; this.pausedTrial = !!st.lapsedTrial; }   // which plan ended: 'Trial ended' / 'Plus ended'
+            } catch (e) { this.pausedOwner = false; }
+        },
+
         trackSubscribe(method) {
             track(a => a.calendarShared(method));
         },
@@ -2373,6 +3396,15 @@ const CalendarVueApp = {
         createReadOnlyLink() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.createReadOnlyLink(this.calendar);
+        },
+
+        /** Share's "Create read-only link", for a calendar saved before view links were made on save. Saves it too. */
+        async makeReadOnlyLink() {
+            if (this.creatingReadOnly) return;
+            this.creatingReadOnly = true;
+            try { await SlugManager.createReadOnlyLink(this.calendar, { autoCreate: true }); }
+            catch (e) { this.showToast('Couldn’t create the link. Try again in a moment.', 'error'); }
+            finally { this.creatingReadOnly = false; }
         },
 
         customizeExistingLink() {
@@ -2392,34 +3424,61 @@ const CalendarVueApp = {
             return SlugManager.getReadOnlySlug(this.calendar) || '';
         },
 
+        /** A link as Share shows it: pastecal.com and the path, whatever host this page is on. The full URL is what's copied. */
+        shortLink(url) {
+            return String(url || '').replace(/^[a-z]+:\/\/(www\.)?[^/]+/i, 'pastecal.com');
+        },
+
+        /** Share's "Embed on a website": the read-only calendar in an iframe (view pages allow framing). */
+        embedCode() {
+            const title = String(this.displayCalendarTitle || 'Calendar').replace(/[<>"&]/g, '');
+            return `<iframe src="${this.getReadOnlyURL()}" title="${title}" width="100%" height="640" style="border:0" loading="lazy"></iframe>`;
+        },
+
         getReadOnlyURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyURL(this.calendar);
         },
 
+        /** /api/pro/status (here, or from the Pro panel after a change): the owner's @link and short links for
+         *  this calendar. Only its owner gets them, and only they are shown them. */
+        onProNames(st) {
+            if (!st || !st.isOwner || !this.calendar) { this.shareNames = null; return; }
+            const shortNames = Array.isArray(st.shortNames) ? st.shortNames.filter((n) => typeof n === 'string') : [];
+            this.shareNames = (st.handle && st.atName) || shortNames.length ? { handle: st.handle || '', atName: st.atName || '', shortNames } : null;
+        },
+        /** The editor link the Pro panel last made in this browser (same key as Pro.js storedLink and /pro/done). */
+        storedEditorLink() {
+            try { return (this.calendar && localStorage.getItem('pastecal_editor_link:' + String(this.calendar.id).toLowerCase())) || ''; } catch (e) { return ''; }
+        },
+        /** "Share to edit" with no editor link here yet: the Pro panel's Editor link section makes one (never resets one). */
+        /** Share to edit, no editor link made in this browser yet: they're made in the Plus tab, under Who can edit. */
+        goEditorLink() {
+            this.openPlusTab('share');
+            setTimeout(() => { const el = document.getElementById('pc-pro-editor'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+        },
+        /** "Share to view": one link, the best this calendar has: its @link, else a short link, else its view link.
+         *  All three open the view-only calendar. */
+        shareViewURL() {
+            const n = this.shareNames, origin = window.location.origin;
+            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
+            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            return this.getReadOnlyURL();
+        },
+        /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
+        otherViewLinks() {
+            const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
+            const all = [];
+            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
+            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            const view = this.getReadOnlyURL();
+            if (view) all.push(view);
+            return all.filter((u) => u !== main);
+        },
+
         getReadOnlyNotes() {
-            let notes = this.calendar.options?.notes || '';
-
-            // Escape HTML special characters
-            notes = notes.replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-
-            // Convert URLs to hyperlinks safely
-            // Match URLs starting with http://, https://, or ftp://
-            notes = notes.replace(/(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-            // Match URLs starting with "www." not preceded by '://'
-            notes = notes.replace(/(^|\s)(www\.[\S]+(\b|$))/ig,
-                '$1<a href="http://$2" target="_blank" rel="noopener noreferrer">$2</a>');
-
-            // Convert line breaks to <br> tags
-            notes = notes.replace(/\n/g, "<br>");
-
-            return notes;
+            // Escaped, then only http(s)/www/email become links (Utils.linkify), then line breaks.
+            return Utils.linkify(this.calendar.options?.notes || '', { style: false }).replace(/\n/g, "<br>");
         },
 
         startUpdateLinkTimer() {
@@ -2456,6 +3515,16 @@ const CalendarVueApp = {
 
         toggleColorFilter(index) {
             this.colorFilters[index] = !this.colorFilters[index];
+        },
+
+        // A search-panel chip: show only this type (and list its events). Tapping the one shown again
+        // shows everything. Seeing all of one color took a tap on every other chip before.
+        soloColorFilter(index) {
+            // Only types some event uses: switching off an unused one hides nothing and only adds clutter.
+            const used = new Set(this.filterChips.filter(c => c.count > 0).map(c => c.idx));
+            const onlyThis = this.colorFilters[index] !== false
+                && [...used].every(i => i === index || this.colorFilters[i] === false);
+            this.colorFilters = this.COLORS.map((_, i) => onlyThis || i === index || !used.has(i));
         },
 
         resetColorFilters() {
@@ -2592,6 +3661,12 @@ const CalendarVueApp = {
         },
 
 
+        // Edit from a search result: the same editor a double-click opens (a repeating event opens its series).
+        editSearchResult(event) {
+            const data = (scheduleObj.eventsData || []).find(e => String(e.Id) === String(event.id) && !e.RecurrenceID);
+            if (data) scheduleObj.openEditor(data, data.RecurrenceRule ? 'EditSeries' : 'Save');
+        },
+
         jumpToEvent(event) {
             let startDate = new Date(event.start);
             scheduleObj.selectedDate = startDate;
@@ -2599,6 +3674,9 @@ const CalendarVueApp = {
         },
 
         toggleRecents() {
+            // On desktop, pointing at the logo already opened the menu: the click that follows
+            // must keep it open, not close it again.
+            if (this.showRecents && Date.now() - (this.recentsHoverOpenedAt || 0) < 1500) { this.recentsHoverOpenedAt = 0; return; }
             this.showRecents = !this.showRecents;
         },
 
@@ -2610,6 +3688,7 @@ const CalendarVueApp = {
             // Only handle hover on non-touch devices
             if (!('ontouchstart' in window)) {
                 clearTimeout(this.hoverTimeout);
+                if (!this.showRecents) this.recentsHoverOpenedAt = Date.now();
                 this.showRecents = true;
             }
         },
@@ -2628,12 +3707,140 @@ const CalendarVueApp = {
             window.location.href = '/';
         },
 
+        // The logo menu's "Start over" on the homepage draft: back to a fresh blank draft -- every
+        // event (the visitor's own too), the title, notes, color names and colors. The events go as
+        // ONE store change, and that undo entry also carries everything else, so one Cmd+Z (or the
+        // toast's Undo) brings the whole draft back (undoLastLocal). The URL name stays the visitor's.
+        startOver() {
+            this.closeRecents();
+            // Only the homepage draft clears in place; anywhere else, starting over means the homepage.
+            if (!this.isHomepageCalendar) { this.goToHomepage(); return; }
+            const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
+            const before = {
+                title: this.calendar.title,
+                options: clone(this.calendar.options || {}),
+                colors: [...this.COLORS],
+                localColors: [...(this.localSettings.colors || this.COLORS)],
+                labels: [...(this.localSettings.typeLabels || [])],
+                template: clone(this.template),
+                templateNudge: this.templateNudge,
+                userAddedEvent: this.userAddedEvent,
+            };
+            const commands = (this.calendar.events || []).map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
+            this.calendar.sampleEvents().forEach(e => commands.push({ type: 'add', event: e }));
+            const label = 'Started over';
+            const r = this.store().dispatch({ type: 'batch', commands, label }, { label });
+            if (!r.ok) return;
+            const stack = this.store().undoStack;
+            (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], restore: () => this.restoreDraftMeta(before) });
+            this.restoreDraftMeta({
+                title: Calendar.DEFAULT_TITLE,
+                options: { notes: '', defaultView: before.options.defaultView || 'month' },
+                colors: [...this.DEFAULT_COLORS],
+                localColors: [...this.DEFAULT_COLORS],
+                labels: this.DEFAULT_COLORS.map((_, i) => `Type ${i + 1}`),
+                template: null,
+                templateNudge: false,
+                userAddedEvent: false,
+            });
+            clearTimeout(this._templateUndoTimer);
+            this.templateUndo = false;
+            track(a => a.featureUsed('start_over'));
+            this.offerUndo('Started over with a blank calendar');
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+        },
+
+        // Put a draft's title, options, palette, color names and template back as given (startOver and its undo).
+        restoreDraftMeta(m) {
+            this.calendar.title = m.title;
+            this.calendar.options = JSON.parse(JSON.stringify(m.options || {}));
+            this.COLORS = [...m.colors];
+            this.localSettings.colors = [...m.localColors];
+            this.localSettings.typeLabels = [...m.labels];
+            this.syncColorFiltersLength();
+            this.storeColorsInCalendarOptions();
+            this.storeTypeLabelsInCalendarOptions();
+            this.updateColorCSS();
+            this.template = m.template;
+            this.templateNudge = !!m.templateNudge;
+            this.userAddedEvent = !!m.userAddedEvent;
+            try {
+                if (m.template) localStorage.setItem('pastecal_template', JSON.stringify(m.template));
+                else localStorage.removeItem('pastecal_template');
+            } catch (e) { /* this visit only */ }
+        },
+
         // ============================================================
         // REGION: UI State Management (Panels & Toggles)
         // ============================================================
 
         isPanelOpen() {
-            return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
+            return !!this.sideTab;
+        },
+
+        /** A tab in the side panel's row. Picking the open tab leaves it open. */
+        openSideTab(id) {
+            if (this.sideTab === id) return;
+            if (id === 'notes') this.toggleNotes();
+            else if (id === 'share') this.toggleShare();
+            else if (id === 'settings') this.toggleSettings();
+            else if (id === 'changes') this.openRecentChanges();
+            else if (id === 'stats') this.openStats();
+            else if (id === 'plus') this.openPlusTab('share');
+            else if (id === 'history') this.openInsight(id, 'side_panel');
+        },
+        /** Stats: the Pro numbers for the owner; for everyone else, what Stats holds and how to get it. */
+        openStats() {
+            if (this.canSeeProStats) { this.openInsight('stats', 'side_panel'); return; }
+            this.closeAllPanels();
+            this.showStatsInfo = true;
+            // A free calendar: its views and followers, then what Pro adds. Counted where it now lives.
+            if (this.isExisting && !this.lock.locked) {
+                track(a => a.proStatsTeaserShown());
+                this.loadFreeStats();
+            }
+        },
+        /** The free counts (/api/stats): anyone with an unlocked calendar's edit link. Counts only, never who. */
+        async loadFreeStats() {
+            const id = this.calendar && this.calendar.id;
+            if (!id) return;
+            const keep = this.freeStats && this.freeStats.id === id && !this.freeStats.error ? this.freeStats : null;
+            this.freeStats = { id, views: 0, viewsPrev: 0, followers: 0, ...keep, loading: !keep, error: false };
+            let data = null, offline = false, unavailable = false;
+            try {
+                const res = await fetch(`/api/stats?calendar=${encodeURIComponent(id)}`, { credentials: 'same-origin' });
+                data = res.ok ? await res.json().catch(() => null) : null;
+                // 503 stats-unavailable: this calendar isn't being counted yet. Never shown as zeros.
+                if (res.status === 503) unavailable = ((await res.json().catch(() => null)) || {}).error === 'stats-unavailable';
+            } catch (e) { offline = true; }
+            if (!this.freeStats || this.freeStats.id !== id) return;      // another calendar opened meanwhile
+            // No numbers to show (not stored here, or locked meanwhile): just the Pro list, no error.
+            this.freeStats = data
+                ? { id, loading: false, error: false, views: Number(data.views) || 0, viewsPrev: Number(data.viewsPrev) || 0, followers: Number(data.followers) || 0 }
+                : unavailable ? { id, loading: false, error: false, unavailable: true }
+                : keep ? { ...keep, loading: false } : { id, loading: false, error: offline, none: !offline };
+        },
+        /** Notes' Edit and Add notes. The textarea is bound as before, so typing saves the same way. */
+        editNotes() {
+            this.notesEditing = true;
+            this.$nextTick(() => { const el = this.$refs.notesInput; if (el) el.focus(); });
+        },
+        /** From the Stats tab: the Plus tab. */
+        getProFromStats() {
+            track(a => a.proStatsTeaserClicked());
+            this.openPlusTab('stats');
+        },
+
+        /** The panel's close button, its backdrop on small screens, and Escape. */
+        closeSidePanel() {
+            // A viewer who hides the pinned notes means it for this calendar, in this browser.
+            if (this.showNotes && this.isReadOnly) {
+                try { localStorage.setItem('pc_notes_hidden:' + String(this.calendar.id).toLowerCase(), '1'); } catch (e) { /* this visit only */ }
+            }
+            this.closeAllPanels();
+        },
+        notesHiddenHere() {
+            try { return !!localStorage.getItem('pc_notes_hidden:' + String(this.calendar.id).toLowerCase()); } catch (e) { return false; }
         },
 
         // First-run welcome. Deliberately narrow: it's for someone who has never
@@ -2673,6 +3880,7 @@ const CalendarVueApp = {
             }
         },
 
+
         welcomeShowHelp() {
             this.dismissWelcome();
             this.toggleHelp();
@@ -2700,6 +3908,7 @@ const CalendarVueApp = {
                     track(a => a.featureUsed('notes'));
                 }
                 this.showNotes = false;
+                this.notesEditing = false;
             } else {
                 this.closeAllPanels();
                 this.showNotes = true;
@@ -2735,16 +3944,14 @@ const CalendarVueApp = {
          * panel's own copy buttons -- the whole point is to learn whether this path
          * gets used, and lumping them together would hide the answer.
          */
+        // The header pill copies the page's own link, the edit link (it is the address you are on); the
+        // view-only link is one click away in Share. The toast says what was copied, since it grants editing.
         copyShareLink() {
-            const readOnly = this.getReadOnlyURL();
-            const url = readOnly || this.getEditableURL();
+            const url = this.getEditableURL();
             if (!url) return;
 
             const settle = () => {
-                // The view-only link is minted asynchronously and can be missing or still
-                // pending; the fallback grants full edit access, so say so rather than
-                // giving the same "copied" as the safe link.
-                if (!readOnly) this.showToast('Copied the edit link: anyone with it can change this calendar', 'info');
+                this.showToast('Copied the edit link: anyone with it can change this calendar. For a view-only link, open Share.', 'info');
                 this.shareCopied = true;
                 clearTimeout(this.shareCopiedTimer);
                 this.shareCopiedTimer = setTimeout(() => { this.shareCopied = false; }, 1600);
@@ -2757,13 +3964,13 @@ const CalendarVueApp = {
             // user something rather than silently doing nothing.
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(url).then(settle).catch(() => {
-                    if (!this.legacyCopy(url)) this.showToast('Could not copy the link', 'error');
+                    if (!this.legacyCopy(url)) this.showToast('Couldn’t copy the link', 'error');
                     else settle();
                 });
             } else if (this.legacyCopy(url)) {
                 settle();
             } else {
-                this.showToast('Could not copy the link', 'error');
+                this.showToast('Couldn’t copy the link', 'error');
             }
         },
 
@@ -2814,6 +4021,13 @@ const CalendarVueApp = {
             if (this.showSettings) {
                 this.toggleSettings();
             }
+
+            // Activity, Stats and History share the panel, so opening anything closes them too.
+            this.showRecentChanges = false;
+            this.showProStats = false;
+            this.showProHistory = false;
+            this.showStatsInfo = false;
+            this.showPlus = false;
         },
 
         togglePin(id) {
@@ -2838,6 +4052,19 @@ const CalendarVueApp = {
             return new Date(dateString).toLocaleString(undefined, options);
         },
 
+        // A search result's "when". An all-day event shows its dates only: its stored start is a
+        // midnight, so formatDate printed "12:00 AM", and its end is the day AFTER the last one.
+        formatEventRange(event) {
+            if (!event.isAllDay) return `${this.formatDate(event.start)} - ${this.formatDate(event.end)}`;
+            const day = { weekday: 'short', month: 'short', day: 'numeric' };
+            const start = Event.allDayToLocal(event.start);
+            if (!start) return '';
+            const end = Event.allDayToLocal(event.end);
+            const last = end && end > start ? new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1) : start;
+            const first = start.toLocaleDateString(undefined, day);
+            return last.toDateString() === start.toDateString() ? first : `${first} - ${last.toLocaleDateString(undefined, day)}`;
+        },
+
         // Resolves globalSettings.dateFormat to a Syncfusion-compatible date pattern.
         // 'auto' inspects navigator.language: US locales use M/d/yy; ISO regions (Sweden,
         // Hungary, Korea, etc.) use yyyy-MM-dd; everywhere else uses dd/MM/yyyy.
@@ -2858,6 +4085,7 @@ const CalendarVueApp = {
         },
 
         handleQuickAddEvent(event) {
+            this.noteHomepageEvent();
             // Quick-add can produce a start with no end ("standup tomorrow 9am" parses a
             // time but no duration), and the dialog's own validation only requires a start.
             // An event with a null end is dropped at the write boundary by
@@ -2885,11 +4113,8 @@ const CalendarVueApp = {
         shareUrl(url, title) {
             if (navigator.share) {
                 track(a => a.calendarShared('native'));
-                navigator.share({
-                    title: 'PasteCal Calendar',
-                    text: title,
-                    url: url
-                }).catch(err => {
+                // The message is the calendar's name and its link, nothing else: it reads like a person sent it.
+                navigator.share({ title: title || 'Calendar', text: title || '', url: url }).catch(err => {
                     console.log('Error sharing:', err);
                 });
             }
@@ -2935,7 +4160,8 @@ const CalendarVueApp = {
                         rows = cloudRows;
                     }
                 }
-                if (!rows.length && typeof firebase !== 'undefined' && firebase.database) {
+                // Never on the staging copy: Firebase there is production's data for a same-named calendar.
+                if (!rows.length && typeof firebase !== 'undefined' && firebase.database && !window.pcNoProdSideEffects && !(typeof PreviewSite !== 'undefined' && PreviewSite.is())) {
                     // Only the newest 20 entries are ever shown, so only they are downloaded:
                     // a calendar's history is 10-20x the calendar itself.
                     const snap = await firebase.database()
@@ -3021,6 +4247,9 @@ const CalendarVueApp = {
                         ...addedEvents.map(keyOf),
                     ])].sort();
                     const n = lost.length;
+                    if (this.isEmptyChange(r, { lost, edited, added })) return null;
+                    // The row's dot: the color of the first event it touched (none for calendar-level changes).
+                    const firstEvent = lostEvents[0] || (visibleEdits[0] && visibleEdits[0].to) || addedEvents[0];
 
                     return {
                         key: r.key,
@@ -3039,6 +4268,7 @@ const CalendarVueApp = {
                         // there. Listing it without a button is honest; a no-op Restore is
                         // not. (Cmd+Z can still take an addition back: undoLastChange.)
                         canRestore: delta.removed.length > 0 || delta.changed.length > 0,
+                        type: firstEvent && firstEvent.type ? firstEvent.type : null,
                         what: this.describeChange(r, lost, edited, added),
                         when: this.describeWhen(r.savedAt),
                         // Terse for the row's right-hand column; the full timestamp rides
@@ -3061,7 +4291,7 @@ const CalendarVueApp = {
                     };
                 });
 
-                this.undoEntries = this.collapseSessions(detailed).slice(0, 10);
+                this.undoEntries = this.collapseSessions(detailed.filter(Boolean)).slice(0, 10);
                 // An old calendar may predate the lastEditedAt stamp; the log still knows.
                 const newest = this.undoEntries[0];
                 if (newest && newest.savedAt > (this.lastEditedAt || 0)) {
@@ -3083,6 +4313,7 @@ const CalendarVueApp = {
          */
         watchLastEdited(calendarId) {
             if (!calendarId || typeof firebase === 'undefined') return;
+            if (window.pcNoProdSideEffects || (typeof PreviewSite !== 'undefined' && PreviewSite.is())) return;   // staging/local CF: never production Firebase
             if (this._lastEditedRef && this._lastEditedId === calendarId) return;
             this.unwatchLastEdited();   // a different calendar: drop the old listener
 
@@ -3136,6 +4367,53 @@ const CalendarVueApp = {
                 this.lastEditedAt = this.calendar.lastEditedAt;
             }
             this.refreshRelativeTimes();
+            this.maybeShowProUpsell();
+        },
+
+        /**
+         * Pro, at the moment it is most relevant: you open a calendar YOU made and someone else
+         * has changed it since your last visit. One quiet line above the calendar, at most once
+         * per calendar per 30 days (ProUpsell, public/components/Pro.js). Never on someone
+         * else's calendar, a locked or read-only one, the homepage draft, an embed or /beta.
+         * Called whenever one of its inputs arrives (visit, lock state, last-edit stamp); the
+         * history is read once, and only when everything cheaper already says yes.
+         */
+        async maybeShowProUpsell() {
+            if (this._upsellChecked || this.proUpsell || typeof ProUpsell === 'undefined') return;
+            const id = this.calendar && this.calendar.id;
+            let embedded = true;
+            try { embedded = window.self !== window.top; } catch (e) { /* cross-origin parent: embedded */ }
+            const verdict = ProUpsell.precheck({
+                id, existing: this.isExisting, homepage: this.isHomepageCalendar,
+                readOnly: this.isReadOnly, viewRoute: this.viewRoute, embedded,
+                beta: /^\/(beta|nativecal)(\/|$)/.test(location.pathname),
+                mine: !!(this.recentManager && this.recentManager.getMine().some(item => item.id === id)),
+                shownAt: ProUpsell.shownAt(id), now: Date.now(),
+                lockKnown: this.lockKnown, locked: this.lock.locked,
+                visitKnown: this.lastSeenKnown, lastSeenAt: this.lastSeenAt, lastEditedAt: this.lastEditedAt,
+            });
+            if (verdict === 'wait') return;
+            this._upsellChecked = true;
+            if (verdict !== 'yes') return;
+            const rows = await this.loadUndoEntries();
+            if (!ProUpsell.changedByOthers(rows, this.lastSeenAt, CalendarDataService.writerId)) return;
+            // Things may have moved while the history loaded.
+            if (!this.calendar || this.calendar.id !== id || this.lock.locked || this.isReadOnly) return;
+            this.proUpsell = true;
+            ProUpsell.markShown(id);
+            track(a => a.proUpsellShown());
+        },
+
+        dismissProUpsell() {
+            this.proUpsell = false;
+            track(a => a.proUpsellDismissed());
+        },
+
+        // The quiet upsell line: the Plus tab. Billing not on yet: its beta email field is already open.
+        openProUpsell() {
+            this.proUpsell = false;
+            track(a => a.proUpsellClicked());
+            this.openPlusTab('lock', { join: this.proBilling === false });
         },
 
         /** Re-render every relative time from its stored timestamp. */
@@ -3416,6 +4694,9 @@ const CalendarVueApp = {
             const gone = (lost || []).map(e => ({
                 title: (e.title && e.title.trim()) ? e.title : 'Untitled event',
             }));
+            if (entry.kind === 'restored') return ProInsightMath.restoredLabel(entry.label);   // "Restored the version from Oct 21"
+            // Server-written rows: "Upgraded with Plus", "Unlocked". Rows written before the rename said Pro for the Plus plan.
+            if (entry.label) return { 'Locked with Pro': 'Upgraded with Plus', 'Pro ended. Editing paused by the owner': 'Plus ended. Editing paused by the owner' }[entry.label] || entry.label;
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
                 return gone.length ? `All events deleted (${gone.length})` : 'All events deleted';
             }
@@ -3432,7 +4713,22 @@ const CalendarVueApp = {
             const c = entry.changed || 0;
             if (c > 0) return c === 1 ? '1 event edited' : `${c} events edited`;
             const ad = entry.added || 0;
-            return ad === 1 ? '1 event added' : `${ad} events added`;
+            if (ad > 0) return ad === 1 ? '1 event added' : `${ad} events added`;
+            if (entry.kind === 'title-cleared') return 'Calendar title cleared';
+            // Nothing to name: a write that changed no event (see isEmptyChange).
+            return null;
+        },
+
+        /**
+         * A history entry that changed no event, so there is nothing to list or undo. Rooms
+         * on Cloudflare stored one for every settings-only write (the option defaults a tab
+         * fills in on load go out right after its first edit), listed as "0 events added".
+         * They no longer record them, but entries already stored are skipped here.
+         */
+        isEmptyChange(r, row) {
+            if (['wiped', 'deleted', 'title-cleared'].includes(r.kind)) return false;
+            return !row.lost.length && !row.edited.length && !row.added.length
+                && !(r.removed || 0) && !(r.changed || 0) && !(r.added || 0);
         },
 
         /**
@@ -3753,7 +5049,7 @@ const CalendarVueApp = {
                 scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
 
                 // Apply time format
-                const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
                 scheduleObj.timeFormat = timeFormat;
 
                 // Apply default view if not already set via URL
@@ -3779,7 +5075,7 @@ const CalendarVueApp = {
                 } catch (e) { console.warn('Failed to apply first day of week setting:', e); }
 
                 try {
-                    scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                    scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
                     console.log('Applied time format setting');
                 } catch (e) { console.warn('Failed to apply time format setting:', e); }
 
@@ -3986,11 +5282,17 @@ const CalendarVueApp = {
         loadCustomColors() {
             // Load custom colors from calendar options if available
             if (this.calendar.options && this.calendar.options.colors && Array.isArray(this.calendar.options.colors)) {
+                // Calendars store a copy of the palette, so ones made before Oct 2026 still hold the
+                // old coral/green/gray, which only dark text could read. An exact old default shows as
+                // the deeper one (white text passes 4.5:1); a color someone picked themselves stays.
+                const UPGRADE = { '#ff6652': '#d0442f', '#4caf50': '#2e7d32', '#9e9e9e': '#757575' };
+                const colors = this.calendar.options.colors.map(c => UPGRADE[String(c).toLowerCase()] || c);
+
                 // Update local settings with stored colors
-                this.localSettings.colors = [...this.calendar.options.colors];
+                this.localSettings.colors = [...colors];
 
                 // Update the component COLORS array
-                this.COLORS = [...this.calendar.options.colors];
+                this.COLORS = [...colors];
 
                 // One filter flag per color. colorFilters is sized once at init from the
                 // default palette; COLORS is replaced here with whatever the calendar
@@ -4095,6 +5397,35 @@ const CalendarVueApp = {
          *   call site says which -- an untagged copy still works, it just isn't
          *   attributed.
          */
+        // Share's click-to-copy fields: reactive "copied" state, so Vue owns the markup. The async
+        // clipboard can be refused (permissions, focus, older browsers), so fall back to the
+        // execCommand path, and if that fails too, select the link so Cmd/Ctrl+C works.
+        copyLink(key, text, method) {
+            if (!text) { this.showToast('Nothing to copy', 'error'); return; }
+            if (method) track(a => a.calendarShared(method));
+            const done = () => {
+                this.copiedKey = key;
+                clearTimeout(this._copiedTimer);
+                this._copiedTimer = setTimeout(() => { this.copiedKey = null; }, 1600);
+            };
+            const legacy = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+                document.body.appendChild(ta); ta.select();
+                let ok = false;
+                try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+                ta.remove();
+                return ok;
+            };
+            const fail = () => {
+                const el = document.querySelector(`[data-copy-key="${key}"] .pc-link-url`);
+                if (el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+                this.showToast('Your browser blocked copying. The link is selected: press ⌘C or Ctrl+C.', 'error');
+            };
+            const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
+            p.then(done).catch(() => (legacy() ? done() : fail()));
+        },
+
         copyToClipboard(textToCopy, buttonElement, method) {
             if (!textToCopy) {
                 this.showToast('Nothing to copy', 'error');
@@ -4105,22 +5436,20 @@ const CalendarVueApp = {
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalContent = buttonElement.innerHTML;
-                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
-                buttonElement.innerHTML = `${checkIcon} Copied!`;
-                buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                buttonElement.classList.add('bg-green-500');
+                buttonElement.innerHTML = `${checkIcon} Copied`;
+                buttonElement.classList.add('bg-theme-success');
 
                 setTimeout(() => {
                     buttonElement.innerHTML = originalContent;
-                    buttonElement.classList.remove('bg-green-500');
-                    buttonElement.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                }, 1500); // Revert after 1.5 seconds
+                    buttonElement.classList.remove('bg-theme-success');
+                                    }, 1500); // Revert after 1.5 seconds
 
             }).catch(err => {
                 console.error('Failed to copy: ', err);
-                this.showToast('Failed to copy link', 'error');
+                this.showToast('Couldn’t copy the link', 'error');
             });
         },
 
@@ -4139,13 +5468,178 @@ const CalendarVueApp = {
             this.isReadOnly = this.normalizeBoolean(val);
         },
 
+        /**
+         * Pro lock state for the open calendar. A locked calendar this tab may not change is
+         * shown exactly like a view link (the existing read-only mode), so every editing control
+         * that already hides for view links hides here too. An editor key or the owner's
+         * sign-in lifts it again.
+         */
+        applyLockState(s) {
+            if (!s || (this.calendar && s.id && s.id !== this.calendar.id)) return;
+            this.lock = { locked: !!s.locked, pro: !!s.pro, paused: !!s.paused, canEdit: s.canEdit !== false, proSettings: s.proSettings || null };
+            this.lockKnown = true;
+            if (this.lock.locked || this.lock.paused) this.proUpsell = false;
+            else this.$nextTick(() => this.maybeShowProUpsell());
+            const out = (this.lock.locked || this.lock.paused) && !this.lock.canEdit;
+            if (out !== this.lockedOut) {
+                this.lockedOut = out;
+                this.setIsReadOnly(out || this.viewRoute);
+                if (out) this.editTitle = false;
+                try {
+                    if (window.scheduleObj) {
+                        if (out && typeof scheduleObj.closeEditor === 'function') scheduleObj.closeEditor();
+                        if (out && typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
+                        scheduleObj.readonly = this.isReadOnly;
+                    }
+                } catch (e) { /* the grid catches up on its next render */ }
+            }
+            if (s.reason === 'key-rotated') this.showToast(PRO_MESSAGES.keyReset, 'info', { duration: 10000 });
+        },
+
+        /** Quick add from a menu: on a calendar this tab can't change, say why instead of opening it. */
+        openQuickAdd() {
+            if (!this.canEdit) {
+                this.showToast(this.lockedOut ? this.lockedOutMessage : 'This is a view-only link. You can’t add or change events.', 'info');
+                return;
+            }
+            this.$refs.quickAddDialog && this.$refs.quickAddDialog.showDialog();
+        },
+
+        // ---- Pro stats and history (ProInsight.js) -------------------------------------------
+        /** Open Stats or History. The dialogs ask the server, which answers only the owner. */
+        openInsight(view, where) {
+            this.insightWhere = where || 'share_panel';
+            this.trialFeatureUsed(view === 'history' ? 'history' : 'stats_pro');
+            this.closeAllPanels();
+            this.showProHistory = view === 'history';
+            this.showProStats = view !== 'history';
+        },
+        /** The logo menu's "Stats" beside a Pro calendar: here, or on that calendar's page. */
+        openStatsFor(id) {
+            this.showRecents = false;
+            if (this.calendar && String(this.calendar.id).toLowerCase() === String(id).toLowerCase()) {
+                this.openInsight('stats', 'logo_menu');
+                return;
+            }
+            ProInsightIntent.set(id, 'stats');
+            window.location.href = '/' + encodeURIComponent(id);
+        },
+        /** Has this calendar had its one free trial? Only so the Go Pro card doesn't offer one it can't have. */
+        async refreshProTrial() {
+            const id = this.calendar && this.calendar.id;
+            if (!id) return;
+            try {
+                const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
+                const data = res.ok ? await res.json() : null;
+                if (this.calendar && this.calendar.id === id) {
+                    this.proTrialUsed = !!(data && data.trialUsed);
+                    this.proUnlimited = !!(data && data.unlimited);
+                    this.proUnlimitedFull = !!(data && data.unlimitedFull);    // its 5 are used: this one goes under @name
+                    this.proHandle = (data && data.handle) || '';
+                }
+            } catch (e) { /* offline: offer it; the server decides */ }
+        },
+        /** During a trial: the first use of a Pro feature per calendar per day (Pro.js trialFeature). */
+        trialFeatureUsed(feature) {
+            if (this.proTrialActive && this.calendar && typeof trialFeature === 'function') trialFeature(this.calendar.id, feature);
+        },
+        async refreshProOwner() {
+            const id = this.calendar && this.calendar.id;
+            if (!id) return;
+            try {
+                const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
+                const data = res.ok ? await res.json() : null;
+                if (this.calendar && this.calendar.id === id) {
+                    this.proOwner = !!(data && data.isOwner);
+                    this.proPlan = (data && data.plan) || null;
+                    this.onProNames(data);
+                    this.editorLinkStored = data && data.isOwner ? this.storedEditorLink() : '';
+                    this.proTrialActive = !!(data && data.isOwner && data.trial);
+                    this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
+                }
+            } catch (e) { /* offline: leave it as it was */ }
+            this.proOwnerChecked = true;
+        },
+        /** A restore landed. The room has already sent every open tab (this one too) the restored calendar. */
+        onVersionRestored({ label, unchanged }) {
+            this.showProHistory = false;      // back to the calendar, which now shows the restored version
+            if (unchanged) {
+                this.showToast('That version matches the calendar now. Nothing changed.', 'info');
+                return;
+            }
+            // This tab's own undo stack holds edits to the calendar as it was; replaying one now
+            // would edit the restored version instead. The restore's undo is the version saved before it.
+            if (this._eventStore && Array.isArray(this._eventStore.undoStack)) this._eventStore.undoStack.length = 0;
+            this.trialFeatureUsed('restore');
+            this.showToast(`Restored the version from ${label}`, 'success');
+            this.loadUndoEntries();
+        },
+        /**
+         * The Plus tab: what an upgrade adds (trial, checkout, or the beta list), or the owner's plan,
+         * editor links and billing. Every "Upgrade" and "Join the beta" in the app opens it.
+         * surface: where it was opened from, for trial_started / pro_beta_joined ('share' | 'stats' | 'lock').
+         * join: billing off and they pressed "Join the beta": open on the email field.
+         */
+        openPlusTab(surface, { join = false } = {}) {
+            this.closeAllPanels();
+            this.proSurface = surface === 'stats' || surface === 'lock' ? surface : 'share';
+            this.plusAutoJoin = !!join;
+            this.showPlus = true;
+        },
+        /** Activity's line for a free calendar's creator. */
+        openProOffer() { this.openPlusTab('share'); },
+        /** Someone other than its creator upgraded this calendar lately: may this browser undo it? Only the
+         *  server knows (it checks this browser's author uid), so ask; the notice shows only on a yes. */
+        async checkUpgradeNotice(retried = false) {
+            const id = this.calendar && this.calendar.id;
+            this.upgradeNotice = null;
+            if (!id || !this.lock.locked || typeof proAuthor !== 'function') return;
+            // The author uid comes from an anonymous sign-in that may still be on its way: look once more shortly.
+            if (!proAuthor()) { if (!retried) setTimeout(() => this.checkUpgradeNotice(true), 4000); return; }
+            try {
+                const r = await fetch('/api/pro/upgrade-notice', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: id, author: proAuthor() }) });
+                const d = r.ok ? await r.json() : null;
+                if (d && d.notice && this.calendar && this.calendar.id === id && this.lock.locked) {
+                    this.upgradeNotice = { day: new Date(d.notice.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), busy: false };
+                }
+            } catch (e) { /* offline: no notice */ }
+        },
+        async undoUpgrade() {
+            if (!this.upgradeNotice || !window.confirm('Undo this upgrade? The calendar goes back to a free calendar anyone with the link can edit, and any payment is refunded.')) return;
+            this.upgradeNotice.busy = true;
+            let r = null;
+            try {
+                r = await fetch('/api/pro/undo-upgrade', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: this.calendar.id, author: await proAuthorReady() }) });
+            } catch (e) { /* offline */ }
+            const d = r ? await r.json().catch(() => ({})) : {};
+            if (r && r.ok) { this.upgradeNotice = null; this.showToast('Upgrade undone. Anyone with the link can edit again.', 'success'); return; }
+            if (this.upgradeNotice) this.upgradeNotice.busy = false;
+            this.showToast(d.message || (r ? 'That didn’t work. Write to support@pastecal.com and we’ll sort it out.' : 'We couldn’t reach pastecal. Check your connection and try again.'), 'error');
+            if (r && r.status === 410) this.upgradeNotice = null;
+        },
+        /** A plan id's display name (Pro.js planName), for templates: 'pro' is Plus, 'unlimited' is Pro. */
+        planName(plan) { return planName(plan); },
+        focusInsight(open, ref) {
+            if (open) {
+                this._insightOpener = this._insightOpener || document.activeElement;
+                this.$nextTick(() => { const el = this.$refs[ref]; if (el) el.focus(); });
+            } else if (!this.showProStats && !this.showProHistory && !this.sideTab) {
+                const opener = this._insightOpener;
+                this._insightOpener = null;
+                if (opener && document.contains(opener) && typeof opener.focus === 'function') opener.focus();
+            }
+        },
+
         showToast(message, type = 'info', options = {}) {
             this.$refs.toast.display(message, type, options);
         },
 
         /** Open the change history, refreshing it first so the list is never stale. */
         async openRecentChanges() {
-            await this.loadUndoEntries();
+            if (this.isExisting) await this.loadUndoEntries();   // a draft has no history yet
+            if (!this.showRecentChanges) this.closeAllPanels();
             this.showRecentChanges = true;
         },
 
@@ -4156,6 +5650,12 @@ const CalendarVueApp = {
          * ids, and leaves every other event as it is now (the old snapshot restore could
          * revert someone else's edit made in between).
          */
+        // The tour's "Start your calendar": back up to the calendar, whose first-event hint says what to do.
+        startFromTour() {
+            track(a => a.featureUsed('tour_start'));
+            window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        },
+
         offerUndo(message) {
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',
@@ -4170,7 +5670,17 @@ const CalendarVueApp = {
          */
         undoLastLocal() {
             const before = this.calendar.events.map(e => new Event(e));
+            const stack = this.store().undoStack;
+            const tpl = this._templateUndo && this._templateUndo[this._templateUndo.length - 1];
+            const templateChange = !!tpl && tpl.entry === stack[stack.length - 1];
             const undone = this.store().undo();
+            // Undoing "Started from ..." also puts back the title, notes and labels from before it;
+            // undoing "Started over" puts back the whole draft (startOver).
+            if (undone && templateChange) {
+                const t = this._templateUndo.pop();
+                if (t.restore) t.restore();
+                else this.setTemplate(t.state);
+            }
             if (!undone) return null;
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             this.showToast(`Undid: ${undone}`, 'success');
@@ -4222,7 +5732,14 @@ const CalendarVueApp = {
     }
 };
 
-const app = Vue.createApp(CalendarVueApp)
+const vueApp = Vue.createApp(CalendarVueApp);
+// Vue catches errors in components itself, so they never reach window.onerror: report them the
+// same way (and let a stale page reload) while still logging them as Vue would.
+vueApp.config.errorHandler = (err, instance, info) => {
+    console.error(err);
+    try { window.pcReportError && window.pcReportError(err, `vue:${info}`); } catch (e) { /* never the failure */ }
+};
+const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)
     .component('welcome-dock', WelcomeDock)

@@ -25,7 +25,7 @@ async function freshCalendar(page) {
   await page.goto('/');
   const slug = `test-dialog-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await page.locator('input[placeholder="your-name"]').fill(slug);
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
   await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
   return slug;
@@ -43,7 +43,7 @@ async function createViaDialog(page, title, nth = 15) {
 
 const stored = (page) => page.evaluate(`${VM}.calendar.events.map(e => ({ id: String(e.id), title: e.title, start: e.start }))`);
 
-/** Just the events this test created -- a new calendar also ships with "Sample event". */
+/** Just the events this test created -- a new calendar also ships with "Your event here". */
 const mine = async (page, title) => (await stored(page)).filter(e => e.title === title);
 
 test('an event created through the dialog gets a stable, non-numeric id', async ({ page }) => {

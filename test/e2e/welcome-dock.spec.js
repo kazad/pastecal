@@ -22,7 +22,7 @@ test.describe('First-run welcome dock', () => {
     await bootWith(page, () => localStorage.clear());
 
     await expect(page.locator(DOCK)).toBeVisible();
-    await expect(page.locator(DOCK)).toContainText('Shared calendars that just work');
+    await expect(page.locator(DOCK)).toContainText('A calendar you can share in a minute');
   });
 
   test('stays dismissed after clicking Got it', async ({ page }) => {

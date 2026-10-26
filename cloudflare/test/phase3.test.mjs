@@ -99,8 +99,11 @@ step('POST /api/create-view creates public view mapping');
 const viewLookup = await (await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(viewSlug)}`)).json();
 assert.equal(viewLookup.found, true);
 assert.equal(viewLookup.isReadOnly, true);
-assert.equal(viewLookup.targetId, calId);
-step('directory lookup on view slug returns isReadOnly: true and points to targetId');
+assert.equal(viewLookup.targetId, undefined, 'a view link must not reveal the edit name');
+assert.ok(!JSON.stringify(viewLookup).includes(calId), 'the edit name appears in the lookup answer');
+const legacy = await (await fetch(`${BASE}/lookupCalendar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: { slug: viewSlug } }) })).json();
+assert.ok(!JSON.stringify(legacy).includes(calId), 'the edit name appears in /lookupCalendar');
+step('public lookup of a view slug says read-only and never reveals the edit name (/api/lookup and /lookupCalendar)');
 
 // Connect to view-only WebSocket
 const viewTab = wsTab(`${WS_BASE}/cal/view/${encodeURIComponent(viewSlug)}/ws`);
@@ -194,7 +197,9 @@ assert.equal(latest.changedEvents[0].to.title, 'Kickoff (Rescheduled)');
 step('history table records structured delta with from/to');
 
 // Check author tracking: GET /cal/<id>/authors
-const authorsRes = await (await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`)).json();
+// Admin only (Bearer): author uids are what lets an editor of record upgrade, so they are never public.
+assert.equal((await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`)).status, 403);
+const authorsRes = await (await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`, { headers: { Authorization: `Bearer ${SECRET}` } })).json();
 assert.ok(Array.isArray(authorsRes), 'Authors returns an array');
 const authorEntry = authorsRes.find((a) => a.uid === authorUid);
 assert.ok(authorEntry, 'Author uid is recorded');

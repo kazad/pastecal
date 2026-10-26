@@ -4,12 +4,12 @@
 const QuickAddDialog = {
     template: /* html */ `
         <div v-if="dialogVisible" 
-                 class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
-                    <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
+                 class="fixed inset-0 pc-scrim flex items-center justify-center z-50">
+                <div class="pc-qa-dialog bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+                    <h3 class="text-lg font-semibold mb-4">Add event by typing</h3>
                     <form @submit.prevent="createEvent">
                         <div class="flex items-baseline gap-2 mb-1.5">
-                            <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">1</span>
+                            <span class="pc-qa-step">1</span>
                             <label for="qa-description" class="text-sm font-medium">Describe the event</label>
                         </div>
                         <textarea id="qa-description"
@@ -18,23 +18,33 @@ const QuickAddDialog = {
                                  placeholder="Meet John tomorrow 2pm for 1 hour"
                                  rows="2"
                                  @keydown.enter.prevent="handleEnter"
-                                 class="w-full p-2 bg-1 border border-color-default rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                 class="pc-field mb-2">
                         </textarea>
+                        <!-- Examples belong to step 1: they show what you can type. -->
+                        <div class="pc-qa-examples">
+                            <span class="pc-qa-try">Try</span>
+                            <button type="button"
+                                    v-for="ex in examples"
+                                    :key="ex"
+                                    @click="useExample(ex)"
+                                    :title="'Use: ' + ex"
+                                    class="pc-chip pc-chip--soft">{{ ex }}</button>
+                        </div>
 
                         <div class="flex items-baseline gap-2 mb-1.5">
-                            <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
+                            <span class="pc-qa-step">2</span>
                             <label class="text-sm font-medium">Check the details</label>
                         </div>
 
-                        <div class="rounded mb-4 flex flex-col gap-2 pl-7">
+                        <div class="pc-qa-fields rounded mb-6 flex flex-col gap-3 pl-7">
                             <div class="flex items-center gap-2">
                                 <label for="qa-subject" class="w-14 shrink-0 text-sm opacity-70">Subject</label>
                                 <input id="qa-subject"
                                        type="text"
                                        v-model="fields.subject"
                                        @input="pin('subject')"
-                                       placeholder="Untitled Event"
-                                       class="flex-1 min-w-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       placeholder="Untitled event"
+                                       class="flex-1 min-w-0 pc-field">
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -44,12 +54,13 @@ const QuickAddDialog = {
                                        v-model="fields.startDate"
                                        @input="pin('start')"
                                        aria-label="Start date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 pc-field">
                                 <input type="time"
                                        v-model="fields.startTime"
-                                       @input="pin('start')"
+                                       @input="pin('start'); timesCleared()"
+                                       :disabled="isAllDay"
                                        aria-label="Start time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 pc-field">
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -59,65 +70,80 @@ const QuickAddDialog = {
                                        v-model="fields.endDate"
                                        @input="pin('end')"
                                        aria-label="End date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 pc-field">
                                 <input type="time"
                                        v-model="fields.endTime"
-                                       @input="pin('end')"
+                                       @input="pin('end'); timesCleared()"
+                                       :disabled="isAllDay"
                                        aria-label="End time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 pc-field">
+                            </div>
+
+                            <!-- All day: a switch under the dates, aligned with the inputs. The time
+                                 inputs stay in place (blank, disabled) while it is on, so turning it
+                                 on or off never changes the dialog's height. -->
+                            <div class="flex items-center gap-2">
+                                <span class="w-14 shrink-0" aria-hidden="true"></span>
+                                <label class="pc-toggle pc-qa-switch">
+                                    <input type="checkbox" role="switch" data-testid="qa-all-day"
+                                           :checked="isAllDay" :aria-checked="isAllDay ? 'true' : 'false'"
+                                           @change="setAllDay($event.target.checked)">
+                                    <span class="pc-toggle-track" aria-hidden="true"></span>
+                                    <span>All day</span>
+                                </label>
                             </div>
 
                             <!-- Color. This dialog used to have none, so an event made here
                                  could only ever be the first color -- one of the two creation
                                  paths reported in #32 as "impossible to change colors". -->
+                            <!-- A color the calendar has named ("Practice", "Game") shows as a chip
+                                 with its name, like the search filter's, so people pick the type and
+                                 not just a hue. Unnamed colors stay plain swatches. -->
                             <div v-if="colors.length" class="flex items-center gap-2">
-                                <span class="w-14 shrink-0 text-sm opacity-70">Color</span>
-                                <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Event color">
-                                    <button v-for="(c, i) in colors" :key="i" type="button"
-                                            role="radio" :aria-checked="type === i + 1"
-                                            :aria-label="labels[i] || ('Type ' + (i + 1))"
-                                            :title="labels[i] || ('Type ' + (i + 1))"
-                                            :data-testid="'qa-color-' + (i + 1)"
-                                            @click="type = i + 1"
-                                            class="w-6 h-6 rounded-full transition-transform"
-                                            :class="type === i + 1 ? 'ring-2 ring-offset-2 ring-blue-500 scale-110' : 'hover:scale-110'"
-                                            :style="{ backgroundColor: c }"></button>
+                                <span class="w-14 shrink-0 text-sm opacity-70">{{ anyNamed ? 'Type' : 'Color' }}</span>
+                                <div class="flex flex-wrap items-center gap-1.5" role="radiogroup" :aria-label="anyNamed ? 'Event type' : 'Event color'">
+                                    <template v-for="(c, i) in colors" :key="i">
+                                        <button v-if="named[i]" type="button"
+                                                role="radio" :aria-checked="type === i + 1"
+                                                :aria-label="labels[i] || ('Type ' + (i + 1))"
+                                                :title="labels[i] || ('Type ' + (i + 1))"
+                                                :data-testid="'qa-color-' + (i + 1)"
+                                                @click="type = i + 1"
+                                                class="pc-chip pc-chip--dot pc-qa-type" :class="{ 'is-selected': type === i + 1 }"
+                                                :style="{ '--dot': c }">{{ labels[i] }}</button>
+                                        <button v-else type="button"
+                                                role="radio" :aria-checked="type === i + 1"
+                                                :aria-label="labels[i] || ('Type ' + (i + 1))"
+                                                :title="labels[i] || ('Type ' + (i + 1))"
+                                                :data-testid="'qa-color-' + (i + 1)"
+                                                @click="type = i + 1"
+                                                class="pc-swatch"
+                                                :class="{ 'is-selected': type === i + 1 }"
+                                                :style="{ backgroundColor: c }"></button>
+                                    </template>
                                 </div>
                             </div>
 
-                            <p v-if="isAllDay" class="text-sm opacity-70">All day</p>
-                            <p v-if="endBeforeStart" class="text-sm text-red-500">End is before start.</p>
+                            <p v-if="endBeforeStart" class="text-sm text-theme-danger">End is before start.</p>
                             <!-- Say WHY Create is disabled. A greyed-out button with no reason
                                  is what #32 reported as "no way to save once you've written a
                                  description": the text had no date the parser could read, the
                                  date fields stayed empty, and nothing on screen said so. -->
                             <p v-else-if="fields.subject.trim() && !startDateTime"
-                               data-testid="qa-needs-date" class="text-sm text-amber-600">
+                               data-testid="qa-needs-date" class="text-sm text-theme-warning">
                                 Add a date — type one (e.g. "tomorrow 2pm") or pick it under Start.
                             </p>
-                        </div>
-
-                        <div class="mb-4 text-sm">
-                            <div class="text-xs text-color-1 mb-1.5">Examples</div>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button type="button"
-                                        v-for="ex in examples"
-                                        :key="ex"
-                                        @click="useExample(ex)"
-                                        :title="'Use: ' + ex"
-                                        class="text-left px-2.5 py-1 rounded-full border border-color-default text-color-2 font-mono text-xs hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-colors">{{ ex }}</button>
-                            </div>
                         </div>
 
                         <div class="flex justify-end gap-2">
                             <button type="button"
                                     @click="hideDialog"
-                                    class="py-2.5 px-4 border border-color-default text-color-2 font-bold rounded-lg text-sm hover:bg-[var(--bg-interactive-hover)] transition-colors">
+                                    class="pc-btn">
                                 Cancel
                             </button>
                             <button type="submit"
                                     :disabled="!isValidEvent"
-                                    class="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-colors disabled:opacity-50 disabled:hover:bg-blue-600">
+                                    class="pc-btn pc-btn--primary">
                                 Create
                             </button>
                         </div>
@@ -133,7 +159,10 @@ const QuickAddDialog = {
         // The calendar's palette and labels, so the swatches match the grid and the
         // categories a calendar has added (up to 16) are all offered.
         colors: { type: Array, default: () => [] },
-        labels: { type: Array, default: () => [] }
+        labels: { type: Array, default: () => [] },
+        // Per color: true when the calendar gave it a name of its own (app.js hasTypeLabel).
+        // `labels` alone can't tell: an unnamed color is labeled "Type N".
+        named: { type: Array, default: () => [] }
     },
     data() {
         return {
@@ -141,8 +170,12 @@ const QuickAddDialog = {
             description: '',
             fields: { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' },
             type: 1,
+            // All day is a switch the parser drives ("vacation dec 11 - dec 15") until it's flipped by hand.
+            allDay: false,
+            // The times from before All day went on, put back when it goes off.
+            savedTimes: null,
             // A field is pinned once the user edits it directly; re-parsing skips pinned fields.
-            pinned: { subject: false, start: false, end: false },
+            pinned: { subject: false, start: false, end: false, allDay: false },
             // Each shows off a distinct capability: duration, explicit range,
             // numeric date, month-name date, multi-day span.
             examples: [
@@ -155,9 +188,13 @@ const QuickAddDialog = {
         };
     },
     computed: {
-        // Dates with no time on either end ("vacation dec 11 - dec 15") are all-day.
+        // The All day switch: set by the parser for dates with no time ("vacation dec 11 - dec 15"),
+        // or by hand.
         isAllDay() {
-            return !!this.fields.startDate && !this.fields.startTime && !this.fields.endTime;
+            return this.allDay;
+        },
+        anyNamed() {
+            return this.colors.some((_, i) => !!this.named[i]);
         },
         // All-day events are stored as local midnight of their date, end exclusive (the
         // legacy format, see Event.allDayDateUTC); the End date input shows the last day.
@@ -211,8 +248,34 @@ const QuickAddDialog = {
             this.dialogVisible = false;
             this.description = '';
             this.fields = { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' };
-            this.pinned = { subject: false, start: false, end: false };
+            this.pinned = { subject: false, start: false, end: false, allDay: false };
             this.type = 1;
+            this.allDay = false;
+            this.savedTimes = null;
+        },
+        // The All day switch, flipped by hand. On: the times blank out (kept to restore) and the
+        // inputs disable. Off: the earlier times come back, or 9 to 10 if there were none.
+        setAllDay(on) {
+            this.pinned.allDay = true;
+            if (on === this.allDay) return;
+            this.allDay = on;
+            if (on) {
+                this.savedTimes = { start: this.fields.startTime, end: this.fields.endTime, endDate: this.fields.endDate };
+                this.fields.startTime = '';
+                this.fields.endTime = '';
+                if (this.fields.startDate && !this.fields.endDate) this.fields.endDate = this.fields.startDate;
+            } else {
+                const saved = this.savedTimes;
+                if (saved && saved.start) {
+                    this.fields.startTime = saved.start;
+                    this.fields.endTime = saved.end;
+                    if (!saved.endDate) this.fields.endDate = '';   // filled in only for All day
+                } else {
+                    this.fields.startTime = '09:00';
+                    this.fields.endTime = '10:00';
+                }
+                this.savedTimes = null;
+            }
         },
         parseDescription() {
             const parsed = Utils.parseHumanWrittenCalendar(this.description) || {};
@@ -222,19 +285,27 @@ const QuickAddDialog = {
             if (!this.pinned.subject) {
                 this.fields.subject = empty ? '' : (parsed.subject || '');
             }
-            const allDay = !empty && !!parsed.isAllDay;
+            const parsedAllDay = !empty && !!parsed.isAllDay;
+            if (!this.pinned.allDay) this.allDay = parsedAllDay;
+            const allDay = this.allDay;
+            const dateOnly = allDay || parsedAllDay;
             if (!this.pinned.start) {
-                this.setDateTime('start', empty ? null : parsed.startDateTime, allDay);
+                this.setDateTime('start', empty ? null : parsed.startDateTime, dateOnly);
             }
             if (!this.pinned.end) {
                 let end = empty ? null : parsed.endDateTime;
                 // The parser's all-day end is exclusive; show the last day instead.
-                if (allDay && end) {
+                if (parsedAllDay && end) {
                     const d = new Date(end);
                     d.setDate(d.getDate() - 1);
                     end = d.toISOString();
                 }
-                this.setDateTime('end', end, allDay);
+                this.setDateTime('end', end, dateOnly);
+            }
+            // Dates with no time while All day is switched off by hand: a 9-to-10 slot on them.
+            if (parsedAllDay && !allDay) {
+                if (!this.pinned.start && !this.fields.startTime) this.fields.startTime = '09:00';
+                if (!this.pinned.end && !this.fields.endTime) this.fields.endTime = '10:00';
             }
         },
         // Split an ISO string into the local date/time strings the inputs expect.
@@ -267,7 +338,7 @@ const QuickAddDialog = {
         },
         useExample(text) {
             // Start clean so the example parses into every field, not just unpinned ones.
-            this.pinned = { subject: false, start: false, end: false };
+            this.pinned = { subject: false, start: false, end: false, allDay: false };
             this.description = text;
             this.$nextTick(() => {
                 const ta = this.$el.querySelector('textarea');
@@ -279,6 +350,15 @@ const QuickAddDialog = {
         },
         pin(field) {
             this.pinned[field] = true;
+        },
+        // Both times blanked by hand: that's an all-day event, as it always was. Turn the switch on.
+        timesCleared() {
+            if (this.fields.startDate && !this.fields.startTime && !this.fields.endTime && !this.allDay) {
+                this.pinned.allDay = true;
+                this.allDay = true;
+                this.savedTimes = null;
+                if (!this.fields.endDate) this.fields.endDate = this.fields.startDate;
+            }
         },
         createEvent() {
             if (!this.isValidEvent) return;

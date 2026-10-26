@@ -27,9 +27,27 @@
 const NativeCalendar = (() => {
     const DAY_MS = 86400000;
     const HOUR_PX = 48;                 // Syncfusion: two 24px slots per hour
+    // Hours on the clock face (0-24) of a time within one day; `dayEnd` (next midnight) reads as 24.
+    const wallHours = (t, dayEnd) => (dayEnd && t >= dayEnd) ? 24 : t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
     const MONTH_ROW_PX = 100;           // fixed month row height, like Syncfusion
     const BAR_PX = 20, BAR_GAP = 2, DATE_HEADER_PX = 26;
-    const VIEWS = ['Day', 'Week', 'Month', '3 Months', 'Year', 'Agenda'];
+    // 'Custom' is Syncfusion's "N Months" / "N Weeks" view (customDuration / customUnit props).
+    const VIEWS = ['Day', 'Week', 'Month', 'Custom', 'Year', 'Agenda'];
+    // A view name from a setting or a link: 'week', 'Custom', '3 Months', '4 weeks', 'q', ...
+    const normView = (v) => {
+        const s = String(v || '').trim().toLowerCase();
+        if (!s) return null;
+        if (/^\d+\s*(week|month)s?$/.test(s) || s === 'custom' || s === 'c' || s === 'q' || s === 'quarter') return 'Custom';
+        return { day: 'Day', d: 'Day', week: 'Week', w: 'Week', month: 'Month', m: 'Month', year: 'Year', y: 'Year', agenda: 'Agenda', a: 'Agenda' }[s] || null;
+    };
+    // 'YYYY-MM-DD' as a LOCAL date (new Date('2026-10-29') would be UTC midnight, the day before in the Americas).
+    const parseDay = (v) => {
+        if (!v) return null;
+        if (v instanceof Date) return isNaN(v) ? null : new Date(v.getFullYear(), v.getMonth(), v.getDate());
+        const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(v));
+        if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+        const d = new Date(v); return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    };
     const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -144,12 +162,17 @@ const NativeCalendar = (() => {
             startHour: { type: String, default: '05:00' },
             readOnly: { type: Boolean, default: false },
             initialView: { type: String, default: 'Month' },
+            // Color filter (the search panel's dots): color slots (0-based) whose events are hidden.
+            hiddenSlots: { type: Array, default: () => [] },
+            initialDate: { type: [String, Date], default: null },
+            customDuration: { type: [Number, String], default: 3 },
+            customUnit: { type: String, default: 'Months' },
         },
         emits: ['update:events', 'event-click', 'event-create', 'view-change'],
         data() {
             return {
-                view: VIEWS.includes(this.initialView) ? this.initialView : 'Month',
-                date: startOfDay(new Date()),
+                view: normView(this.initialView) || 'Month',
+                date: parseDay(this.initialDate) || startOfDay(new Date()),
                 now: new Date(),
                 pickerOpen: false, pickerYear: new Date().getFullYear(),
                 showEarlyHours: false,
@@ -163,10 +186,22 @@ const NativeCalendar = (() => {
         computed: {
             palette() {
                 return (this.colors && this.colors.length) ? this.colors
-                    : ['#3f51b5', '#e3165b', '#ff6652', '#4caf50', '#ff9800', '#03a9f4', '#9e9e9e', '#27282f'];
+                    : ['#3f51b5', '#e3165b', '#d0442f', '#2e7d32', '#ff9800', '#03a9f4', '#757575', '#27282f'];
             },
             first() { return Number(this.firstDayOfWeek) || 0; },
             weekdayOrder() { return [0, 1, 2, 3, 4, 5, 6].map(i => (i + this.first) % 7); },
+            views() { return VIEWS; },
+            // What is drawn: the events minus the filtered-out colors. Drags still edit `events`,
+            // so a hidden event is never dropped from the list the grid hands back.
+            shownEvents() {
+                if (!this.hiddenSlots.length) return this.events;
+                const n = this.palette.length;
+                const slot = (e) => { const t = parseInt(e.type || 1, 10); return Number.isFinite(t) && t >= 1 && t <= n ? t - 1 : 0; };
+                return this.events.filter(e => !this.hiddenSlots.includes(slot(e)));
+            },
+            customN() { const n = parseInt(this.customDuration, 10); const max = this.customWeeks ? 52 : 24; return n >= 1 ? Math.min(n, max) : 3; },
+            customWeeks() { return /^week/i.test(String(this.customUnit || '')); },
+            customLabel() { return `${this.customN} ${this.customWeeks ? 'Week' : 'Month'}${this.customN === 1 ? '' : 's'}`; },
             title() {
                 const d = this.date, M = MONTHS[d.getMonth()];
                 if (this.view === 'Day') return `${M} ${d.getDate()}, ${d.getFullYear()}`;
@@ -176,8 +211,14 @@ const NativeCalendar = (() => {
                     if (s.getMonth() !== e.getMonth()) return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
                     return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${e.getDate()}, ${e.getFullYear()}`;
                 }
-                if (this.view === '3 Months') {
-                    const e = addMonths(d, 2);
+                if (this.view === 'Custom' && this.customWeeks) {
+                    const s = startOfWeek(d, this.first), e = addDays(s, 7 * this.customN - 1);
+                    if (s.getFullYear() !== e.getFullYear()) return `${MONTHS[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                    return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                }
+                if (this.view === 'Custom') {
+                    if (this.customN === 1) return `${M} ${d.getFullYear()}`;
+                    const e = addMonths(d, this.customN - 1);
                     return e.getFullYear() === d.getFullYear() ? `${M} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}` : `${M} ${d.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
                 }
                 if (this.view === 'Year') return String(d.getFullYear());
@@ -185,13 +226,15 @@ const NativeCalendar = (() => {
             },
             // ---- month / 3 months --------------------------------------------------------
             monthWeeks() {
-                if (this.view !== 'Month' && this.view !== '3 Months') return [];
-                const m0 = new Date(this.date.getFullYear(), this.date.getMonth(), 1);
-                const mEnd = addMonths(m0, this.view === 'Month' ? 1 : 3);
+                if (this.view !== 'Month' && this.view !== 'Custom') return [];
+                const byWeeks = this.view === 'Custom' && this.customWeeks;
+                // N weeks: one continuous grid from the week holding the date. N months: whole months.
+                const m0 = byWeeks ? startOfWeek(this.date, this.first) : new Date(this.date.getFullYear(), this.date.getMonth(), 1);
+                const mEnd = byWeeks ? addDays(m0, 7 * this.customN) : addMonths(m0, this.view === 'Month' ? 1 : this.customN);
                 const weeks = [];
                 for (let ws = startOfWeek(m0, this.first); ws < mEnd; ws = addDays(ws, 7)) {
                     const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
-                    const occs = occurrencesBetween(this.events, ws, addDays(ws, 7));
+                    const occs = occurrencesBetween(this.shownEvents, ws, addDays(ws, 7));
                     const bars = layoutWeekBars(occs, ws, 7);
                     const maxLanes = Math.floor((MONTH_ROW_PX - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
                     const hidden = [0, 0, 0, 0, 0, 0, 0];
@@ -212,15 +255,17 @@ const NativeCalendar = (() => {
             gridLayout() {
                 const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], allDayLanes: 0 };
                 const s = days[0], e = addDays(days[days.length - 1], 1);
-                const occs = occurrencesBetween(this.events, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e);
                 const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
                 const timed = days.map(day => {
                     const dayEnd = addDays(day, 1); const items = [];
                     for (const o of occs) {
                         if (isLong(o) || o.end <= day || o.start >= dayEnd) continue;
-                        const a = Math.max(o.start, day), b = Math.min(o.end, dayEnd);
-                        const top = ((a - day) / 3600000 - this.firstHour) * HOUR_PX;
-                        const height = Math.max(((b - a) / 3600000) * HOUR_PX, 18);
+                        // Wall-clock hours, not elapsed time since midnight: on a DST day midnight to
+                        // 10:00 is 9 or 11 hours, and the event would sit an hour off its label.
+                        const a = wallHours(new Date(Math.max(o.start, day)), dayEnd), b = wallHours(new Date(Math.min(o.end, dayEnd)), dayEnd);
+                        const top = (a - this.firstHour) * HOUR_PX;
+                        const height = Math.max((b - a) * HOUR_PX, 18);
                         if (top + height <= 0) continue;
                         items.push({ occ: o, top: Math.max(top, 0), height: top < 0 ? height + top : height });
                     }
@@ -228,12 +273,12 @@ const NativeCalendar = (() => {
                 });
                 return { allDay: allDayBars, timed, allDayLanes: allDayBars.reduce((m, b) => Math.max(m, b.lane + 1), 0) };
             },
-            nowTop() { return ((this.now - startOfDay(this.now)) / 3600000 - this.firstHour) * HOUR_PX; },
+            nowTop() { return (wallHours(this.now) - this.firstHour) * HOUR_PX; },
             // ---- year --------------------------------------------------------------------
             yearMonths() {
                 if (this.view !== 'Year') return [];
                 const y = this.date.getFullYear();
-                const occs = occurrencesBetween(this.events, new Date(y, 0, 1), new Date(y + 1, 0, 8));
+                const occs = occurrencesBetween(this.shownEvents, new Date(y, 0, 1), new Date(y + 1, 0, 8));
                 const marks = new Map();
                 for (const o of occs) {
                     const last = o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1);
@@ -249,7 +294,7 @@ const NativeCalendar = (() => {
             agendaDays() {
                 if (this.view !== 'Agenda') return [];
                 const s = this.date, e = addDays(s, 7);
-                const occs = occurrencesBetween(this.events, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e);
                 const days = [];
                 for (let d = s; d < e; d = addDays(d, 1)) {
                     const next = addDays(d, 1);
@@ -274,6 +319,9 @@ const NativeCalendar = (() => {
         },
         watch: {
             view(v) { this.$emit('view-change', { view: v, date: this.date }); },
+            // The app's default view (settings, or the calendar's own default once it has loaded).
+            initialView(v) { const n = normView(v); if (n && n !== this.view) this.setView(n); },
+            initialDate(v) { const d = parseDay(v); if (d) this.date = d; },
         },
         mounted() {
             this._tick = setInterval(() => { this.now = new Date(); }, 60000);
@@ -296,15 +344,30 @@ const NativeCalendar = (() => {
         },
         methods: {
             // ---- navigation --------------------------------------------------------------
-            setView(v) { this.view = v; this.pickerOpen = false; this.$nextTick(() => this.scrollToWorkHours()); },
+            setView(v) { this.view = normView(v) || v; this.pickerOpen = false; this.$nextTick(() => this.scrollToWorkHours()); },
             step(dir) {
                 const d = this.date;
                 if (this.view === 'Day') this.date = addDays(d, dir);
                 else if (this.view === 'Week' || this.view === 'Agenda') this.date = addDays(d, 7 * dir);
                 else if (this.view === 'Month') this.date = new Date(d.getFullYear(), d.getMonth() + dir, Math.min(d.getDate(), 28));
-                else if (this.view === '3 Months') this.date = new Date(d.getFullYear(), d.getMonth() + 3 * dir, 1);
+                else if (this.view === 'Custom' && this.customWeeks) this.date = addDays(d, 7 * this.customN * dir);
+                else if (this.view === 'Custom') this.date = new Date(d.getFullYear(), d.getMonth() + this.customN * dir, 1);
                 else if (this.view === 'Year') this.date = new Date(d.getFullYear() + dir, d.getMonth(), 1);
             },
+            // What a screen reader says for an event, as the main app's grid does:
+            // "Team standup, Monday, October 12, 9:00 AM to 10:00 AM" (dates in the browser's language).
+            ariaLabel(o) {
+                const day = (d) => d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+                const title = o.title || '(No title)';
+                if (o.allDay) {
+                    const last = addDays(o.end, -1);
+                    return dayIndex(last) > dayIndex(o.start) ? `${title}, ${day(o.start)} to ${day(last)}, all day` : `${title}, ${day(o.start)}, all day`;
+                }
+                const sameDay = dayIndex(o.start) === dayIndex(new Date(o.end.getTime() - 1));
+                return sameDay ? `${title}, ${day(o.start)}, ${this.time(o.start)} to ${this.time(o.end)}`
+                    : `${title}, ${day(o.start)} ${this.time(o.start)} to ${day(o.end)} ${this.time(o.end)}`;
+            },
+            viewLabel(v) { return v === 'Custom' ? this.customLabel : v; },
             goToday() { this.date = startOfDay(new Date()); this.pickerOpen = false; },
             togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
             pickMonth(m) { this.date = new Date(this.pickerYear, m, 1); this.pickerOpen = false; },
@@ -442,9 +505,11 @@ const NativeCalendar = (() => {
                 } else if (d.mode === 'move') {
                     const minutes = ((d.top - d.top0) / HOUR_PX) * 60;
                     const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
-                    start = new Date(addDays(start, shift).getTime() + minutes * 60000); end = new Date(addDays(end, shift).getTime() + minutes * 60000);
+                    // The grid is drawn in wall-clock hours, so a drag moves the clock time (DST-safe).
+                    const wall = (t) => { const x = addDays(t, shift); x.setMinutes(x.getMinutes() + Math.round(minutes)); return x; };
+                    start = wall(start); end = wall(end);
                 } else {
-                    end = new Date(start.getTime() + (d.height / HOUR_PX) * 3600000);
+                    end = new Date(start); end.setMinutes(end.getMinutes() + Math.round((d.height / HOUR_PX) * 60));
                 }
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
                 // An all-day end goes out in the display shape (through 23:59:59.999 of the last day), the
@@ -486,18 +551,18 @@ const NativeCalendar = (() => {
       <button class="nc-icon-btn" aria-label="Change view" data-testid="view-menu" @click="viewMenu = !viewMenu">
         <nc-icon name="ellipsis-vertical" :size="20"></nc-icon></button>
       <div v-if="viewMenu" class="nc-view-menu">
-        <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" :class="{ on: view === v }"
-          :data-testid="'view-' + v.replace(' ', '')" @click="setView(v); viewMenu = false">{{ v }}</button>
+        <button v-for="v in views" :key="v" :class="{ on: view === v }"
+          :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v); viewMenu = false">{{ viewLabel(v) }}</button>
       </div>
     </div>
     <div class="nc-views" role="tablist">
-      <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" role="tab" :aria-selected="view === v"
-        :class="{ on: view === v }" :data-testid="'view-' + v.replace(' ', '')" @click="setView(v)">{{ v2 ? v : v.toUpperCase() }}</button>
+      <button v-for="v in views" :key="v" role="tab" :aria-selected="view === v"
+        :class="{ on: view === v }" :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v)">{{ v2 ? viewLabel(v) : viewLabel(v).toUpperCase() }}</button>
     </div>
   </div>
 
-  <!-- Month & 3 Months -->
-  <div v-if="view === 'Month' || view === '3 Months'" class="nc-month" data-testid="month-view-grid">
+  <!-- Month & N Months / N Weeks -->
+  <div v-if="view === 'Month' || view === 'Custom'" class="nc-month" data-testid="month-view-grid">
     <div class="nc-month-head">
       <div v-for="i in weekdayOrder" :key="i" class="nc-weekday"
         :class="{ today: now.getDay() === i && monthWeeks.some(w => w.days.some(d => isToday(d))) }">{{ weekdayName(i, v2 && isPhone) }}</div>
@@ -513,7 +578,7 @@ const NativeCalendar = (() => {
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
           :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight }"
           :data-testid="'event-' + b.occ.event.id" :title="b.occ.title"
-          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)">
+          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
@@ -543,7 +608,7 @@ const NativeCalendar = (() => {
         <div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
           <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
-            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)">
+            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -566,7 +631,7 @@ const NativeCalendar = (() => {
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :data-testid="'event-' + it.occ.event.id"
-              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)">
+              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
               <div class="nc-resize" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
@@ -599,7 +664,7 @@ const NativeCalendar = (() => {
       <div class="nc-agenda-date" :class="{ today: isToday(day.d) }"><div class="n">{{ day.d.getDate() }}</div><div class="w">{{ weekdayName(day.d.getDay(), true) }}</div></div>
       <div class="nc-agenda-items">
         <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
-          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)">
+          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
           <div class="t">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur dark" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
           <div class="w">{{ it.when }}</div>
         </div>

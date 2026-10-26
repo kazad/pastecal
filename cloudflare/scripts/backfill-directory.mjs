@@ -20,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const KEY_PATH = path.join(__dirname, '../../internal/keys/pastecal-web-firebase-adminsdk-scf60-24fc54f2df.json');
 const BASE = process.argv[2] || 'https://new.pastecal.com';
-const SECRET = process.env.IMPORT_SECRET || '1489ba81d8ddde0675e1f1af99012cf3cfbef60fd43fe8c8dd26bef4f362b9c8';
+const SECRET = process.env.IMPORT_SECRET;
+if (!SECRET) { console.error('Set IMPORT_SECRET in the environment (never commit it).'); process.exit(1); }
 const DB = 'https://pastecal-web-default-rtdb.firebaseio.com';
 
 // Generate Google OAuth2 access token from service account key

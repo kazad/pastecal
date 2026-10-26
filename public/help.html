@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help · pastecal</title>
+<meta name="description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/help">
+<meta property="og:title" content="Help · pastecal">
+<meta property="og:description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
+<style>
+html { scroll-behavior: smooth; scroll-padding-top: 76px }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-xs); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); text-align: center }
+code { font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font-mono); background: var(--pc-soft); border-radius: var(--pc-radius-xs); padding: 1px 5px; overflow-wrap: anywhere }
+td:nth-child(2) code { white-space: nowrap; overflow-wrap: normal }   /* "Looks like": a URL pattern never breaks mid-word */
+main.help { max-width: var(--pc-page-max) }
+.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px; align-items: start }
+.toc { position: sticky; top: 24px; font-size: var(--pc-fs-md) }
+.toc b { display: block; font-size: var(--pc-fs-2xs); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
+.toc a { display: block; padding: 5px 10px; margin-left: -10px; border-radius: var(--pc-radius-control); color: var(--pc-text); text-decoration: none }
+.toc a:hover, .toc a.on { background: var(--pc-soft); color: var(--pc-link) }
+.doc { min-width: 0; max-width: 860px }
+.doc section { padding-top: 6px }
+.doc h2 { margin: 36px 0 8px; padding-top: 4px }
+.doc section:first-child h2 { margin-top: 0 }
+.doc h3 { font-size: var(--pc-fs-lg); margin: 20px 0 2px }
+.doc p { margin: 6px 0 }
+.steps { list-style: none; counter-reset: s; padding: 0; margin: 12px 0 0; display: grid; gap: 16px }
+.steps li { counter-increment: s; position: relative; padding: 2px 0 2px 44px }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-text-2); font-weight: var(--pc-fw-bold); display: grid; place-items: center }
+.steps li > b:first-child { display: block }
+.tw { overflow-x: auto; margin: 12px 0; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
+table { border-collapse: collapse; width: 100%; font-size: var(--pc-fs-md); line-height: 1.5 }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--pc-line) }
+tr:last-child td { border-bottom: 0 }
+th { background: var(--pc-soft); font-size: var(--pc-fs-sm); color: var(--pc-text-muted); font-weight: 600 }
+td:first-child { font-weight: 600; white-space: nowrap }
+td:nth-child(2) { min-width: 210px }
+.warn { margin: 10px 0; padding: 10px 14px; border-radius: var(--pc-radius-card); background: var(--pc-warning-soft); border: 1px solid var(--pc-line); font-size: var(--pc-fs-md) }
+.feat { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 0 }
+.feat li { padding: 9px 0; border-bottom: 1px solid var(--pc-line) }
+.feat li:last-child { border-bottom: 0 }
+.feat b { font-weight: 700 }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin: 10px 0 0 }
+.keys dd { margin: 0 }
+.keys dt { white-space: nowrap }
+@media (max-width: 820px) {
+  .layout { display: block }
+  .toc { position: sticky; top: 0; z-index: 5; margin: 0 -16px 12px; padding: 8px 16px; background: var(--pc-bg); border-bottom: 1px solid var(--pc-line); display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch }
+  .toc b { display: none }
+  .toc a { margin: 0; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); font-size: var(--pc-fs-md); flex: none }
+  html { scroll-padding-top: 64px }
+  .tw { border: 0; overflow: visible }
+  table, tbody, tr, td { display: block }
+  thead { display: none }
+  tr { border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); padding: 4px 0; margin-bottom: 10px }
+  td, td:nth-child(2) { border: 0; padding: 4px 14px; min-width: 0; white-space: normal; overflow-x: auto }
+  td:first-child { font-size: var(--pc-fs-lg); padding-top: 10px }
+  td[data-l]:not([data-l=""])::before { content: attr(data-l); display: block; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); font-weight: 600 }
+  h1 { font-size: var(--pc-fs-3xl) }
+}
+</style>
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
+      <a class="site-link" href="/templates" data-from="site-header">Templates</a>
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
+<!-- /site-header -->
+<main class="help">
+<h1>Help</h1>
+<p class="updated">Everything about pastecal, in one page.</p>
+<div class="layout">
+<nav class="toc" aria-label="On this page"><b>On this page</b>
+<a href="#quick-start">Quick start</a><a href="#links">Link types</a><a href="#features">Features</a><a href="#privacy">Privacy &amp; locking</a><a href="#phone">On your phone</a><a href="#shortcuts">Shortcuts</a><a href="#contact">Contact</a></nav>
+<div class="doc">
+
+<section id="quick-start"><h2>Quick start</h2>
+<p>pastecal is a shared calendar with no login required. Anyone with the link can use it.</p>
+<ol class="steps">
+<li><b>Add events</b>Click any day and type, or press <kbd>⌘</kbd> <kbd>E</kbd> and type something like <code>Practice Tuesday 5pm</code>.</li>
+<li><b>Save &amp; share</b>Press <b>Save &amp; share</b> and pick a name. Until then the calendar is a draft, saved only in this browser.</li>
+<li><b>Send the link</b>Copy the link from <b>Share</b> and send it. Use the edit link for helpers and the view-only link for everyone else.</li>
+</ol></section>
+
+<section id="links"><h2>Link types</h2>
+<p>Every calendar has several links. Find them in <b>Share</b>.</p>
+<div class="tw"><table>
+<thead><tr><th>Link</th><th>Looks like</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td data-l="">Edit link</td><td data-l="Looks like"><code>pastecal.com/&lt;name&gt;</code></td><td data-l="What it does">Anyone with it can view and edit. Share it only with people who help run the calendar.</td></tr>
+<tr><td data-l="">View-only link</td><td data-l="Looks like"><code>pastecal.com/view/&lt;id&gt;</code></td><td data-l="What it does">People can view but not edit. They see every change. You can rename it.</td></tr>
+<tr><td data-l="">This view</td><td data-l="Looks like">Any link plus <code>?date=YYYY-MM-DD&amp;view=day|week|month|year|agenda</code></td><td data-l="What it does">Opens on a date and view. For a custom range use <code>&amp;view=custom&amp;dur=3&amp;unit=weeks|months</code>. Example: <code>?date=2026-03-01&amp;view=custom&amp;dur=3&amp;unit=weeks</code></td></tr>
+<tr><td data-l="">Calendar feed</td><td data-l="Looks like"><code>pastecal.com/view/&lt;id&gt;.ics</code></td><td data-l="What it does">Shows events in Google, Apple or Outlook calendar. View only. Google refreshes every few hours.</td></tr>
+<tr><td data-l="">Feed with edit access</td><td data-l="Looks like">Feed made from the edit link</td><td data-l="What it does">Same as the feed, but it carries the edit link.</td></tr>
+<tr><td data-l="">Embed</td><td data-l="Looks like"><code>&lt;iframe&gt;</code> snippet</td><td data-l="What it does">Puts the calendar on a website. Uses the view-only link.</td></tr>
+</tbody></table></div>
+<p class="warn"><b>Careful:</b> a feed with edit access contains your edit link. Anyone who gets the feed can edit. Use the plain feed unless you need it.</p>
+<p>Embed snippet:</p>
+<p><code>&lt;iframe src="https://pastecal.com/view/&lt;id&gt;" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></p>
+</section>
+
+<section id="features"><h2>Features</h2>
+<ul class="feat">
+<li><b>Templates.</b> Start from a ready-made calendar, like Shared space, Who's out, Family, Sports team, Volunteer shifts, Guest visits or Club or class, instead of a blank one.</li>
+<li><b>Type your events.</b> Press <kbd>⌘</kbd> <kbd>E</kbd> (<kbd>Ctrl</kbd> <kbd>E</kbd> on Windows) and write it the way you'd say it: <code>Practice Tuesday 5pm</code>.</li>
+<li><b>Colors and labels.</b> Give events a color and a label to tell groups apart.</li>
+<li><b>Search and color filters.</b> Search by text, or filter to one or more colors.</li>
+<li><b>Notes.</b> Add details to any event: places, links, who brings snacks.</li>
+<li><b>Activity.</b> See recent changes and undo any of them.</li>
+<li><b>Stats.</b> Basic stats are free. <a href="/pricing">Pro</a> adds more.</li>
+<li><b>Settings.</b> <b>This calendar</b> applies to everyone who opens the calendar. <b>Only me</b> applies only on this device: first day of week, time format, date format, start hour, default view and theme.</li>
+<li><b>Dark mode.</b> Set the theme to light, dark or auto under <b>Settings</b>, in <b>Only me</b>.</li>
+<li><b>Delete without confirming.</b> Deleting is instant. An undo toast appears so you can bring it back.</li>
+<li><b>Daily backups.</b> Calendars are backed up every day they change.</li>
+</ul></section>
+
+<section id="privacy"><h2>Privacy &amp; locking</h2>
+<ul class="feat">
+<li>Calendars are unlisted: they don't appear in any directory.</li>
+<li>Edit links are kept out of search engines.</li>
+<li>Only people with a link can open a calendar. For a private one, pick a hard-to-guess name.</li>
+<li>To stop anyone else from editing, <a href="/pricing">Pro</a> locks editing to you and the people you choose.</li>
+</ul></section>
+
+<section id="phone"><h2>On your phone</h2>
+<p>pastecal works in any phone browser. Nothing to install.</p>
+<p>To see events in your phone's own calendar, with its reminders, open <b>Share</b> and choose <b>Add to a calendar app</b>: Google, Apple or Outlook. Changes show up on their own. Google checks every few hours.</p>
+<p>Click the pastecal logo to jump between calendars you've opened on this device, or to start a new one.</p></section>
+
+<section id="shortcuts"><h2>Keyboard shortcuts</h2>
+<dl class="keys">
+<dt><kbd>⌘</kbd> <kbd>E</kbd></dt><dd>Add an event by typing (<kbd>Ctrl</kbd> <kbd>E</kbd> on Windows)</dd>
+<dt><kbd>⌘</kbd> <kbd>Z</kbd></dt><dd>Undo your last change (<kbd>Ctrl</kbd> <kbd>Z</kbd> on Windows)</dd>
+<dt><kbd>Esc</kbd></dt><dd>Close a popup or panel</dd>
+</dl></section>
+
+<section id="contact"><h2>Contact</h2>
+<p>Most answers are on this page. For the rest:</p><ul><li><b>Questions and ideas:</b> <a href="https://github.com/kazad/pastecal/discussions">ask on GitHub Discussions</a>. Other people may have the same question.</li><li><b>Something broken:</b> <a href="https://github.com/kazad/pastecal/issues/new">open an issue</a> with what you did and what happened.</li><li><b>Billing:</b> click the pastecal logo, then <b>Manage billing</b> to change or cancel Pro.</li><li><b>A calendar that shouldn't be public:</b> <a href="/report">report it</a>.</li></ul></section>
+
+</div></div>
+<script>(function(){var l=[].slice.call(document.querySelectorAll('.toc a')),s=l.map(function(a){return document.querySelector(a.hash)});if(!window.IntersectionObserver)return;var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){l.forEach(function(a){a.classList.toggle('on',a.hash==='#'+e.target.id)})}})},{rootMargin:'-20% 0px -70% 0px'});s.forEach(function(x){x&&o.observe(x)})})()</script>
+</main><!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+    </nav>
+    <p class="site-footer__fine">pastecal · Simple shared calendars</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>

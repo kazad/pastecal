@@ -37,7 +37,7 @@ const EventEditor = {
         // One occurrence of a series (a fresh "Edit Event" or an already-edited copy):
         // no Repeat controls, as in Syncfusion -- the series owns the rule.
         isOccurrence() { return !!(this.event && (this.event._occurrenceOf || this.event.recurrenceID)); },
-        palette() { return this.colors.length ? this.colors : ['#3f51b5', '#e3165b', '#ff6652', '#4caf50', '#ff9800', '#03a9f4', '#9e9e9e', '#27282f']; },
+        palette() { return this.colors.length ? this.colors : ['#3f51b5', '#e3165b', '#d0442f', '#2e7d32', '#ff9800', '#03a9f4', '#757575', '#27282f']; },
         currentColor() { return this.palette[(this.type - 1) % this.palette.length]; },
         // The start as one number, for "end follows start". Uses the time field even
         // when All day hides it, so toggling All day never counts as moving the start.

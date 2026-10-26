@@ -18,6 +18,21 @@ class SlugManager {
         return slug?.toLowerCase();
     }
 
+    // The calendar name a page path names, or null for the homepage / a path that cannot be one.
+    // Any name a calendar can have is accepted: real calendars include "TEAM NUÑEZ", "d&d8",
+    // "강아지봉사" and names ending in a space. (Until Oct 2026 only [a-zA-Z0-9_-] and under 40
+    // characters were, so every other link silently opened a blank new calendar.) The path is
+    // percent-encoded ("royal%20city%20"), so it is decoded first; a name may not hold the
+    // characters a stored key cannot (. # $ [ ] / and control characters).
+    static slugFromPath(pathname) {
+        const first = String(pathname || '').split('/').filter(Boolean)[0];
+        if (!first) return null;
+        let name;
+        try { name = decodeURIComponent(first); } catch { return null; }
+        if (!name.trim() || name.length > 200 || /[.#$\[\]\/\u0000-\u001f\u007f]/.test(name)) return null;
+        return name;
+    }
+
     // Alternatives to offer when a chosen name is taken, best first. Pure: the caller checks
     // which are actually free. A trailing number counts up ("team-2" -> "team-3"); otherwise
     // the usual ways people disambiguate (-2, -<year>, -team, -calendar).
@@ -138,6 +153,9 @@ class SlugManager {
     // because their call sites are template-gated by canEdit.
     static getViewerBasePath(calendar, isReadOnly) {
         if (isReadOnly) {
+            // An @link (pastecal.com/@handle/<name>) is itself the address to share.
+            const at = window.location.pathname.match(/^\/@[^/?#]+\/[^/?#]+/);
+            if (at && document.querySelector('meta[name="pc-view"]')) return at[0];
             const slug = this.getReadOnlySlug(calendar) || this._slugFromLocation();
             // Refuse to fall back to /${calendar.id} in read-only mode — that would leak
             // the editable id. Caller treats null as "no shareable base path"; UI should

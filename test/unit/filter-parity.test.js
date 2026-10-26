@@ -82,9 +82,11 @@ test('the filter warning lives with the calendar, not inside the search panel', 
   // would never have been seen.
   const banner = INDEX.indexOf('data-testid="hidden-events-banner"');
   assert.ok(banner !== -1, 'expected a hidden-events banner in the template');
-  const panelEnd = INDEX.indexOf('</panel>');
-  assert.ok(panelEnd !== -1 && banner > panelEnd,
-    'the banner must sit outside the search panel, with the calendar');
+  // Search lives in the side panel (data-testid="side-panel"), beside the calendar.
+  const side = INDEX.indexOf('data-testid="side-panel"');
+  const search = INDEX.indexOf('v-if="showSearch"');
+  assert.ok(side !== -1 && search > side, 'expected search inside the side panel');
+  assert.ok(banner < side, 'the banner must sit outside the search panel, with the calendar');
 
   // And it must track the filter being on, not merely something being hidden right here:
   // filters persist past closing the panel, so paging to a week with none of the hidden
@@ -96,20 +98,21 @@ test('the filter warning lives with the calendar, not inside the search panel', 
 test('the color dots are real, labeled toggle controls', () => {
   // They were <span>s: no name, no pressed state, no keyboard focus, and opacity as the
   // only "off" signal — which fails for colorblind users and near-identical palettes.
-  const at = INDEX.indexOf('toggleColorFilter(idx)');
-  assert.ok(at !== -1, 'expected the color dots in the template');
+  const at = INDEX.indexOf('soloColorFilter(chip.idx)');
+  assert.ok(at !== -1, 'expected the color chips in the template');
   const dots = INDEX.slice(at - 900, at + 1200);
+  const css = fs.readFileSync(path.join(__dirname, '../../public/style.css'), 'utf8');
 
   assert.match(dots, /role="switch"/, 'dots should expose a switch role');
   assert.match(dots, /:aria-checked=/, 'dots should expose their on/off state');
-  assert.match(dots, /:aria-label="typeLabelFor\(idx\)"/, 'dots should be named, not color-only');
-  assert.match(dots, /backgroundColor: 'transparent'/,
+  assert.match(dots, /:aria-label="chip\.label/, 'dots should be named, not color-only');
+  assert.match(css, /\.pc-filter-chip\.is-off::before\s*\{[^}]*background:\s*transparent/,
     'the off state needs a non-color signal (hollow dot), not just opacity');
+  assert.match(css, /\.pc-filter-chip\.is-off\s*\{[^}]*line-through/, 'and its name is struck through');
   // A focusable control needs a visible focus indicator. Tailwind's ring utilities
   // resolve to a transparent shadow in this build, so the dots carry a real outline
   // from style.css instead.
   assert.match(dots, /pc-filter-dot/, 'dots should carry the class that styles their focus ring');
-  const css = fs.readFileSync(path.join(__dirname, '../../public/style.css'), 'utf8');
   assert.match(css, /\.pc-filter-dot:focus-visible\s*\{[^}]*outline:/,
     'pc-filter-dot needs a visible focus-visible outline');
 });

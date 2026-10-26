@@ -6,3 +6,6 @@ cd "$(dirname "$0")/.."
 [ -x ./node_modules/.bin/tailwindcss ] || { echo "ERROR: run npm install first (tailwindcss missing)."; exit 1; }
 ./node_modules/.bin/tailwindcss -c tailwind.config.js -i scripts/css/tailwind.input.css -o public/tailwind.css --minify
 echo "Built public/tailwind.css ($(wc -c < public/tailwind.css | tr -d ' ') bytes)"
+# The native renderer's page (/beta, /nativecal) gets its own build from its own files.
+./node_modules/.bin/tailwindcss -c tailwind.nativecal.config.js -i scripts/css/tailwind.input.css -o public/nativecal/tailwind.css --minify
+echo "Built public/nativecal/tailwind.css ($(wc -c < public/nativecal/tailwind.css | tr -d ' ') bytes)"

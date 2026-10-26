@@ -5,13 +5,21 @@ const QuickAddButton = {
     template: /* html */ `
         <span class="inline-flex items-start">
                 <button slot="trigger" @click="$emit('open')"
-                    data-testid="desktop-add-event-button"
-                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                    <span class="text-nowrap px-3 py-1 text-white bg-slate-500 dark:bg-slate-600 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event</span>
-                    <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
+                    data-testid="desktop-add-event-button" :title="'Add event (' + shortcut + ')'"
+                    class="pc-btn pc-btn--secondary pc-add-event">
+                    <span aria-hidden="true" class="pc-add-event-plus">+</span><span class="pc-add-event-label">Add event</span>
                 </button>
         </span>
     `,
     // No props - dialog is a single shared instance
-    emits: ['open', 'clicked']
+    emits: ['open', 'clicked'],
+    computed: {
+        // The Cmd/Ctrl+E shortcut (QuickAddDialog.handleKeydown), spelled for this keyboard.
+        // Shown in the button's tooltip only: the button itself stays plain.
+        shortcut() {
+            const nav = typeof navigator !== 'undefined' ? navigator : {};
+            const platform = (nav.userAgentData && nav.userAgentData.platform) || nav.platform || '';
+            return /mac|iphone|ipad|ipod/i.test(platform) ? '⌘E' : 'Ctrl E';
+        }
+    }
 };

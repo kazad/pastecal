@@ -106,7 +106,7 @@ test.describe('Analytics call sites', () => {
     await page.waitForTimeout(2500);
 
     await page.locator('#slug').fill(slug);
-    await page.getByRole('button', { name: /^Claim/ }).first().click();
+    await page.getByRole('button', { name: /^Save & share/ }).first().click();
     await page.waitForURL(`**/${slug}`, { timeout: 15000 });
     await page.waitForTimeout(2500);
 
@@ -236,7 +236,7 @@ test.describe('Events are counted once, and surfaces stay distinct', () => {
       };
     });
 
-    await page.getByRole('button', { name: /^Claim/ }).first().click();
+    await page.getByRole('button', { name: /^Save & share/ }).first().click();
     await page.waitForURL(`**/${slug}`, { timeout: 20_000 });
 
     const claims = await page.evaluate(() =>
@@ -284,7 +284,7 @@ test.describe('Creation and feature usage', () => {
     await page.locator('#slug').fill(slug);
     await expect(page.locator('#slug')).toHaveValue(slug);
 
-    await page.getByRole('button', { name: /^Claim/ }).first().click();
+    await page.getByRole('button', { name: /^Save & share/ }).first().click();
     await page.waitForURL(`**/${slug}`, { timeout: 20_000 });
 
     const created = await page.evaluate(() =>
