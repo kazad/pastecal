@@ -166,7 +166,7 @@
         s.extra = list.filter(([k]) => !OWN.includes(k)).map(([k, v]) => `${k}=${v}`);
         s.freq = parts.FREQ || '';
         s.interval = parseInt(parts.INTERVAL, 10) || 1;
-        if (parts.BYDAY) {
+        if (parts.BYDAY && (!parts.FREQ || parts.FREQ === 'WEEKLY' || parts.FREQ === 'DAILY')) {   // (a monthly or yearly BYDAY is "the Nth weekday", below)
             s.byDay = parts.BYDAY.split(',').map((d) => MAP[d.replace(/^[+-]?\d+/, '')]).filter((n) => n !== undefined);
             if (!s.byDay.length) s.byDay = [start.getDay()];
         }
@@ -186,23 +186,28 @@
         } else if (parts.COUNT) { s.endMode = 'count'; s.count = parseInt(parts.COUNT, 10) || 1; }
         return s;
     }
-    /** The Custom panel's fields -> a rule, in EventEditor.buildRule's form. untilStamp(ymd, allDay) formats an all-day UNTIL. */
-    function buildRule(s, { isAllDay = false, untilStamp = null } = {}) {
+    /**
+     * The Custom panel's fields -> a rule, character for character as classic's repeat editor (Syncfusion 23.2.6
+     * RecurrenceEditor.getRecurrenceRule) writes it: the weekdays in the order its buttons show them (from the first
+     * day of the week: MO,WE,SU when weeks start on Monday), and UNTIL as the chosen date's local midnight, a UTC
+     * stamp (its date picker's value), timed or all day. Both calendars read that UNTIL as running through its day.
+     */
+    function buildRule(s, { firstDay = 0 } = {}) {
         if (!s.freq) return '';
+        const f = Number(firstDay) || 0;
         let r = `FREQ=${s.freq};`;
-        if (s.freq === 'WEEKLY') r += `BYDAY=${[...s.byDay].sort().map((d) => DAYS[d]).join(',')};`;
+        if (s.freq === 'WEEKLY') r += `BYDAY=${[...new Set(s.byDay)].sort((a, b) => ((a - f + 7) % 7) - ((b - f + 7) % 7)).map((d) => DAYS[d]).join(',')};`;
         if (s.freq === 'MONTHLY' || s.freq === 'YEARLY') {
             r += s.monthMode === 'weekday' ? `BYDAY=${DAYS[s.posDay]};BYSETPOS=${s.setPos};`
                 : `BYMONTHDAY=${Math.min(31, Math.max(1, parseInt(s.monthDay, 10) || 1))};`;
             if (s.freq === 'YEARLY') r += `BYMONTH=${s.month};`;
         }
-        r += `INTERVAL=${Math.max(1, parseInt(s.interval, 10) || 1)};`;
+        r += `INTERVAL=${Math.min(999, Math.max(1, parseInt(s.interval, 10) || 1))};`;
         for (const p of s.extra || []) r += `${p};`;
         if (s.endMode === 'until' && s.until) {
             const [y, m, d] = s.until.split('-').map(Number);
-            const grid = isAllDay && untilStamp ? untilStamp(s.until, true) : null;
-            r += grid ? `UNTIL=${grid};` : `UNTIL=${new Date(y, m - 1, d, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
-        } else if (s.endMode === 'count') r += `COUNT=${Math.max(1, parseInt(s.count, 10) || 1)};`;
+            r += `UNTIL=${new Date(y, m - 1, d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
+        } else if (s.endMode === 'count') r += `COUNT=${Math.min(999, Math.max(1, parseInt(s.count, 10) || 1))};`;
         return r;
     }
     /** The one-tap choices for an event starting on `d`: [{ id, rule }]. */
