@@ -48,6 +48,11 @@ implementations (Syncfusion, native). Not a fake `scheduleObj` that imitates Syn
   events across time zones and a DST week, two browsers editing different fields of one event.
 - Speed only counts if Syncfusion's JS and CSS are not downloaded in native mode (a test asserts zero requests).
 
+## Decisions
+
+- Oct 25, 2026: dragging one occurrence of a repeating event asks "this event / all events" (the owner's call). Classic Syncfusion moved only the occurrence without asking; "this event" stores exactly what classic stored.
+- Oct 25, 2026: the native editor follows the editing prototype (artifact Pme2wmbmcdS8vjPQ9xQ4ba): a quick card that grows into full details, Starts/Ends with "Same day", a length menu, the time zone as a line under the times, a category menu with Edit labels, changes saved as you go with Undo.
+
 ## Plan
 
 1. **No new features on Syncfusion.** Bug fixes only. New calendar UX ("who's coming") is built on native.
