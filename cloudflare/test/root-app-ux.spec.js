@@ -8,9 +8,7 @@
  *     (the calendar's socket, offline). Each must leave a message in the page where the action was, no browser
  *     dialog, no uncaught error, and nothing that reads as success. (The stats collector is excluded: it is never
  *     seen.) Past instances: A05, A07, A08, A09, A12.
- *   ROOT 4, components assuming their container: embeds at 300/360/400px and phones at 360/390px, classic and the
- *     new calendar, edit and view links: no sideways scroll, and nothing that should be on screen past its edge.
- *     Past instances: A10 (a 320px body floor in a 300px embed).
+ * (ROOT 4's guard, pages that fit embeds at 300-400px and phones at 360/390, is in layout-guard.spec.js "page fit".)
  * Screenshots (light/dark, desktop/phone) land in cloudflare/test-results/root-app-ux/.
  * Run with scripts/test-on-box.sh root-app-ux.
  */
@@ -199,61 +197,6 @@ test('B socket: a dropped connection that comes right back does not flash the of
   expect(seen).toBe(false);
   await ctx.close();
 });
-
-// =====================================================================================================
-// ROOT 4: every surface fits its container.
-// =====================================================================================================
-
-/** In `frame`: the page's width, its scroll width, and anything visible that ends past the right edge. */
-const overflow = (frame) => frame.evaluate(() => {
-  const W = document.documentElement.clientWidth;
-  const clipped = (e) => { for (let a = e.parentElement; a; a = a.parentElement) { const o = getComputedStyle(a).overflowX; if (o !== 'visible' && a !== document.body && a !== document.documentElement) return a.getBoundingClientRect().right <= W + 1; } return false; };
-  const past = [...document.querySelectorAll('body *')].filter((e) => {
-    if (!e.getClientRects().length || getComputedStyle(e).visibility === 'hidden') return false;
-    const r = e.getBoundingClientRect();
-    return r.width > 0 && r.right > W + 1 && !clipped(e);
-  }).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]} ${Math.round(e.getBoundingClientRect().right)}`);
-  return { W, sw: document.documentElement.scrollWidth, past: past.slice(0, 8) };
-});
-
-for (const cal of [null, 'native']) {
-  test(`4 embeds at 300, 360 and 400px (${cal || 'classic'}): no sideways scroll, the bar, credit, Saturday and the open Notes panel inside`, async ({ browser }) => {
-    const { viewId } = await seed([timed('e1', 'Game', '2026-10-03T10:00:00-07:00', '2026-10-03T11:00:00-07:00')],
-      { title: 'Riverside Rockets U10 Fall', options: { notes: 'Home field: Riverside Park https://maps.example.com/riverside-park-field-3\nBring water.' } });
-    const out = {};
-    for (const w of [300, 360, 400]) {
-      const { ctx, page } = await browserFor(browser, { now: NOW, cal });
-      await page.setViewportSize({ width: w + 60, height: 560 });
-      await page.goto(`${BASE}/about.html`);
-      await page.setContent(`<body style="margin:20px"><iframe id="f" src="${BASE}/view/${viewId}?backend=cf" title="cal" width="${w}" height="480" style="border:0"></iframe></body>`);
-      await expect(page.frameLocator('#f').getByTestId('embed-bar')).toBeVisible({ timeout: 20_000 });
-      await page.waitForTimeout(800);
-      await page.frameLocator('#f').getByTestId('embed-notes-btn').click();
-      await page.waitForTimeout(300);
-      if (w === 300) await shot(page, `embed-300-${cal || 'classic'}`);
-      const r = await overflow(page.frame({ url: /\/view\// }));
-      out[w] = { sideways: r.sw > r.W, past: r.past };
-    }
-    expect(out).toEqual({ 300: { sideways: false, past: [] }, 360: { sideways: false, past: [] }, 400: { sideways: false, past: [] } });
-  });
-
-  test(`4 phones at 360 and 390 (${cal || 'classic'}), light and dark: edit and view links fit, with notes`, async ({ browser }) => {
-    const { id, viewId } = await seed([timed('e1', 'Practice at Riverside Park field 3', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00')],
-      { title: 'Riverside Rockets U10 Fall season', options: { notes: 'Rainouts decided by 7am on game day.' } });
-    const out = {};
-    for (const device of ['p360', 'phone']) {
-      for (const scheme of ['light', 'dark']) {
-        for (const p of [`/${id}?backend=cf`, `/view/${viewId}?backend=cf`]) {
-          const { ctx, page, errors } = await open(browser, p, { device, colorScheme: scheme, now: NOW, cal });
-          const r = await overflow(page.mainFrame());
-          out[`${device} ${scheme} ${p.slice(0, 5)}`] = { sideways: r.sw > r.W, past: r.past, errors };
-          await ctx.close();
-        }
-      }
-    }
-    for (const v of Object.values(out)) expect(v).toEqual({ sideways: false, past: [], errors: [] });
-  });
-}
 
 // =====================================================================================================
 // Screenshots of each change, light and dark, desktop and phone (read them).
