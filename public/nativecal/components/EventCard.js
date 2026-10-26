@@ -582,7 +582,7 @@ const EventCard = (() => {
     <div v-if="full" class="nk-row">
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
-        <textarea ref="det" v-model="detText" class="nk-det" rows="3" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
+        <textarea ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
           @input="onDetInput" @paste="onPaste" @focus="detFocus = true" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
