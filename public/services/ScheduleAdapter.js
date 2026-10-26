@@ -233,6 +233,9 @@
                     RecurrenceID: asText(e.recurrenceID),
                     RecurrenceException: allDaySeries
                         ? Event.allDayExceptionsToLocal(e.recurrenceException) : e.recurrenceException,
+                    // The event's own zone (services/EventZone.js) rides along untouched: classic neither shows nor
+                    // edits it, and fromRecord hands it back, so an edit in classic keeps it.
+                    ...(e.tz ? { Tz: e.tz } : {}),
                 };
             });
         },
@@ -258,6 +261,8 @@
             if ('RecurrenceRule' in r) out.recurrencerule = r.RecurrenceRule || '';
             if ('RecurrenceException' in r) out.recurrenceException = r.RecurrenceException || null;
             if ('Recurrence' in r) out.repeat = r.Recurrence || '';
+            // Only when the record carries it: a record without it (an editor that rebuilt the record) changes nothing.
+            if ('Tz' in r) out.tz = r.Tz || null;
             // The way back from toView's all-day display (and an inverted range's repair) is
             // the Event model's: dates become the legacy stored form, and a value whose
             // meaning is unchanged keeps its stored text.
@@ -314,7 +319,8 @@
                         const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r);
                         commands.push({ type: 'update', key: edited, changes: fields });
                     } else if (action === 'EditOccurrence') {
-                        commands.push({ type: 'add', event: { ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
+                        // (An edited occurrence keeps its series' zone.)
+                        commands.push({ type: 'add', event: { ...(master.tz ? { tz: master.tz } : {}), ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
                             recurrencerule: master.recurrencerule, recurrenceException: stamp } });
                     }
                     for (const d of args.deletedRecords || []) commands.push({ type: 'remove', key: keyOf(d) });

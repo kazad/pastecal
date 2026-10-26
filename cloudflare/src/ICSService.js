@@ -3,6 +3,7 @@
  * Ported from functions/index.js to run in Cloudflare Workers and Node.js.
  */
 import EventStore from '../../public/services/EventStore.js';
+import EventZone from '../../public/services/EventZone.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -119,14 +120,41 @@ export const ICSService = {
             .map(s => (s.endsWith('Z') ? s : `${s}Z`));
     },
 
+    // A timed event's own zone (services/EventZone.js), or null: its times are then written in that zone's wall
+    // clock with TZID (DTSTART;TZID=Asia/Tokyo:20261027T140000), so a subscriber's app repeats it in that zone across
+    // DST, as the calendar does. The TZID is the IANA name, which Google Calendar and Apple Calendar read without a
+    // VTIMEZONE. An event without one is written in UTC, as always.
+    zoneOf(event) {
+        return event && !event.isAllDay ? EventStore.validZone(event.tz) : null;
+    },
+
+    // YYYYMMDDTHHMMSS: an instant's wall clock in tz (for a TZID= value).
+    formatLocal(ms, tz) {
+        if (isNaN(ms)) return null;
+        const w = EventZone.wall(ms, tz), p = (n, l = 2) => String(n).padStart(l, '0');
+        return `${p(w.y, 4)}${p(w.m + 1)}${p(w.d)}T${p(w.h)}${p(w.min)}${p(w.s)}`;
+    },
+
     seriesShape(event) {
-        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start) };
+        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start), tz: this.zoneOf(event) };
     },
 
     seriesSlot(stamp, shape) {
         let ms = this.toMs(stamp);
         if (isNaN(ms)) return null;
         if (shape.allDay) return this.formatDate(ms);
+        // A series in its own zone: the slot is that zone's wall clock, at the series' time of day there (a stamp
+        // off by DST elsewhere still names its day's occurrence).
+        if (shape.tz) {
+            const w = EventZone.wall(ms, shape.tz);
+            if (!isNaN(shape.anchorMs)) {
+                const a = EventZone.wall(shape.anchorMs, shape.tz);
+                const here = Date.UTC(w.y, w.m, w.d, w.h, w.min, w.s), day = Date.UTC(w.y, w.m, w.d, a.h, a.min, a.s);
+                const nearest = [day - DAY_MS, day, day + DAY_MS].reduce((x, y) => (Math.abs(y - here) < Math.abs(x - here) ? y : x));
+                if (Math.abs(nearest - here) < 12 * HOUR_MS) return this.formatDateTime(new Date(nearest)).slice(0, 15);
+            }
+            return this.formatLocal(ms, shape.tz);
+        }
         if (!isNaN(shape.anchorMs)) {
             const timeOfDay = ((shape.anchorMs % DAY_MS) + DAY_MS) % DAY_MS;
             const sameDay = Math.floor(ms / DAY_MS) * DAY_MS + timeOfDay;
@@ -193,8 +221,8 @@ export const ICSService = {
                     .filter(Boolean))];
                 const startMs = this.toMs(child.start);
                 for (const slot of slots) {
-                    const distance = Math.abs(this.toMs(slot) - startMs);
-                    pairs.push({ child, index, slot, allDay: shape.allDay,
+                    const distance = Math.abs((shape.tz ? this.toMs(`${slot}Z`) - EventZone.offsetMin(shape.tz, startMs) * 60000 : this.toMs(slot)) - startMs);
+                    pairs.push({ child, index, slot, allDay: shape.allDay, tz: shape.tz || null,
                         ambiguous: slots.length > 1 ? 1 : 0,
                         distance: isNaN(distance) ? Infinity : distance });
                 }
@@ -205,7 +233,7 @@ export const ICSService = {
             const usedSlots = new Set();
             for (const pair of pairs) {
                 if (assigned.has(pair.child) || usedSlots.has(pair.slot)) continue;
-                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay });
+                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay, tz: pair.tz });
                 usedSlots.add(pair.slot);
             }
         }
@@ -226,9 +254,10 @@ export const ICSService = {
             ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), !!event.isAllDay)) : null;
 
         const allDay = !!event.isAllDay;
+        const tz = this.zoneOf(event);
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
         let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
-        const dateParam = allDay ? ';VALUE=DATE' : '';
+        const dateParam = allDay ? ';VALUE=DATE' : tz ? `;TZID=${tz}` : '';
 
         if (allDay && (!end || end <= start)) {
             end = this.formatDate(this.toMs(start) + DAY_MS);
@@ -244,8 +273,8 @@ export const ICSService = {
             'BEGIN:VEVENT',
             `UID:${this.safeUid(uid)}`,
             `DTSTAMP:${dtstamp}`,
-            `DTSTART${dateParam}:${start}`,
-            `DTEND${dateParam}:${end}`,
+            `DTSTART${dateParam}:${tz ? this.formatLocal(this.toMs(start), tz) : start}`,
+            `DTEND${dateParam}:${tz ? this.formatLocal(this.toMs(end), tz) : end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
             // The calendar's VIEW link (never the edit link: a calendar app shows notes to anyone who sees
             // the event): the bare link on the notes' last line (Google shows only notes), and URL: (Apple's
@@ -255,7 +284,7 @@ export const ICSService = {
         if (viewUrl) eventLines.push(`URL:${viewUrl}`);
 
         if (isOccurrence) {
-            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : ''}:${occurrence.slot}`);
+            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : occurrence.tz ? `;TZID=${occurrence.tz}` : ''}:${occurrence.slot}`);
         } else if (rule) {
             eventLines.push(`RRULE:${rule}`);
 
