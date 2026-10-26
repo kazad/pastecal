@@ -384,7 +384,7 @@ class CalendarDataService {
     static _sameEvent(a, b) {
         if (!a || !b) return a === b;
         const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
         const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
         return FIELDS.every(f => {
             const x = norm(a[f]), y = norm(b[f]);
@@ -446,7 +446,7 @@ class CalendarDataService {
      */
     static _lastEditedAt(current, next, now) {
         const events = (c) => { const v = c && c.events; return (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean); };
-        const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
         const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
         // A date compares by instant: an epoch number and its ISO string are the same value.
         const when = (v) => { const n = norm(v); if (n === null) return null; const t = new Date(v).getTime(); return Number.isNaN(t) ? n : String(t); };

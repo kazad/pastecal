@@ -478,8 +478,8 @@ const CalendarVueApp = {
         nativeDraft() {
             const c = this.nativeCard;
             if (!c || !c.isNew) return null;
-            const v = c.value, end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : v.end;
-            return { start: new Date(v.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
+            const v = c.value, real = this.nativeCardInstants(v), end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : real.end;
+            return { start: new Date(real.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
         },
         nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
         nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
@@ -1886,9 +1886,12 @@ const CalendarVueApp = {
             const rec = this.nativeRecord(series);
             rec.RecurrenceID = rec.Id;
             ScheduleAdapter.noteStart(rec);
-            const shift = nativeShift(from.start, to.start), stretch = nativeShift(from.end, to.end);
-            return { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
-                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start) };
+            // A series in its own zone moves by that zone's days and minutes (its repeat days are that zone's).
+            const z = this.nativeCardZone({ tz: rec.Tz, isAllDay: rec.IsAllDay });
+            const W = (d) => (z ? EventZone.toWallDate(d, z) : d), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
+            const shift = nativeShift(W(from.start), W(to.start)), stretch = nativeShift(W(from.end), W(to.end));
+            return { ...rec, StartTime: U(shift(W(rec.StartTime))), EndTime: U(stretch(W(rec.EndTime))),
+                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, W(from.start), W(to.start)) };
         },
         /**
          * Save an "all events" change (record: the series' record as it should be). A series with skipped dates or
@@ -2050,11 +2053,29 @@ const CalendarVueApp = {
                 end = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (exclusive ? 1 : 0));
                 if (end < start) end = new Date(start);
             }
-            return { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '' };
+            const value = { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '', tz: rec.Tz || '' };
+            return this.nativeCardRezone({ ...value, tz: '' }, value.tz);
+        },
+        // ---- An event's own time zone (services/EventZone.js) on the card. With one, the card's start and end are its
+        // wall clock there: Dates whose LOCAL fields read that zone's time, so every picker (built on local getters)
+        // shows and edits the zone's time, and "2:00 PM" typed with Tokyo picked means 2 PM in Tokyo. They become
+        // instants again only here, on the way to the write path (nativeCardTimes, nativeCardInstants).
+        /** The zone a card value's times are in, or null (none, or all day: dates are dates). */
+        nativeCardZone(v) { return v && v.tz && !v.isAllDay && typeof EventZone !== 'undefined' ? EventZone.validZone(v.tz) : null; },
+        /** The instants a card value stands for (an all-day value as it is: its display dates). */
+        nativeCardInstants(v) {
+            const z = this.nativeCardZone(v);
+            return z ? { start: EventZone.fromWallDate(v.start, z), end: EventZone.fromWallDate(v.end, z) } : { start: new Date(v.start), end: new Date(v.end) };
+        },
+        /** The same instants, shown in zone `tz` ('' = this browser's own). */
+        nativeCardRezone(v, tz) {
+            const real = this.nativeCardInstants(v), out = { ...v, tz: tz || '' }, z = this.nativeCardZone(out);
+            if (v.isAllDay) return out;
+            return { ...out, start: z ? EventZone.toWallDate(real.start, z) : real.start, end: z ? EventZone.toWallDate(real.end, z) : real.end };
         },
         /** The card's start / end in the shapes classic's records carry (an all-day end: the next local midnight). */
         nativeCardTimes(v) {
-            if (!v.isAllDay) return { StartTime: new Date(v.start), EndTime: new Date(v.end) };
+            if (!v.isAllDay) { const r = this.nativeCardInstants(v); return { StartTime: r.start, EndTime: r.end }; }
             const s = new Date(v.start), e = new Date(v.end);
             return { StartTime: new Date(s.getFullYear(), s.getMonth(), s.getDate()), EndTime: nativeEnd(new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999), true) };
         },
@@ -2066,7 +2087,10 @@ const CalendarVueApp = {
             if (!same(before.type, after.type)) out.Type = Number(after.type) || 1;
             if (!same(before.description, after.description)) out.Description = after.description;
             if (!same(before.rule, after.rule)) out.RecurrenceRule = after.rule || '';
-            if (!same(before.start, after.start) || !same(before.end, after.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
+            if ((before.tz || '') !== (after.tz || '')) out.Tz = after.tz || '';
+            // (Compared as instants: the same time shown in another zone is not a change of time.)
+            const a = this.nativeCardInstants(before), b = this.nativeCardInstants(after);
+            if (!same(a.start, b.start) || !same(a.end, b.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
             return out;
         },
         nativeCardClone(v) { return { ...v, start: new Date(v.start), end: new Date(v.end) }; },
@@ -2091,7 +2115,7 @@ const CalendarVueApp = {
             } else if (kind === 'series') {
                 target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null };
                 value = this.nativeCardValue(row);
-                target.occurrence = { start: new Date(value.start), end: new Date(value.end) };
+                target.occurrence = this.nativeCardInstants(value);
             } else {
                 target = { kind: 'row', id: row.id, recurrenceID: row.recurrenceID ?? null, seriesId: kind === 'edited' && series ? series.id : null, occurrence: null };
                 value = this.nativeCardValue(row);
@@ -2133,6 +2157,9 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c) return;
             if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
+            // Another time zone keeps the date and clock time shown and means them in that zone (as Google Calendar
+            // does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo. The card's start and end are wall-clock Dates,
+            // so that is just the new tz beside them (nativeCardTimes turns them into instants in it).
             const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
             // Whether people categorize events at all (classic sends it too).
             if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
@@ -2140,7 +2167,7 @@ const CalendarVueApp = {
             if (!Object.keys(this.nativeCardFields(before, after)).length) { c.value = after; return; }
             if (c.target.kind === 'occ') {
                 // A repeat belongs to the whole series; anything else asks first, once ("this event" is the default).
-                if ('rule' in patch) return this.nativeCardWrite('all', before, after, message);
+                if ('rule' in patch || 'tz' in patch) return this.nativeCardWrite('all', before, after, message);
                 this.nativeAskScope('Edit recurring event', () => this.nativeCardWrite('this', before, after, message),
                     () => this.nativeCardWrite('all', before, after, message), 'OK', () => { if (this.nativeCard === c) c.value = before; });
                 return;
@@ -2217,7 +2244,7 @@ const CalendarVueApp = {
             const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
             if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
             const v = this.nativeCardValue(row), cur = c.value;
-            const next = t.kind === 'row' ? v : { ...cur, title: v.title, type: v.type, description: v.description, rule: v.rule };
+            const next = t.kind === 'row' ? v : { ...this.nativeCardRezone(cur, v.tz), title: v.title, type: v.type, description: v.description, rule: v.rule };
             if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
         },
         nativeCardWrite(scope, before, after, message) {
@@ -2262,11 +2289,16 @@ const CalendarVueApp = {
                 let moved = this.nativeRecord(series);
                 moved.RecurrenceID = moved.Id;
                 ScheduleAdapter.noteStart(moved);
-                if (timed) {
+                if (timed && 'Tz' in fields && !!before.isAllDay === !!after.isAllDay) {
+                    // Another zone: the series' own dates and clock times, meant in the new zone (its repeat days too).
+                    const oz = this.nativeCardZone(before), nz = this.nativeCardZone(after);
+                    const re = (d) => { const w = oz ? EventZone.toWallDate(d, oz) : new Date(d); return nz ? EventZone.fromWallDate(w, nz) : w; };
+                    moved = { ...moved, StartTime: re(moved.StartTime), EndTime: re(moved.EndTime) };
+                } else if (timed) {
                     moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
                         { IsAllDay: !!after.isAllDay });
                 }
-                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule']) if (f in fields) moved[f] = fields[f];
+                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule', 'Tz']) if (f in fields) moved[f] = fields[f];
                 this.nativeSaveSeries(series, moved, {
                     timing: timed || 'RecurrenceRule' in fields,
                     // (Switching All day changes what a stamp names: kept stamps stay as they are.)
@@ -2277,7 +2309,7 @@ const CalendarVueApp = {
                     if (this.nativeCard !== c) return;
                     if (asked) c.keepOccurrences = keepOccurrences;   // asked once per card
                     if (done) {
-                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(after.start), end: new Date(after.end) } };
+                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: this.nativeCardInstants(after) };
                         this.nativeCardSaved(c, snapshot, after, message);
                     } else c.value = before;
                 });
@@ -2334,7 +2366,7 @@ const CalendarVueApp = {
             if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '' }] }, { action: 'Add' });
+                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
             this.closeNativeCard();
             if (!ok) return;
             const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
@@ -2347,7 +2379,8 @@ const CalendarVueApp = {
                     if (!now) return;
                     const rec = this.nativeRecord(now);
                     ScheduleAdapter.noteStart(rec);
-                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: new Date(smart.base.start), EndTime: new Date(smart.base.end) }] }, { action: 'Save' })) this.showToast('Undone', 'success');
+                    const base = this.nativeCardInstants({ ...v, start: smart.base.start, end: smart.base.end });
+                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: base.start, EndTime: base.end }] }, { action: 'Save' })) this.showToast('Undone', 'success');
                 } });
             }
         },
@@ -2414,7 +2447,7 @@ const CalendarVueApp = {
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: v.title || '(No title)', ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
             const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             if (!row) return;
             c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
@@ -5529,7 +5562,8 @@ const CalendarVueApp = {
                 && String(a.type ?? 1) === String(b.type ?? 1)
                 && !!a.isAllDay === !!b.isAllDay
                 && norm(a.recurrencerule) === norm(b.recurrencerule)
-                && norm(a.recurrenceException) === norm(b.recurrenceException);
+                && norm(a.recurrenceException) === norm(b.recurrenceException)
+                && norm(a.tz) === norm(b.tz);
         },
 
         /** What turned `before` into `after`, in the same shape the server records. */

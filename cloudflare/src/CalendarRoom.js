@@ -667,7 +667,7 @@ export class CalendarRoom extends DurableObject {
         if (!a || !b) return false;
         const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
         const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
         return FIELDS.every((f) => {
             const x = norm(a[f]), y = norm(b[f]);
             if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
@@ -791,6 +791,12 @@ export class CalendarRoom extends DurableObject {
                 const v = e[f];
                 if (v !== undefined && v !== null && typeof v !== 'string' && typeof v !== 'number') return `an event ${f} is not text`;
                 if (String(v ?? '').length > LIMITS.maxId) return `an event ${f} is too long`;
+            }
+            // The event's own time zone (services/EventZone.js): an IANA name, or nothing.
+            const z = e.tz;
+            if (z !== undefined && z !== null && z !== '') {
+                if (typeof z !== 'string' || z.length > 64) return 'an event time zone is not a zone name';
+                if (rules && !validZone(z)) return 'an event time zone is not a zone name';
             }
             const t = e.type;
             if (t !== undefined && t !== null && typeof t !== 'number' && typeof t !== 'string') return 'an event type is not a number';

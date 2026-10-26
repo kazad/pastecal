@@ -274,6 +274,14 @@
 .nk-durb:hover, .nk-durb[aria-expanded="true"] { background: var(--pc-soft); }
 .nk-tz { margin: -6px 0 0 60px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-text-muted); display: flex; align-items: center; min-height: var(--pc-h-sm); position: relative; }
 .nk-tz > .nk-gi { position: absolute; left: -60px; }
+/* the time zone: a quiet button (the event's zone, or yours), then its times in yours when the clocks differ */
+.nk-tz { flex-wrap: wrap; column-gap: 6px; }
+.nk-tzb { display: inline-flex; align-items: center; border: 0; background: transparent; border-radius: var(--pc-radius-control); min-height: var(--pc-h-sm); padding: 0 var(--pc-space-2);
+    margin-left: calc(-1 * var(--pc-space-2)); font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.nk-tzb:hover, .nk-tzb[aria-expanded="true"] { background: var(--pc-soft); color: var(--pc-text-2); }
+.nk-tzyou { font-variant-numeric: tabular-nums; }
+.nk-qtz { color: var(--pc-text-muted); }
+@media (pointer: coarse) { .nk-tzb { min-height: var(--pc-h-lg); } }
 .nk-row { display: flex; align-items: flex-start; margin-left: 60px; position: relative; }
 .nk-row > .nk-gi { position: absolute; left: -60px; top: 7px; }
 .nk-sel { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; border-radius: var(--pc-radius-control); min-height: var(--pc-h-sm);
@@ -322,6 +330,9 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 @keyframes nk-drop { from { opacity: 0; transform: translateY(-4px); } }
 .nk-pick { width: 240px; }
 .nk-pick-dur { width: 200px; }
+.nk-pick-tz { width: 300px; }
+.nk-pick-tz .nk-plist { max-height: 300px; }
+.nk-empty { margin: 0; padding: 7px 10px; font-size: var(--pc-fs-sm); color: var(--pc-text-muted); }
 .nk-menu { width: 200px; }
 .nk-menu button { display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; min-height: 34px; padding: var(--pc-space-2) 10px; border: 0;
     background: none; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; }

@@ -269,6 +269,8 @@
     <script src="/services/AuthorSignal.js?v=1792797113"></script>
     <script src="/services/CalendarDataService.js?v=1792797113"></script>
     <script src="/models/Calendar.js?v=1792797113"></script>
+    <!-- An event's own time zone (before EventStore and the models that read it). -->
+    <script src="/services/EventZone.js?v=1792797113"></script>
     <script src="/services/EventStore.js?v=1792797113"></script>
     <!-- Picks the backend: replaces CalendarDataService with the Cloudflare one when ?backend=cf / new.pastecal.com. Flag off = no effect. -->
     <script src="/services/EditorKeys.js?v=1792797113"></script>
@@ -780,7 +782,7 @@
                 <template v-if="nativeEdit">
                     <!-- The event card: quick view, grows into every field; saves as you go (app.js nativeCardChange). -->
                     <event-card v-if="nativeCard" ref="eventCard" :card="nativeCard" :colors="COLORS" :labels="displayTypeLabels" :time-format="globalSettings.timeFormat"
-                        :first-day-of-week="globalSettings.firstDayOfWeek" :blocked="!!nativeAsk" @change="nativeCardChange" @done="nativeCardDone"
+                        :first-day-of-week="globalSettings.firstDayOfWeek" :calendar-zone="(calendar.options && calendar.options.tz) || ''" :blocked="!!nativeAsk" @change="nativeCardChange" @done="nativeCardDone"
                         @cancel="nativeCardCancel" @delete="nativeCardDelete" @duplicate="nativeCardDuplicate" @labels="nativeCardLabels"></event-card>
                     <!-- ? on an edit link: the few keys there are. -->
                     <div v-if="nativeKeys" class="pc-native-ask" @mousedown.self="nativeKeys = false">

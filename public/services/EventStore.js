@@ -32,7 +32,7 @@
     'use strict';
 
     const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-        'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
 
     const blank = (v) => v === undefined || v === null || v === '';
     const uuid = () => (root.Utils && root.Utils.uuidv4) ? root.Utils.uuidv4()
@@ -44,6 +44,15 @@
         if (blank(v)) return null;
         const d = v instanceof Date ? v : new Date(v);
         return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+
+    /**
+     * An event's own time zone (services/EventZone.js): a canonical IANA name, or null. Most events have none --
+     * each viewer sees them in their own zone -- and their rows never carry the key.
+     */
+    function validZone(tz) {
+        if (typeof tz !== 'string' || !tz || tz.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(tz)) return null;
+        try { return new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone; } catch (e) { return null; }
     }
 
     /** Identity of a row. Ids compare as TEXT: stored ids are numbers (old grid events) or uuids. */
@@ -74,6 +83,9 @@
             recurrenceID: blank(pick('recurrenceID', 'RecurrenceID')) ? null : pick('recurrenceID', 'RecurrenceID'),
             recurrenceException: blank(pick('recurrenceException', 'RecurrenceException')) ? null : String(pick('recurrenceException', 'RecurrenceException')),
         };
+        // The event's own zone: kept when it names one; a key present but blank or not a zone is null (a change
+        // that takes the zone away), and a row that never had one gets no key (it stays as it always was).
+        if ('tz' in r || 'Tz' in r) out.tz = validZone(pick('tz', 'Tz'));
         return out;
     }
 
@@ -103,6 +115,12 @@
         return null;
     }
 
+    /** A row as stored: no zone is no key at all (a row without one is byte-for-byte as before zones existed). */
+    function stored(e) {
+        if ('tz' in e && !e.tz) delete e.tz;
+        return e;
+    }
+
     /** Why this event cannot be stored, or null. */
     function invalid(e) {
         if (!e.start) return 'start is not a date';
@@ -116,13 +134,15 @@
         if (f === 'type') return (parseInt(a, 10) || 1) === (parseInt(b, 10) || 1);
         if (f === 'isAllDay') return !!a === !!b;
         if (f === 'start' || f === 'end') return iso(a) === iso(b);
+        if (f === 'tz') return (validZone(a) || null) === (validZone(b) || null);
         return (blank(a) ? null : String(a)) === (blank(b) ? null : String(b));
     }
 
     /** The fields of `next` that differ from `prev` -- what a change actually changes. */
     function diff(prev, next) {
         const out = {};
-        for (const f of FIELDS) if (f in next && !sameField(f, prev[f], next[f])) out[f] = next[f];
+        // (The zone is compared even when `next` has no key: a full row without one has no zone.)
+        for (const f of FIELDS) if ((f in next || f === 'tz') && !sameField(f, prev[f], next[f])) out[f] = f === 'tz' ? (validZone(next[f]) || null) : next[f];
         return out;
     }
 
@@ -177,7 +197,7 @@
 
         switch (c.type) {
             case 'add': {
-                const e = normalize(c.event);
+                const e = stored(normalize(c.event));
                 if (blank(e.id) || index.has(keyOf(e))) e.id = uuid();
                 const why = invalid(e);
                 if (why) throw new CommandError(`add: ${why}`, c, 'invalid_dates');
@@ -196,10 +216,12 @@
                 if (c.wrote) undoOnly(prev, fieldChanges, c.wrote);
                 const changes = diff(prev, normalize({ ...prev, ...fieldChanges }));
                 if (!Object.keys(changes).length) return { events: list, inverse: null, added: [], changed: [], removed: [] };
-                const next = { ...prev, ...changes };
+                const next = stored({ ...prev, ...changes });
                 const why = invalid(next);
                 if (why) throw new CommandError(`update: ${why}`, c, 'invalid_dates');
-                const before = {}; for (const f of Object.keys(changes)) before[f] = prev[f];
+                // (A zone taken away is undone by putting it back, one put on by taking it away: null, never
+                // undefined, which a save would drop.)
+                const before = {}; for (const f of Object.keys(changes)) before[f] = f === 'tz' ? (prev.tz || null) : prev[f];
                 list[i] = next;
                 // The inverse remembers what this change wrote, so an undo can take back only that (undoOnly).
                 return { events: list, inverse: { type: 'update', key: keyOf(next), changes: before, wrote: changes }, added: [], changed: [next], removed: [] };
@@ -228,7 +250,7 @@
     // Undo of a remove puts the row back with its ORIGINAL id, so anything that pointed at
     // it (an occurrence's recurrenceID, a shared link) still does.
     function restore(events, event) {
-        const e = normalize(event);
+        const e = stored(normalize(event));
         if (events.some((x) => keyOf(x) === keyOf(e))) throw new CommandError('restore: already there', { type: 'add', event }, 'already_there');
         return { events: [...events, e], inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
     }
@@ -334,7 +356,11 @@
         for (const [k] of cur) if (!tgt.has(k)) commands.push({ type: 'remove', key: k });
         for (const [k, e] of tgt) {
             if (!cur.has(k)) commands.push({ type: 'add', event: e, restoreId: true });
-            else if (Object.keys(diff(cur.get(k), e)).length) commands.push({ type: 'update', key: k, changes: e });
+            else {
+                const d = diff(cur.get(k), e);
+                // (A zone the target no longer has goes out as tz: null; the row alone would keep the old one.)
+                if (Object.keys(d).length) commands.push({ type: 'update', key: k, changes: 'tz' in d ? { ...e, tz: d.tz } : e });
+            }
         }
         return commands;
     }
@@ -348,6 +374,7 @@
     EventStore.report = report;
     EventStore.FIELDS = FIELDS;
     EventStore.unsafeRecurrence = unsafeRecurrence;
+    EventStore.validZone = validZone;
 
     if (typeof module !== 'undefined' && module.exports) module.exports = EventStore;
     else root.EventStore = EventStore;

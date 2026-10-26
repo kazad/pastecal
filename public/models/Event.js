@@ -29,6 +29,9 @@ class Event {
         this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
         this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
         this.isAllDay = options.IsAllDay || options.isAllDay || false;
+        // The event's own time zone (services/EventZone.js), only when it has one: other rows stay as they were.
+        const tz = options.Tz || options.tz;
+        if (tz) this.tz = tz;
 
         // for SyncFusion Internal Object. StartTime and EndTime are converted
         // independently: a bad StartTime must not throw away a good EndTime (Syncfusion
