@@ -5,7 +5,8 @@
 # (inspectors at +900), each with its own data folder; every Playwright worker sticks to one of them
 # (cloudflare/test/worker-server.js). PW_WORKERS workers (default 6). Its own ports and data, so parallel agents
 # never share or kill each other's servers; all of them stop when this script exits or is killed.
-# LOCAL_NO_LIMITS turns off the per-address rate limits for these local servers only. The Plus/Stripe journeys
+# Server logs (/tmp/pc-test-<port>.log) keep warnings and errors only; WRANGLER_LOG_LEVEL=info brings back a line
+# per request. LOCAL_NO_LIMITS turns off the per-address rate limits for these local servers only. The Plus/Stripe journeys
 # need the fake-Stripe vars (scripts/test-all.sh) and are skipped here unless named.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -28,7 +29,7 @@ trap 'exit 130' INT TERM HUP
 for i in $(seq 0 $((N - 1))); do
   P=$((PORT + 100 * i))
   (cd "$ROOT/cloudflare" && exec $NODE node_modules/.bin/wrangler dev --port "$P" --inspector-port $((P + 900)) --persist-to "$DATA/$i" \
-    --show-interactive-dev-session=false --var IMPORT_SECRET:dev-secret --var COPY_BACK: --var FIREBASE_DB_URL: --var LOCAL_NO_LIMITS:1 \
+    --show-interactive-dev-session=false --log-level "${WRANGLER_LOG_LEVEL:-warn}" --var IMPORT_SECRET:dev-secret --var COPY_BACK: --var FIREBASE_DB_URL: --var LOCAL_NO_LIMITS:1 \
     </dev/null > "/tmp/pc-test-$P.log" 2>&1) &
   PIDS+=($!) PORTS+=("$P") URLS+=("http://localhost:$P")
 done
