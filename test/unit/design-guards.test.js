@@ -173,6 +173,8 @@ const BUTTON_COMPONENTS = {
   'pc-hdr-btn': 'the desktop header toolbar: a segmented group of icon+label buttons (style.css "Header")',
   'pc-tab': 'a tab in a .pc-tabs row (components.css)',
   'pc-chip': 'a chip you press: templates, examples, color types (components.css)',
+  'pc-home-tpl-pill': 'a template choice in the homepage guide panel: a quiet outline pill, deliberately not a chip or button (style.css, docs/DESIGN-RESTRAINT.md)',
+  'pc-tour-tpl': 'a template picture card under the homepage calendar; the picture is the button (style.css)',
   'pc-link': 'a button that reads as a text link (components.css)',
   'pc-link-field': 'a link shown as a field that copies itself (components.css)',
   'pc-seg-btn': 'a segment of a .pc-seg control (components.css)',
