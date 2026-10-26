@@ -87,8 +87,7 @@ test('view link: View only badge, Add to my calendar with the Share subscribe UR
   // and the header's Make your own goes. Turning hideBranding off brings the pitch back.
   await page.evaluate(`${VM}.lock = { locked: true, pro: true, canEdit: false, proSettings: { hideBranding: true } }`);
   await expect(page.getByTestId('view-footer')).toHaveCount(0);
-  // (plus the quiet "Try the new calendar (beta)" every view link carries, try-new-calendar.spec.js)
-  await expect(page.getByTestId('hosted-note')).toHaveText(/^Made with pastecal · Report(Try the new calendar \(beta\))?$/);
+  await expect(page.getByTestId('hosted-note')).toHaveText('Made with pastecal · Report');
   await expect(page.getByTestId('make-own')).toHaveCount(0);
   await page.evaluate(`${VM}.lock = { locked: true, pro: true, canEdit: false, proSettings: { hideBranding: false } }`);
   await expect(page.getByTestId('view-footer')).toBeVisible();

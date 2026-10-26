@@ -826,7 +826,7 @@ const CalendarVueApp = {
         // and view links (locked and Pro ones too); never an embed, the homepage (classic only for now) or a pill
         // hidden for this session.
         showCalSwitch() {
-            if (this.embedded || this.isHomepageCalendar || !['viewer', 'pro', 'editor'].includes(this.pageFooter)) return false;
+            if (this.embedded || this.isHomepageCalendar || this.lock.pro || !['viewer', 'editor'].includes(this.pageFooter)) return false;   // never on Pro calendars (owner's call)
             return !(this.nativeCal && this.calPillHidden);
         },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link

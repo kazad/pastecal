@@ -136,7 +136,7 @@ test('the footer link opts in, the pill takes you back, and the choice sticks ac
   await ctx.close();
 });
 
-test('view links and locked calendars get the link; ?cal=classic wins; the address flag is dropped when switching', async ({ browser }) => {
+test('view links and locked calendars get the link, Pro ones never; ?cal=classic wins; the address flag is dropped when switching', async ({ browser }) => {
   const id = await seed();
   const viewId = await viewOf(id);
   const { ctx, page, sf } = await browserFor(browser);
@@ -159,6 +159,15 @@ test('view links and locked calendars get the link; ?cal=classic wins; the addre
   await loaded(page);
   expect(new URL(page.url()).searchParams.get('cal')).toBe(null);
   expect(await mode(page)).toBe('native');
+
+  // Pro calendars never show it: with full branding (the regular footer) or trimmed (Made with pastecal · Report).
+  await go(page, `/view/${viewId}?backend=cf&cal=classic`);
+  const VM = `document.querySelector('#app')._vnode.component.proxy`;
+  for (const hideBranding of [false, true]) {
+    await page.evaluate(`${VM}.lock = { locked: true, pro: true, canEdit: false, proSettings: { hideBranding: ${hideBranding} } }`);
+    await expect(page.getByTestId('try-new-cal')).toHaveCount(0);
+    await expect(page.getByTestId('new-cal-pill')).toHaveCount(0);
+  }
   await ctx.close();
 });
 
