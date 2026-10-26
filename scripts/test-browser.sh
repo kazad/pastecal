@@ -7,7 +7,8 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PORT=${1:-8871}; shift || true
-PW_NODE_PATH=${PW_NODE_PATH:-/Users/kazad/Dropbox/computer/Projects/pastecal/node_modules}
+# Playwright from this checkout when installed (any machine), else the main Mac checkout.
+PW_NODE_PATH=${PW_NODE_PATH:-$( [ -d "$ROOT/node_modules/@playwright/test" ] && echo "$ROOT/node_modules" || echo /Users/kazad/Dropbox/computer/Projects/pastecal/node_modules )}
 NODE=${NODE:-node}
 DATA=$(mktemp -d /tmp/pc-test.XXXX)
 (cd "$ROOT/cloudflare" && $NODE node_modules/.bin/wrangler dev --port "$PORT" --inspector-port $((PORT + 900)) --persist-to "$DATA" \
