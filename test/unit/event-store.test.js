@@ -168,6 +168,24 @@ test('edit one occurrence: series gets the stamp, the edited copy is a new row (
     assert.equal(s.commits[0].shrink, 0);
 });
 
+test('edit one occurrence that someone else already edited: the same row changes, no second row for the slot', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;' })]);
+    const record = () => ({ Id: 'occ', Subject: 'Weekly', RecurrenceID: '9', StartTime: new Date('2026-10-12T21:00:00Z'), EndTime: new Date('2026-10-12T22:00:00Z'),
+        RecurrenceRule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;', Type: 1 });
+    const edit = (title) => {
+        const r = record();
+        ScheduleAdapter.noteStart(r);   // both editors opened on the untouched occurrence
+        return { requestType: 'eventChange', changedRecords: [{ ...r, Subject: title }] };
+    };
+    const ctx = { action: 'EditOccurrence', occurrenceStart: new Date('2026-10-12T21:00:00Z') };
+    assert.ok(s.store.dispatch(ScheduleAdapter.toCommand(edit('Weekly (B)'), s.store, ctx)).ok);
+    assert.ok(s.store.dispatch(ScheduleAdapter.toCommand(edit('Weekly (A)'), s.store, ctx)).ok);
+    assert.equal(s.events.length, 2);
+    const copy = s.events.find((e) => e.recurrenceID === 9);
+    assert.deepEqual([copy.title, copy.recurrenceException, copy.recurrencerule], ['Weekly (A)', '20261012T210000Z', 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;']);
+    assert.equal(s.events.find((e) => e.id === 9).recurrenceException, '20261012T210000Z');
+});
+
 test('delete one occurrence: only the series stamp changes; nothing is removed', () => {
     const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;', recurrenceException: '20261012T210000Z' })]);
     const args = { requestType: 'eventRemove', changedRecords: [{ Id: '9', Subject: 'Weekly', RecurrenceID: '9', StartTime: new Date('2026-10-26T21:00:00Z'), RecurrenceRule: 'FREQ=WEEKLY;' }] };

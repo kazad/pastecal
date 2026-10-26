@@ -168,3 +168,29 @@ test('dragging a series that ends (UNTIL) "all events" to another day moves its 
   await ctx.close();
 });
 
+// =====================================================================================================
+test('two browsers saving "This event" on the same occurrence keep one row for that slot', async ({ browser }) => {
+  const id = await seed([timed('s1', 'Standup', '2026-10-19T09:00:00-07:00', '2026-10-19T09:30:00-07:00', { recurrencerule: 'FREQ=DAILY;INTERVAL=1;' })]);
+  const A = await open(browser, id, '&view=week&date=2026-10-21');
+  const B = await open(browser, id, '&view=week&date=2026-10-21');
+  const occ = { start: iso('2026-10-21T09:00:00-07:00'), end: iso('2026-10-21T09:30:00-07:00') };
+  for (const P of [A, B]) {
+    await vm(P.page, (v, o) => v.openNativeEditor({ mode: 'EditOccurrence', row: v.calendar.events[0], occurrence: { start: new Date(o.start), end: new Date(o.end) } }), occ);
+    await expect(P.page.getByTestId('event-editor')).toBeVisible();
+  }
+  await B.page.getByTestId('editor-title').fill('Standup (B: room 4)');
+  await B.page.getByTestId('editor-save').click();
+  await soon(async () => (await stored(id)).length).toBe(2);
+  await soon(() => vm(A.page, (v) => v.calendar.events.length)).toBe(2);
+  await A.page.getByTestId('editor-title').fill('Standup (A: moved online)');
+  await A.page.getByTestId('editor-save').click();
+  await soon(async () => (await stored(id)).map((e) => e.title).sort()).toEqual(['Standup', 'Standup (A: moved online)']);
+  const rows = await stored(id);
+  expect(rows).toHaveLength(2);
+  expect(rows.find((e) => e.id === 's1').recurrenceException).toBe('20261021T160000Z');
+  expect(rows.find((e) => e.id !== 's1').recurrenceException).toBe('20261021T160000Z');
+  await expect(A.page.locator('.nc-timed', { hasText: /Standup \(/ })).toHaveCount(1);
+  expect([...A.errors, ...B.errors]).toEqual([]);
+  await A.ctx.close(); await B.ctx.close();
+});
+

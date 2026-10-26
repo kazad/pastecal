@@ -250,7 +250,14 @@
                     const list = String(master.recurrenceException || '').split(',').map((x) => x.trim()).filter(Boolean);
                     if (!list.includes(stamp)) list.push(stamp);
                     commands.push({ type: 'update', key: master, changes: { recurrenceException: list.join(',') } });
-                    if (action === 'EditOccurrence') {
+                    // One slot, one row: if this occurrence already has its edited row (someone else saved "This
+                    // event" on it while this editor was open), change that row instead of adding a second.
+                    const edited = action === 'EditOccurrence' && (store.getEvents() || []).find((e) => e && !blank(e.recurrenceID)
+                        && String(e.recurrenceID) === String(master.id) && String(e.recurrenceException || '').trim() === stamp);
+                    if (edited) {
+                        const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r);
+                        commands.push({ type: 'update', key: edited, changes: fields });
+                    } else if (action === 'EditOccurrence') {
                         commands.push({ type: 'add', event: { ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
                             recurrencerule: master.recurrencerule, recurrenceException: stamp } });
                     }
