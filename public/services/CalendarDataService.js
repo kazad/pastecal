@@ -307,7 +307,7 @@ class CalendarDataService {
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL
-                    window.location.href = `/view/${result.data.actualSlug}`;
+                    window.location.href = CalendarPath.view(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case

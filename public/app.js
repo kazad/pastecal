@@ -4140,7 +4140,7 @@ const CalendarVueApp = {
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar saved', 'success');
                     try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
-                    window.location.href = "/" + slug;
+                    window.location.href = CalendarPath.of(slug);   // encoded: "a?b" is not "/a" + a query (A04)
                 });
             });
         },
@@ -4340,7 +4340,7 @@ const CalendarVueApp = {
                         if (previous?.pinned) this.recentManager.togglePin(newId);
                         this.recentCalendars = this.recentManager.getAll();
 
-                        window.location = "/" + newId;
+                        window.location = CalendarPath.of(newId);
                     }, { asCreator: false });
                 }
             });
@@ -4474,12 +4474,12 @@ const CalendarVueApp = {
         // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}`;
+            return window.location.origin + CalendarPath.of(this.calendar.id);
         },
 
         getEditableICSURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}.ics`;
+            return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
         getReadOnlyICSURL() {
@@ -4501,8 +4501,9 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
-            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
-            return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
+            const name = (p) => { try { return decodeURIComponent(p); } catch (e) { return p; } };
+            if (atViewSlug() && parts.length === 2) return window.location.origin + CalendarPath.feed(CalendarPath.at(name(parts[0]).replace(/^@/, ''), name(parts[1])));
+            return parts[0] === 'view' && parts[1] ? window.location.origin + CalendarPath.feed(CalendarPath.view(name(parts[1]))) : null;
         },
 
         /**
@@ -4626,16 +4627,16 @@ const CalendarVueApp = {
          *  All three open the view-only calendar. */
         shareViewURL() {
             const n = this.shareNames, origin = window.location.origin;
-            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
-            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            if (n && n.handle && n.atName) return origin + CalendarPath.at(n.handle, n.atName);
+            if (n && n.shortNames.length) return origin + CalendarPath.of(n.shortNames[0]);
             return this.getReadOnlyURL();
         },
         /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
         otherViewLinks() {
             const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
             const all = [];
-            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
-            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            if (n && n.handle && n.atName) all.push(origin + CalendarPath.at(n.handle, n.atName));
+            if (n) for (const s of n.shortNames) all.push(origin + CalendarPath.of(s));
             const view = this.getReadOnlyURL();
             if (view) all.push(view);
             return all.filter((u) => u !== main);
@@ -6671,7 +6672,7 @@ const CalendarVueApp = {
                 return;
             }
             ProInsightIntent.set(id, 'stats');
-            window.location.href = '/' + encodeURIComponent(id);
+            window.location.href = CalendarPath.of(id);
         },
         /** Has this calendar had its one free trial? Only so the Go Pro card doesn't offer one it can't have. */
         async refreshProTrial() {

@@ -276,7 +276,7 @@ select { height: var(--pc-h-md); max-width: 100%; border: 1px solid var(--pc-fie
     $('hasHandle').hidden = !A.handle;
     if (A.handle) {
       $('handleLink').textContent = host + '/@' + A.handle;
-      $('handleLink').href = '/@' + A.handle;
+      $('handleLink').href = '/@' + encodeURIComponent(A.handle);
       $('newCalH').textContent = 'New calendar under @' + A.handle;
       $('newCalPre').textContent = '@' + A.handle + '/';
       $('newCalNote').textContent = 'Upgraded and locked to you, at its own ' + host + '/@' + A.handle + '/… link. As many as you like; they don\u2019t count toward your ' + A.proLimit + '.';
@@ -306,7 +306,7 @@ select { height: var(--pc-h-md); max-width: 100%; border: 1px solid var(--pc-fie
         change('/api/names/short/release', { name: x.name }, 'shortErr');
       });
       var row = el('div', { class: 'short-row' }, [
-        el('a', { class: 'short-name', href: '/' + x.name, target: '_blank', rel: 'noopener', text: host + '/' + x.name }),
+        el('a', { class: 'short-name', href: '/' + encodeURIComponent(x.name), target: '_blank', rel: 'noopener', text: host + '/' + x.name }),
         el('span', { class: 'grow', text: '→ ' + (cal ? cal.title : 'a calendar') })]);
       // Moving a link that may be printed on flyers: Change opens a picker, and only Save moves it.
       if (unl && mine.length > 1) {
@@ -349,8 +349,8 @@ select { height: var(--pc-h-md); max-width: 100%; border: 1px solid var(--pc-fie
       var chip = el('span', { class: 'chip' + (c.state === 'paused' ? ' warn' : c.state === 'open' ? '' : ' on'), 'data-testid': 'cal-status', text: label });
       var top = el('div', { class: 'cal-top' }, [el('span', { class: 'cal-title', text: c.title }), chip]);
       var links = el('div', { class: 'cal-links' }, [el('a', { href: '/' + encodeURIComponent(c.id), 'data-testid': 'cal-open', text: 'Open' })]);
-      if (c.atName && A.handle) links.appendChild(el('a', { href: '/@' + A.handle + '/' + c.atName, target: '_blank', rel: 'noopener', 'data-testid': 'cal-at-link', text: host + '/@' + A.handle + '/' + c.atName }));
-      (c.shortNames || []).forEach(function (n) { links.appendChild(el('a', { href: '/' + n, target: '_blank', rel: 'noopener', text: host + '/' + n })); });
+      if (c.atName && A.handle) links.appendChild(el('a', { href: '/@' + encodeURIComponent(A.handle) + '/' + encodeURIComponent(c.atName), target: '_blank', rel: 'noopener', 'data-testid': 'cal-at-link', text: host + '/@' + A.handle + '/' + c.atName }));
+      (c.shortNames || []).forEach(function (n) { links.appendChild(el('a', { href: '/' + encodeURIComponent(n), target: '_blank', rel: 'noopener', text: host + '/' + n })); });
       var li = el('li', { 'data-testid': 'cal-row', 'data-cal': c.id }, [top, links]);
       // @name for this calendar: add, rename, remove, show on my page.
       if (A.handle && (c.atName || (unl && c.state !== 'open'))) {

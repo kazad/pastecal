@@ -217,7 +217,7 @@ class CloudCalendarService extends CalendarDataService {
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {
-                            window.location.href = `/view/${lookup.data.actualSlug}`;
+                            window.location.href = CalendarPath.view(lookup.data.actualSlug);
                             return;
                         }
                     }
