@@ -218,9 +218,11 @@ test('a time typed in a new title moves the event live; the words go on save; Un
   for (const t of ['Room 5', 'Grades 3-5', 'Monica']) {
     const noon = await slot(page, "2026-10-27", 12);
     await page.mouse.click(noon.x, noon.y + 6);
+    await expect(page.getByTestId('card-title')).toBeFocused();
     await page.keyboard.type(t);
     await expect(line, t).toHaveText(/Tue, Oct 27\s*·\s*12 PM\s*–\s*1 PM/);
     await page.keyboard.press('Escape');
+    await expect(page.getByTestId('card-title')).toHaveCount(0);   // closed before the next click (under load a click on the closing card opened nothing)
   }
   expect(errors).toEqual([]);
   await ctx.close();
