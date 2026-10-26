@@ -133,17 +133,23 @@ test('A02 [feed] broken: a weekly Tuesday 5 PM practice (no per-event zone) reac
   finding('ICSService writes an event without event.tz in UTC (DTSTART:20261007T000000Z + RRULE:BYDAY=TU): the rule repeats on UTC Tuesdays (Monday evening in LA) at a fixed UTC hour; the calendar\'s own zone (options.tz) is ignored');
   const { id, viewId } = await seed([timed('w', 'Weekly practice', '2026-10-06T17:00:00-07:00', '2026-10-06T18:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=8;' })],
     { options: { tz: 'America/Los_Angeles' } });
+  // Every event made in the app has no zone of its own unless one is picked: quick add (classic) stores none.
+  const Q = await open(browser, `/${id}?backend=cf`);
+  await quickAdd(Q.page, 'Snack duty tomorrow 5pm');
+  await soon(async () => (await calOf(id)).events.length).toBe(2);
+  await Q.ctx.close();
+  expect('tz' in (await calOf(id)).events.find((e) => e.id !== 'w'), 'an event made in the app has no tz (so this applies to every app-made series)').toBe(false);
   const ics = await (await fetch(`${BASE}/view/${viewId}.ics`)).text();
   // What the calendar itself shows (classic, Syncfusion): Tuesdays at 5 PM, Nov 3 included.
   const C = await open(browser, `/${id}?backend=cf&view=week&date=2026-11-03`);
-  const shown = await C.page.evaluate(() => window.scheduleObj.getEvents(new Date(2026, 9, 1), new Date(2026, 11, 1), true).map((e) => new Date(e.StartTime).toString().slice(0, 21)));
+  const shown = await C.page.evaluate(() => window.scheduleObj.getEvents(new Date(2026, 9, 1), new Date(2026, 11, 1), true).filter((e) => e.Subject === 'Weekly practice').map((e) => new Date(e.StartTime).toString().slice(0, 21)));
   await C.ctx.close();
   // What a subscriber's calendar app shows: the feed read by ical.js, in Los Angeles.
   const { ctx, page } = await browserFor(browser);
   await page.goto(`${BASE}/about.html`);
   await page.addScriptTag({ url: ICALJS });
   const feed = await page.evaluate((t) => {
-    const ev = new ICAL.Event(new ICAL.Component(ICAL.parse(t)).getFirstSubcomponent('vevent'));
+    const ev = new ICAL.Event(new ICAL.Component(ICAL.parse(t)).getAllSubcomponents('vevent').find((v) => v.getFirstPropertyValue('uid') === 'w'));
     const out = [], it = ev.iterator();
     let next;
     while ((next = it.next()) && out.length < 12) out.push(next.toJSDate().toString().slice(0, 21));
@@ -440,17 +446,20 @@ test('A18 [search] nit: "cafe" does not find "Café meetup" (accents must be typ
   await ctx.close();
 });
 
-test('A19 [open] data-loss: a calendar whose name ends in a space ("royal city ") opens as a blank new calendar', async ({ browser }) => {
-  finding('findAndSubscribe trusts /api/lookup\'s actualSlug, and the directory trims names (SlugService.normalizeSlug + the row it registered): "royal city" != "royal city ", so the app re-subscribes to a calendar that does not exist');
-  const real = `${rand().slice(-4)} royal city `;
-  await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')], { id: real, title: 'Royal City' });
-  expect((await calOf(real)).id, 'the server has it, under its real name').toBe(real);
-  const { ctx, page } = await open(browser, `/${encodeURIComponent(real)}?backend=cf`, { now: NOW });
-  await page.waitForTimeout(1000);
-  await shot(page, 'A19-trailing-space-blank');
-  expect({ existing: await vm(page, 'p.isExisting'), title: await vm(page, 'p.calendar.title'), practice: await page.locator('.e-appointment:visible', { hasText: 'Practice' }).count() },
-    'the calendar, its title and its event').toEqual({ existing: true, title: 'Royal City', practice: 1 });
-  await ctx.close();
+test('A19 [open] data-loss: a calendar whose name ends in a space ("royal city ") opens as an unsaved draft under the trimmed name (sometimes blank): edits there never reach it', async ({ browser }) => {
+  finding('CalendarDirectory /register trims actualSlug and targetId ("royal city"), /api/lookup returns that, and CloudCalendarService.findAndSubscribe re-subscribes to it because it differs from the real name');
+  const out = {};
+  for (const noView of [false, true]) {
+    const real = `${rand().slice(-4)} royal city `;
+    await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')], { id: real, title: 'Royal City', noView });
+    expect((await calOf(real)).id, 'the server has it, under its real name').toBe(real);
+    const { ctx, page } = await open(browser, `/${encodeURIComponent(real)}?backend=cf`, { now: NOW });
+    await page.waitForTimeout(1000);
+    await shot(page, `A19-trailing-space-blank${noView ? '-noview' : ''}`);
+    out[noView ? 'no view link' : 'with a view link'] = { existing: await vm(page, 'p.isExisting'), practice: await page.locator('.e-appointment:visible', { hasText: 'Practice' }).count() };
+    await ctx.close();
+  }
+  expect(out, 'the calendar and its event').toEqual({ 'with a view link': { existing: true, practice: 1 }, 'no view link': { existing: true, practice: 1 } });
 });
 
 test('A20 [view] ugly: on a phone, a view link\'s notes are hidden in the ⋮ menu: nothing on screen says the calendar has notes (desktop pins them open)', async ({ browser }) => {
@@ -461,6 +470,19 @@ test('A20 [view] ugly: on a phone, a view link\'s notes are hidden in the ⋮ me
   const shown = await page.getByText('Rainouts decided by 7am').isVisible().catch(() => false);
   const control = await page.locator('button:visible, a:visible').filter({ hasText: /^\s*Notes\s*$/ }).count();
   expect(shown || control > 0, 'the notes, or a Notes button, on screen without opening a menu').toBe(true);
+  await ctx.close();
+});
+
+test('A21 [share] nit (a11y): copying a link in Share says "Copied" only by renaming the button; nothing is announced to a screen reader', async ({ browser }) => {
+  finding('copyLink swaps the button text (copiedKey) with no live region; the page\'s live regions are only Syncfusion\'s (the date range, its editor\'s time zone labels)');
+  const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`, { now: NOW });
+  await page.getByTestId('share-pill-more').click();
+  await page.getByTestId('share-edit-copy').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('share-edit-copy')).toContainText('Copied');
+  const live = await page.evaluate(() => [...document.querySelectorAll('[aria-live]:not([aria-live=off]), [role=status], [role=alert]')].map((e) => e.textContent.trim()).filter(Boolean));
+  expect(live.some((t) => /copied/i.test(t)), `a live region says it was copied: ${JSON.stringify(live)}`).toBe(true);
   await ctx.close();
 });
 
