@@ -433,7 +433,7 @@ const NativeCalendar = (() => {
             // The main app (textOn): its calendar paints event text dark or white by contrast with the event
             // color (ScheduleAdapter.onColor), so a category looks the same here as there. Nothing otherwise.
             ink(type) { return this.textOn && !this.v2 ? { color: this.textOn(this.color(type)) } : null; },
-            earlyLabel() { const h = parseInt(this.startHour, 10); return this.timeFormat === '24' ? `00-${pad(h - 1)}` : `12-${(h - 1) % 12 || 12} AM`; },
+            earlyLabel() { if (this.appLook) return 'Earlier'; const h = parseInt(this.startHour, 10); return this.timeFormat === '24' ? `00-${pad(h - 1)}` : `12-${(h - 1) % 12 || 12} AM`; },
             // People plan by color ("the orange ones are soccer"), so events are blocks of
             // their color with WHITE text, exactly as in the main app -- a category must look
             // the same in both (Sep 26: picking black text for contrast made coral events

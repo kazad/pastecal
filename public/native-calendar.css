@@ -98,7 +98,7 @@
 .nc-grid-body { display: grid; grid-template-columns: 72px 1fr; position: relative; }
 .nc-gutter { position: relative; border-right: 1px solid var(--pc-line); }
 .nc-hour-label { height: 48px; font-size: var(--pc-fs-2xs); color: var(--pc-text-muted); text-align: right; padding: var(--pc-space-1) 10px 0 0; border-bottom: 1px solid var(--pc-line); box-sizing: border-box; }
-.nc-now-label { position: absolute; right: var(--pc-space-2); transform: translateY(-50%); font-size: var(--pc-fs-2xs); color: var(--pc-primary); background: var(--pc-bg); }
+.nc-now-label { position: absolute; left: 0; right: 0; padding-right: 10px; text-align: right; transform: translateY(-50%); font-size: var(--pc-fs-2xs); color: var(--pc-primary); background: var(--pc-bg); }
 .nc-grid-cols { display: grid; grid-template-columns: repeat(var(--cols, 7), minmax(0, 1fr)); position: relative; }
 .nc-col { position: relative; border-right: 1px solid var(--pc-line); }
 .nc-col:last-of-type { border-right: 0; }
@@ -171,10 +171,6 @@
 .np-sub { display: block; color: var(--pc-text-muted); font-size: var(--pc-fs-xs); margin-top: 2px; }
 .np-desc { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; user-select: text; }
 .np-desc a { color: var(--pc-link); text-decoration: underline; }
-@media (max-width: 639px) {
-    /* Phones: a sheet along the bottom, like the side panel. */
-    .np { top: auto !important; left: 0 !important; right: 0; bottom: 0; width: 100%; max-width: none; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; }
-}
 
 /* ---- the page around it ----------------------------------------------------------------- */
 .pc-native-cal { min-height: 0; }

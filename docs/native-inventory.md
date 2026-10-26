@@ -113,6 +113,33 @@ events in, `{ event, start, end, allDay, title, type }` out), never Syncfusion's
 | `setReadOnly(on)`, `closePopups()` | lock state |
 | `openEditor(event)` | search result's Edit (native: milestone 2) |
 
-## Measured: a view link, classic vs native
+## Milestone 1: view links on the native calendar
 
-See "Bytes" in the milestone report; filled in below by the native-view-links spec run.
+The flag: `?cal=native|classic`, else `localStorage pc_cal`, else the server's `<meta name="pc-cal">`
+(Worker var `NATIVE_VIEW_LINKS="1"`, unset = classic). Decided in index.html's head, by path (`/view/<id>`,
+`/@handle/<name>`): edit links, and locked calendars opened from one, stay classic. In native mode
+index.html writes in rrule (jsDelivr, SRI), `nativecal/components/{ncUx,NcIcon,NativeCalendar,EventPopover}.js`
+and `native-calendar.css` instead of `ej2-calendar.min.js` and `material(.dark).css`.
+
+Changes to the shared components are additive (defaults leave /beta as it was): NativeCalendar gained
+`openDayOnClick`, `appLook`, `textOn`, `monthRowHeight`, a `range-change` emit, `visibleRange()` and the static
+`NativeCalendar.occurrencesBetween`; its all-day reader takes the display shape as local dates (fixes UTC+13).
+EventPopover gained `textOn`.
+
+### Bytes: one first visit to a view link (cold cache, wrangler dev, which gzips as production does)
+
+From `cloudflare/test/native-view-links.spec.js` (CDP `encodedDataLength`, Oct 25 2026):
+
+| | Transferred | Files | Syncfusion | Calendar code |
+|---|---|---|---|---|
+| Classic | 1537 KB | 45 | 906 KB | (in Syncfusion) |
+| Native | 496 KB | 47 | 0 | 42 KB (NativeCalendar, popover, icons, CSS, rrule) |
+
+About 1 MB less, two thirds of the page. The rest of the native page is fonts, Vue, app.js and the other services.
+
+### Not yet the same as classic
+
+- Week / Day: classic tints the hours outside 9-5; native tints only weekends.
+- A multi-day bar cut by the week edge: classic draws « and »; native squares the corner.
+- No `location` field exists in the event model, so neither popup shows one.
+- The native editor, drag-to-create, Undo and Recent changes are milestone 2 (edit links); `openEditor` is a no-op.
