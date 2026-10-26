@@ -1340,7 +1340,7 @@ test('details: links are live in the full card until it is edited; a link opens 
   expect(await view.evaluate((el) => el.textContent), 'the text exactly as stored').toBe(fx.description);
   const hrefs = await view.locator('a').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.target, a.rel]));
   expect(hrefs.length).toBeGreaterThanOrEqual(4);
-  for (const [href, target, rel] of hrefs) { expect(href).toMatch(/^(https?:|mailto:)/); expect(target).toBe('_blank'); expect(rel).toContain('noopener'); }
+  for (const [href, target, rel] of hrefs) { expect(href).toMatch(/^(https?:|mailto:|tel:)/); expect(target).toBe('_blank'); expect(rel).toContain('noopener'); }
   expect(await view.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'a long URL wraps').toBe(true);
   expect((await card(page).boundingBox()).width).toBeLessThanOrEqual(680);
   // A link: a new tab at that address, and the box stays as it is (no editing).

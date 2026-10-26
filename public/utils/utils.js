@@ -523,7 +523,9 @@ function linkify(inputText, { style = true } = {}) {
         const tel = /^tel:/i.test(link), shown = link.replace(/^(mailto|tel):/i, '');
         const href = tel ? `tel:${shown.replace(/[^0-9+]/g, '')}` : /^www\./i.test(link) ? `http://${link}`
             : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${shown}` : link);
-        out += escapeHtml(text.slice(last, m.index))
+        // The prefix stays in the text, hidden: the shown text is still exactly what was typed (a click on it places the caret there).
+        const prefix = link.slice(0, link.length - shown.length);
+        out += escapeHtml(text.slice(last, m.index)) + (prefix ? `<span hidden>${escapeHtml(prefix)}</span>` : '')
             + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(shown)}</a>`;
         last = m.index + link.length;
     }
