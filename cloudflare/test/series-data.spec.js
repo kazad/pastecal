@@ -270,3 +270,19 @@ for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe
     expect(await shown(true)).toEqual(classic);
   });
 }
+
+// =====================================================================================================
+test('a description full of markup and odd links shows as text in the popup: no injected elements, only safe hrefs', async ({ browser }) => {
+  const nasty = 'http://a.co/"onmouseover="alert(1) www.a.co\'><img src=x onerror=alert(1)> javascript:alert(1) a"b@x.co &lt;script&gt;';
+  const id = await seed([{ ...PIANO()[0], description: nasty }]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-26');
+  await page.locator('.nc [data-testid="event-s1"]').first().click();
+  const d = page.getByTestId('popover-description');
+  await expect(d).toBeVisible();
+  expect(await d.evaluate((el) => el.querySelectorAll('img,script,iframe,[onmouseover],[onerror]').length)).toBe(0);
+  const hrefs = await d.evaluate((el) => [...el.querySelectorAll('a')].map((a) => a.getAttribute('href')));
+  for (const h of hrefs) expect(h, h).toMatch(/^(https?:|mailto:)/);
+  expect(await d.textContent()).toContain('javascript:alert(1)');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
