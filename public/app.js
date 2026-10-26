@@ -1291,7 +1291,7 @@ const CalendarVueApp = {
         // reader's attention is. Closes the innermost thing first, so one key backs out
         // in the order the user entered.
         this._escapeHandler = (e) => {
-            if (e.key !== 'Escape') return;
+            if (!pcKeys.is(e, 'Escape')) return;
             // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
             if (this.nativeAsk) { this.nativeAnswer(null); return; }
             if (this.nativeEditor) { this.closeNativeEditor(); return; }
@@ -1619,7 +1619,7 @@ const CalendarVueApp = {
                 this._nativeCardClosedAt = false;
                 closedAtPress = false;
             }, true);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            document.addEventListener('keydown', (e) => { if (pcKeys.is(e, 'Escape')) this.nativePopover = null; });
             if (this.nativeEdit) document.addEventListener('keydown', (e) => this.onNativeKey(e));
             // A locked calendar ignores a double-click on a day: say why (as classic does).
             document.addEventListener('dblclick', (e) => {
@@ -2558,7 +2558,7 @@ const CalendarVueApp = {
         },
         /** Tab stays inside the open question. */
         nativeAskTrap(e) {
-            if (e.key !== 'Tab') return;
+            if (!pcKeys.is(e, 'Tab')) return;
             const items = [...e.currentTarget.querySelectorAll('button, input')].filter((x) => x.offsetParent !== null);
             if (!items.length) return;
             const i = items.indexOf(document.activeElement);
@@ -6877,6 +6877,8 @@ vueApp.config.errorHandler = (err, instance, info) => {
 };
 // The native calendar's icons, used inside its own templates (a native view link only).
 if (typeof NcIcon !== 'undefined') vueApp.component('nc-icon', NcIcon);
+// Shortcut labels in any template: pcKeys.mod('D') is "⌘D" on a Mac, "Ctrl+D" elsewhere (utils/keys.js).
+vueApp.config.globalProperties.pcKeys = window.pcKeys;
 const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)

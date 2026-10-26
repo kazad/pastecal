@@ -570,7 +570,7 @@ const EventCard = (() => {
             },
             pickKey(e) {
                 // Inside a picker: Tab stays in it; Escape is handled by onKey.
-                if (e.key !== 'Tab') return;
+                if (!pcKeys.is(e, 'Tab')) return;
                 const items = [...this.$refs.pick.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
                 if (!items.length) return;
                 const i = items.indexOf(document.activeElement);
@@ -744,7 +744,7 @@ const EventCard = (() => {
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------
             onKey(e) {
                 if (this.blocked) return;
-                if (e.key === 'Escape') {
+                if (pcKeys.is(e, 'Escape')) {
                     if (this.menu) { this.menu = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.picker) { this.closePicker(); e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.custom) { this.closeCustom(); e.stopImmediatePropagation(); e.preventDefault(); return; }   // (the repeat settings, then the card)
@@ -752,7 +752,7 @@ const EventCard = (() => {
                     this.cancel();
                     return;
                 }
-                if (e.key === 'Tab' && !this.picker && !this.menu) {
+                if (pcKeys.is(e, 'Tab') && !this.picker && !this.menu) {
                     const c = this.$refs.card;
                     if (!c) return;
                     const items = [...c.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement);
@@ -895,7 +895,7 @@ const EventCard = (() => {
 </div>
 
 <div v-if="menu" ref="menu" class="nk-menu" role="menu" :style="menuStyle" data-testid="card-menu" @keydown="pickKey">
-  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>⌘D</kbd></button>
+  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>{{ pcKeys.mod('D') }}</kbd></button>
   <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>⌫</kbd></button>
 </div>
 
@@ -905,12 +905,12 @@ const EventCard = (() => {
     <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedTime" @keydown.down.prevent="$refs.tlist && ($refs.tlist.querySelector('.cur') || $refs.tlist.querySelector('button')).focus()">
     <div ref="tlist" class="nk-plist" @keydown="listKey">
-      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
+      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
     </div>
   </template>
   <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed' || picker.kind === 'until'">
     <div v-if="picker.kind === 'ed' && !v.isAllDay" class="nk-plist nk-plist-top">
-      <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
+      <button type="button" :class="{ cur: sameDay }" :aria-current="sameDay ? 'true' : null" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
       <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(v.start, 1))">Next day <small>{{ d(addDays(v.start, 1)) }}</small></button>
     </div>
     <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Oct 20, Fri, tomorrow" data-testid="picker-input"
@@ -935,7 +935,7 @@ const EventCard = (() => {
     </div>
   </template>
   <div v-else-if="picker.kind === 'dur'" class="nk-plist" @keydown="listKey">
-    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
+    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
   </div>
   <template v-else-if="picker.kind === 'cat'">
     <template v-if="!labelNames">
@@ -953,8 +953,8 @@ const EventCard = (() => {
     </template>
   </template>
   <div v-else-if="picker.kind === 'rep'" class="nk-plist" @keydown="listKey">
-    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
-    <button v-if="presetNow === 'custom'" type="button" class="cur" data-r="current" @click="closePicker()">{{ repText }}</button>
+    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :aria-current="presetNow === p.id ? 'true' : null" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
+    <button v-if="presetNow === 'custom'" type="button" class="cur" aria-current="true" data-r="current" @click="closePicker()">{{ repText }}</button>
     <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
   </div>
 </div>

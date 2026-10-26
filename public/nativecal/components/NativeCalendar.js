@@ -486,7 +486,7 @@ const NativeCalendar = (() => {
             };
             this._touchOn(this.appEdits && !this.readOnly);
             // Escape drops a drag where it started (and the click that ends it does nothing).
-            this._onKey = (e) => { if (e.key === 'Escape' && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
+            this._onKey = (e) => { if (pcKeys.is(e, 'Escape') && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
             window.addEventListener('keydown', this._onKey, true);
             this._onDocClick = (e) => { if (this.pickerOpen && !e.target.closest('.nc-picker, .nc-title')) this.pickerOpen = false; };
             document.addEventListener('mousedown', this._onDocClick);

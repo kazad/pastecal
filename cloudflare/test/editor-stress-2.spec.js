@@ -54,11 +54,15 @@ const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true },
   p360: { viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true },
 };
-/** A browser at a fixed time. o: device (DEVICES key), colorScheme, locale, timezoneId, settings (pastecal_global_settings), classic. */
+/** A browser at a fixed time. o: device (DEVICES key), colorScheme, locale, timezoneId, settings (pastecal_global_settings), classic, platform. */
 async function open(browser, id, query = '', o = {}) {
   const { device = 'desk', timezoneId = 'America/Los_Angeles', settings = null, colorScheme = 'light', locale = 'en-US', classic = false } = o;
   const ctx = await browser.newContext({ ...DEVICES[device], timezoneId, locale, colorScheme });
   await ctx.addInitScript((g) => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); if (g) localStorage.setItem('pastecal_global_settings', JSON.stringify(g)); } catch (e) { /* blocked */ } }, settings);
+  if (o.platform) await ctx.addInitScript((p) => {   // (a Windows or Mac keyboard: navigator.platform, no userAgentData)
+    Object.defineProperty(Navigator.prototype, 'platform', { get: () => p, configurable: true });
+    Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true });
+  }, o.platform);
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(o.now || NOW) });
@@ -208,8 +212,7 @@ test('S05 [card]: on an 11 PM - midnight event, typing the end "11:30p" ends it 
   await ctx.close();
 });
 
-test('S06 [card] broken (CJK): Enter that confirms an IME conversion saves and closes a new event mid-word; Escape that cancels a conversion throws the event away', async ({ browser }) => {
-  finding('EventCard: @keydown.enter and the window Escape handler ignore event.isComposing (keyCode 229)');
+test('S06 [card] (CJK): the Enter that confirms an IME conversion and the Escape that cancels one leave a new event open and unsaved (they saved it mid-word, and threw it away)', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27', { locale: 'ja-JP' });
   const at = await slot(page, '2026-10-27', 10);
@@ -301,8 +304,7 @@ test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliv
   await ctx.close();
 });
 
-test('S12 [card] nit (a11y): the time, length and repeat lists show the current choice by color only (the type list says aria-selected)', async ({ browser }) => {
-  finding('EventCard: .nk-plist buttons for s/e/dur/rep carry class "cur" and no aria-selected / aria-current');
+test('S12 [card] (a11y): the time, length and repeat lists say which is the current choice (aria-current; it was by color only), as the type list does', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'), true);
@@ -317,23 +319,27 @@ test('S12 [card] nit (a11y): the time, length and repeat lists show the current 
   await ctx.close();
 });
 
-test('S14 [card] nit: on Windows and Linux the shortcuts sheet and the event menu say ⌘D and ⌘Z (the keys there are Ctrl+D and Ctrl+Z)', async ({ browser }) => {
-  finding('the shortcuts dialog and the card menu print ⌘ whatever the platform');
-  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
-  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
-  expect(await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform))).toBe(false);
-  await page.keyboard.press('?');
-  await expect(page.getByTestId('shortcuts-close')).toBeVisible();
-  await shot(page, 'S14-shortcuts-cmd-on-linux');
-  const sheet = await page.getByTestId('shortcuts').innerText();
-  expect(sheet).toContain('Duplicate');
-  await page.keyboard.press('Escape');
-  await openCard(page, ev(page, 'p'), true);
-  await page.getByTestId('card-more-actions').click();
-  const menu = await page.getByTestId('card-menu').innerText();
-  expect({ sheet: /⌘/.test(sheet), menu: /⌘/.test(menu) }, 'Ctrl, not ⌘, off a Mac').toEqual({ sheet: false, menu: false });
-  await ctx.close();
-});
+// S14 (root 7): shortcuts are spelled by utils/keys.js for the keyboard in front of the reader.
+for (const [platform, want] of [['Win32', { d: 'Ctrl+D', z: 'Ctrl+Z', alt: 'Alt' }], ['Linux x86_64', { d: 'Ctrl+D', z: 'Ctrl+Z', alt: 'Alt' }], ['MacIntel', { d: '⌘D', z: '⌘Z', alt: '⌥' }]]) {
+  test(`S14 [card] on ${platform} the shortcuts sheet and the event menu say ${want.d} and ${want.z} (they said ⌘D and ⌘Z everywhere)`, async ({ browser }) => {
+    const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+    const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { platform });
+    expect(await page.evaluate(() => navigator.platform)).toBe(platform);
+    await page.keyboard.press('?');
+    await expect(page.getByTestId('shortcuts-close')).toBeVisible();
+    await shot(page, `S14-shortcuts-${platform.split(' ')[0]}`);
+    const sheet = await page.getByTestId('shortcuts').innerText();
+    expect(sheet).toContain('Duplicate');
+    await page.keyboard.press('Escape');
+    await openCard(page, ev(page, 'p'), true);
+    await page.getByTestId('card-more-actions').click();
+    const menu = await page.getByTestId('card-menu').innerText();
+    const mac = platform === 'MacIntel';
+    expect({ sheetD: sheet.includes(want.d), sheetZ: sheet.includes(want.z), sheetAlt: sheet.includes(`${want.alt} drag`), menuD: menu.includes(want.d),
+      macSigns: /[⌘⌥]/.test(sheet + menu) }, sheet + '\n' + menu).toEqual({ sheetD: true, sheetZ: true, sheetAlt: true, menuD: true, macSigns: mac });
+    await ctx.close();
+  });
+}
 
 // =====================================================================================================
 // Checked and found right.
