@@ -448,12 +448,21 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await P().getByTestId('custom-interval').fill('2');
   for (const d of [1, 3, 0]) await P().getByTestId(`custom-day-${d}`).click();   // Thursday (the event's day) is on already
   await P().getByTestId('custom-end-until').check();
-  await P().getByTestId('custom-until').fill('2026-12-31');
+  await P().getByTestId('custom-until').fill('2026-12-24');
   await P().getByTestId('custom-apply').click();
-  const dec31 = await page.evaluate(() => new Date(2026, 11, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
-  expect(dec31).toBe('20261231T080000Z');
-  await soon(() => rule('p')).toBe(`FREQ=WEEKLY;BYDAY=MO,WE,TH,SU;INTERVAL=2;UNTIL=${dec31};`);
-  await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 weeks on Sun, Mon, Wed, Thu, until Dec 31/);
+  const dec24 = await page.evaluate(() => new Date(2026, 11, 24).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
+  expect(dec24).toBe('20261224T080000Z');
+  await soon(() => rule('p')).toBe(`FREQ=WEEKLY;BYDAY=MO,WE,TH,SU;INTERVAL=2;UNTIL=${dec24};`);
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 weeks on Sun, Mon, Wed, Thu, until Dec 24/);
+  // UNTIL is classic's local midnight, and the series still runs through that day: the 5 PM Thursday on Dec 24 is drawn
+  // (both calendars read UNTIL through the end of its day; rrule.js alone, by instant, would stop at midnight).
+  const dec = await ctx.newPage();
+  await dec.clock.install({ time: new Date(NOW) });
+  await dec.goto(`/${id}?backend=cf&cal=native&view=month&date=2026-12-15`);
+  await expect(dec.locator('.nc-bar', { hasText: 'Fall party' }).first()).toBeVisible({ timeout: 15_000 });
+  const thursdays = (await daysOf(dec, 'event-p')).filter((d) => new Date(`${d}T12:00`).getDay() === 4);
+  expect(thursdays, 'every other Thursday through Dec 24, the UNTIL date itself included').toEqual(['2026-12-10', '2026-12-24']);
+  await dec.close();
   // Monthly on day 15, 3 times; then yearly on October 15.
   await custom();
   await P().getByTestId('custom-unit').selectOption('MONTHLY');
