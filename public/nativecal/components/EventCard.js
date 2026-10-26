@@ -756,8 +756,8 @@ const EventCard = (() => {
       <span v-if="v.rule" class="nk-qrep"> · {{ repText }}</span>
     </div>
     <div v-if="!full && detText.trim()" class="nk-qdet-wrap">
-      <div ref="qdet" class="nk-qdet" :class="{ all: showAll, fade: clamped }" data-testid="card-details-preview" v-html="linked"
-        @click="!$event.target.closest('a') && expand('det')"></div>
+      <div class="nk-qdet" :class="{ all: showAll, fade: clamped }" data-testid="card-details-preview"
+        @click="!$event.target.closest('a') && expand('det')"><div ref="qdet" class="nk-qtext" v-html="linked"></div></div>
       <button v-if="clamped || showAll" type="button" class="nk-showall" data-testid="card-show-all" @click="showAll = !showAll; $nextTick(() => { measureClamp(); fit(); })">{{ showAll ? 'Show less' : 'Show all' }}</button>
     </div>
     <div v-if="!full && !isNew" class="nk-meta" data-testid="card-edited">{{ card.edited || '\u00a0' }}</div>

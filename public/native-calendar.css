@@ -238,11 +238,14 @@
 .nk-qline.nk-pulse { animation: nk-pulse .35s ease-out; }
 @keyframes nk-pulse { 40% { transform: scale(1.02); } }
 .nk-qdet-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: calc(-1 * var(--pc-space-2)); }
-.nk-qdet { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; align-self: stretch; color: var(--pc-text-2); font-size: var(--pc-fs-md);
-    line-height: 1.45; padding: var(--pc-space-1) var(--pc-space-2); margin: 0 calc(-1 * var(--pc-space-2)); border-radius: var(--pc-radius-control); cursor: pointer;
-    white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.nk-qdet.fade { -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent); mask-image: linear-gradient(to bottom, black 60%, transparent); }
-.nk-qdet.all { display: block; -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
+/* The box (padding, hover) around the text; the text itself is clamped, so the cut falls between two whole lines and
+   the box's padding never shows a sliver of the fifth one. */
+.nk-qdet { align-self: stretch; color: var(--pc-text-2); font-size: var(--pc-fs-md);
+    line-height: 1.45; padding: var(--pc-space-1) var(--pc-space-2); margin: 0 calc(-1 * var(--pc-space-2)); border-radius: var(--pc-radius-control); cursor: pointer; }
+.nk-qtext { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.nk-qdet.fade .nk-qtext { -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent); mask-image: linear-gradient(to bottom, black 60%, transparent); }
+.nk-qdet.all { max-height: 40vh; overflow-y: auto; }
+.nk-qdet.all .nk-qtext { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .nk-qdet:hover { background: var(--pc-soft); }
 .nk-qdet a, .nk-det-link { color: var(--pc-link); text-decoration: underline; }
 .nk-showall, .nk-more { border: 0; background: none; color: var(--pc-link); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); cursor: pointer;
@@ -267,7 +270,7 @@
 .nk-switch[aria-checked="true"] i { background: var(--pc-primary); }
 .nk-switch[aria-checked="true"] i::after { transform: translateX(16px); }
 .nk-durb { justify-self: end; display: inline-flex; align-items: center; gap: var(--pc-space-1); border: 0; background: transparent; border-radius: var(--pc-radius-control);
-    min-height: var(--pc-h-sm); padding: 0 6px 0 var(--pc-space-2); margin-right: -6px; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium); color: var(--pc-text-2); cursor: pointer; white-space: nowrap; }
+    min-height: var(--pc-h-sm); padding: 0 6px 0 var(--pc-space-2); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium); color: var(--pc-text-2); cursor: pointer; white-space: nowrap; }
 .nk-durb:hover, .nk-durb[aria-expanded="true"] { background: var(--pc-soft); }
 .nk-tz { margin: -6px 0 0 60px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-text-muted); display: flex; align-items: center; min-height: var(--pc-h-sm); position: relative; }
 .nk-tz > .nk-gi { position: absolute; left: -60px; }
