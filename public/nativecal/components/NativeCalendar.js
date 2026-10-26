@@ -214,20 +214,27 @@ const NativeCalendar = (() => {
         return bars;
     }
 
-    // Side-by-side columns for overlapping timed events in one day.
-    function layoutDayColumns(items) {
+    // Side-by-side columns for overlapping timed events in one day, at most `cap` across: past that, cap - 1 columns
+    // and a "+N" in the last one (Google's week view). -> { shown: items, more: [{ top, height, col, cols, n }] }
+    function layoutDayColumns(items, cap = Infinity) {
         const groups = []; let group = [], groupEnd = -Infinity;
         for (const it of items.sort((a, b) => a.top - b.top || b.height - a.height)) {
             if (it.top >= groupEnd && group.length) { groups.push(group); group = []; }
             group.push(it); groupEnd = Math.max(groupEnd, it.top + it.height);
         }
         if (group.length) groups.push(group);
+        const shown = [], more = [];
         for (const g of groups) {
             const colEnds = [];
             for (const it of g) { let c = 0; while (colEnds[c] !== undefined && colEnds[c] > it.top) c++; colEnds[c] = it.top + it.height; it.col = c; }
-            for (const it of g) it.cols = colEnds.length;
+            const n = colEnds.length, cols = n > cap ? cap : n;
+            for (const it of g) { it.cols = cols; if (n <= cap || it.col < cap - 1) shown.push(it); }
+            if (n <= cap) continue;
+            const hidden = g.filter((it) => it.col >= cap - 1);
+            const top = Math.min(...hidden.map((it) => it.top)), bottom = Math.max(...hidden.map((it) => it.top + it.height));
+            more.push({ top, height: Math.max(bottom - top, 18), col: cap - 1, cols: cap, n: hidden.length });
         }
-        return items;
+        return { shown, more };
     }
 
     const component = {
@@ -280,6 +287,8 @@ const NativeCalendar = (() => {
                 selectedCell: null,
                 drag: null,
                 isPhone: typeof window !== 'undefined' && window.innerWidth < 768,
+                gridW: typeof window !== 'undefined' ? window.innerWidth : 1000,   // the calendar's width (columns of overlapping events)
+                allDayOpen: false,   // the week's all-day row shows every line ("+N more")
                 v2: typeof NcUx !== 'undefined' && NcUx.v2(),
             };
         },
@@ -361,11 +370,15 @@ const NativeCalendar = (() => {
             firstHour() { const h = parseInt(this.startHour, 10); return this.showEarlyHours || isNaN(h) ? 0 : Math.max(0, Math.min(h, 12)); },
             hours() { const r = []; for (let h = this.firstHour; h < 24; h++) r.push(h); return r; },
             gridLayout() {
-                const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], allDayLanes: 0 };
+                const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], more: [], allDayHidden: [], allDayLanes: 0, allDayFolds: false };
                 const s = days[0], e = addDays(days[days.length - 1], 1);
                 const occs = occurrencesBetween(this.shownEvents, s, e);
                 const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
-                const timed = days.map(day => {
+                // Overlapping events never narrower than 40px: the columns that fit (at least two), then "+N".
+                const colPx = ((this.gridW || 1000) - (this.isPhone ? 48 : 72)) / days.length;
+                const cap = Math.max(2, Math.floor(colPx / 40));
+                const more = [];
+                const timed = days.map((day, i) => {
                     const dayEnd = addDays(day, 1); const items = [];
                     for (const o of occs) {
                         if (isLong(o) || o.end <= day || o.start >= dayEnd) continue;
@@ -377,9 +390,19 @@ const NativeCalendar = (() => {
                         if (top + height <= 0) continue;
                         items.push({ occ: o, top: Math.max(top, 0), height: top < 0 ? height + top : height });
                     }
-                    return layoutDayColumns(items);
+                    const out = layoutDayColumns(items, cap);
+                    more[i] = out.more;
+                    // Too narrow for a time range on one line: a two-line title and the start time alone ("4:30").
+                    for (const it of out.shown) { it.narrow = colPx / it.cols < 120; it.tiny = colPx / it.cols < 70; }
+                    return out.shown;
                 });
-                return { allDay: allDayBars, timed, allDayLanes: allDayBars.reduce((m, b) => Math.max(m, b.lane + 1), 0) };
+                // The all-day row: up to three lines; past that two and a "+N more" line, until "+N more" opens it all.
+                const lanes = allDayBars.reduce((m, b) => Math.max(m, b.lane + 1), 0);
+                const MAX = 3, folded = lanes > MAX && !this.allDayOpen;
+                const allDayHidden = days.map(() => 0);
+                if (folded) for (const b of allDayBars) if (b.lane >= MAX - 1) for (let c = b.col; c < b.col + b.span; c++) allDayHidden[c]++;
+                return { allDay: folded ? allDayBars.filter((b) => b.lane < MAX - 1) : allDayBars, timed, more, allDayHidden,
+                    allDayLanes: folded ? MAX : lanes + (lanes > MAX ? 1 : 0), allDayFolds: lanes > MAX };
             },
             nowTop() { return (wallHours(this.now) - this.firstHour) * HOUR_PX; },
             // ---- year --------------------------------------------------------------------
@@ -438,6 +461,10 @@ const NativeCalendar = (() => {
             this._tick = setInterval(() => { this.now = new Date(); }, 60000);
             this._onResize = () => { this.isPhone = window.innerWidth < 768; };
             window.addEventListener('resize', this._onResize);
+            if (typeof ResizeObserver === 'function' && this.$el && this.$el.nodeType === 1) {
+                this._ro = new ResizeObserver(() => { const w = this.$el.clientWidth; if (w && Math.abs(w - this.gridW) > 1) this.gridW = w; });
+                this._ro.observe(this.$el);
+            }
             this._onMove = (e) => this.onDragMove(e);
             this._onUp = (e) => this.onDragEnd(e);
             window.addEventListener('mousemove', this._onMove);
@@ -468,6 +495,7 @@ const NativeCalendar = (() => {
         },
         beforeUnmount() {
             clearInterval(this._tick);
+            if (this._ro) this._ro.disconnect();
             window.removeEventListener('resize', this._onResize);
             window.removeEventListener('mousemove', this._onMove);
             window.removeEventListener('mouseup', this._onUp);
@@ -523,6 +551,10 @@ const NativeCalendar = (() => {
             togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
             pickMonth(m) { this.date = new Date(this.pickerYear, m, 1); this.pickerOpen = false; },
             openDay(d) { this.date = startOfDay(d); this.setView('Day'); },
+            // "+N" over overlapping events: the day, wide; in the day view already, the day's list (Agenda).
+            moreTimed(d) { if (this.view !== 'Day') { this.openDay(d); return; } this.date = startOfDay(d); this.setView('Agenda'); },
+            /** "4:30", "10:00" -- the start of an event in a very narrow column (24-hour: "16:30"). */
+            shortTime(d) { const h = d.getHours(); return `${this.timeFormat === '24' ? h : h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`; },
             scrollToWorkHours() {
                 const el = this.$refs.timeScroll; if (!el) return;
                 // Open at the configured start hour, as Syncfusion does.
@@ -917,6 +949,7 @@ const NativeCalendar = (() => {
     <div class="nc-grid-head">
       <div class="nc-gutter-head">
         <button v-if="parseInt(startHour, 10) > 0" class="nc-early" data-testid="early-hours" @click="showEarlyHours = !showEarlyHours">{{ showEarlyHours ? 'Hide early' : earlyLabel() }}</button>
+        <button v-if="allDayOpen && gridLayout.allDayFolds" type="button" class="nc-early nc-fewer" data-testid="fewer-events" @click="allDayOpen = false">Show less</button>
       </div>
       <div class="nc-grid-days">
         <div class="nc-grid-dayheads">
@@ -924,9 +957,12 @@ const NativeCalendar = (() => {
             <div class="nc-dayhead-name">{{ weekdayName(d.getDay(), true) }}</div><div class="nc-dayhead-num">{{ d.getDate() }}</div>
           </div>
         </div>
-        <div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
-          <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" :class="{ creating: inDayRun(d), drop: isDropDay(d) }"
-            @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
+        <div class="nc-allday-scroll" :class="{ open: allDayOpen && gridLayout.allDayFolds }"><div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
+          <div v-for="(d, c) in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" :class="{ creating: inDayRun(d), drop: isDropDay(d) }"
+            @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)">
+            <button v-if="gridLayout.allDayHidden[c]" type="button" class="nc-more" data-testid="more-events" :aria-label="gridLayout.allDayHidden[c] + ' more all-day events'"
+              @click.stop="allDayOpen = true" @dblclick.stop>+{{ gridLayout.allDayHidden[c] }}<span class="nc-more-word"> more</span></button>
+          </div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
             :class="{ 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
             :data-testid="tid(b.occ)" @contextmenu="eventMenu($event, b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
@@ -934,7 +970,7 @@ const NativeCalendar = (() => {
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
           </div>
-        </div>
+        </div></div>
       </div>
     </div>
     <div class="nc-grid-scroll" ref="timeScroll">
@@ -954,14 +990,17 @@ const NativeCalendar = (() => {
             <div v-for="it in gridLayout.timed[i].filter((x) => drag && drag.moved && drag.mode === 'move' && drag.key === x.occ.key)" :key="'origin' + it.occ.key"
               class="nc-origin" :class="{ copy: drag.copy }" aria-hidden="true" :style="{ top: it.top + 'px', height: it.height + 'px', left: 'calc(' + (it.col * 100 / it.cols) + '% + 1px)', width: 'calc(' + (100 / it.cols) + '% - 3px)', '--c': color(it.occ.type), ...(drag.copy ? ink(it.occ.type) : {}) }"><template v-if="drag.copy"><div class="nc-timed-title">{{ it.occ.title }}</div><div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div></template></div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
-              :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)" @contextmenu="eventMenu($event, it.occ)"
+              :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ), narrow: it.narrow, short: it.height < 44 }" :data-testid="tid(it.occ)" @contextmenu="eventMenu($event, it.occ)"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
               @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown="keyMove($event, it.occ)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
-              <div v-if="(isLifted(it.occ) ? drag.height : it.height) > 34" class="nc-timed-time">{{ time(blockTimes(it.occ).start) }} - {{ time(blockTimes(it.occ).end) }}</div>
+              <div v-if="(isLifted(it.occ) ? drag.height : it.height) > 34" class="nc-timed-time">{{ it.narrow ? (it.tiny ? shortTime(blockTimes(it.occ).start) : time(blockTimes(it.occ).start)) : time(blockTimes(it.occ).start) + ' - ' + time(blockTimes(it.occ).end) }}</div>
               <div class="nc-resize" data-testid="resize-bottom" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
               <div v-if="appEdits" class="nc-resize nc-resize-top" data-testid="resize-top" @mousedown.stop="startDrag($event, it.occ, 'resize-top', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
             </div>
+            <button v-for="m in gridLayout.more[i]" :key="'more' + m.top" type="button" class="nc-more-timed" data-testid="more-timed"
+              :style="{ top: m.top + 'px', height: m.height + 'px', left: 'calc(' + (m.col * 100 / m.cols) + '% + 1px)', width: 'calc(' + (100 / m.cols) + '% - 3px)' }"
+              :aria-label="m.n + ' more events'" :title="m.n + ' more'" @mousedown.stop @touchstart.stop @click.stop="moreTimed(d)" @dblclick.stop>+{{ m.n }}</button>
             <div v-if="isToday(d) && nowTop >= 0" class="nc-now-line" :style="{ top: nowTop + 'px' }"></div>
           </div>
           <div v-if="gridDays.length > 1 && gridDays.some(isToday) && nowTop >= 0" class="nc-now-dotted" :style="{ top: nowTop + 'px' }"></div>
