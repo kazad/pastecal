@@ -1,5 +1,5 @@
 // node summarize.js results.json : one line per test: status, error head, annotations.
-const r = require(process.argv[2]);
+const r = require(require('path').resolve(process.argv[2]));
 const walk = (s, out = []) => { (s.specs || []).forEach((sp) => sp.tests.forEach((t) => out.push({ title: sp.title, t }))); (s.suites || []).forEach((x) => walk(x, out)); return out; };
 for (const { title, t } of r.suites.flatMap((s) => walk(s))) {
   for (const res of t.results) {
