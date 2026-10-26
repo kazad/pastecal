@@ -32,17 +32,27 @@ async function seedLegacy(request, rule) {
 }
 const stored = async (request, id) => (await (await request.get(`/cal/${id}`)).json()).calendar.events;
 
-test('the server refuses a bomb rule on create; a real repeating event is accepted', async ({ request }) => {
-  for (const rule of BOMBS) {
-    const r = await request.post(`/cal/${newId('create')}`, { data: { title: 'x', options: {}, events: [ev('b', 'Bomb', 12, 9, { recurrencerule: rule })] } });
-    expect(r.status(), rule).toBe(413);
-    expect((await r.json()).error).toMatch(/second|minute|5000/);
+// The Worker allows 10 new calendars a minute per address, shared with the rest of the suite: wait out a 429.
+async function create(request, events) {
+  for (let i = 0; ; i++) {
+    const r = await request.post(`/cal/${newId('create')}`, { data: { title: 'x', options: {}, events } });
+    if (r.status() !== 429 || i === 2) return r;
+    await new Promise((res) => setTimeout(res, 31_000));
   }
-  const ok = await request.post(`/cal/${newId('create')}`, { data: { title: 'x', options: {}, events: [ev('w', 'Choir', 3, 18, { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20991231T000000Z' })] } });
+}
+
+test('the server refuses a bomb rule on create; a real repeating event is accepted', async ({ request }) => {
+  test.setTimeout(240_000);
+  for (const rule of ['FREQ=SECONDLY', 'FREQ=DAILY;COUNT=10000000']) {
+    const r = await create(request, [ev('b', 'Bomb', 12, 9, { recurrencerule: rule })]);
+    expect(r.status(), rule).toBe(413);
+    expect((await r.json()).error).toMatch(/second|5000/);
+  }
+  const ok = await create(request, [ev('w', 'Choir', 3, 18, { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20991231T000000Z' })]);
   expect(ok.status()).toBe(201);
 });
 
-test('the server refuses a bomb rule on save (WebSocket); a later real edit saves', async ({ page, request }) => {
+test('the server refuses a bomb rule on save (WebSocket), added or changed; a real repeating event saves', async ({ page, request }) => {
   const id = await seedLegacy(request, 'FREQ=WEEKLY;COUNT=2');
   await page.goto('/?backend=cf');
   const replies = await page.evaluate(async ({ id }) => {
@@ -53,17 +63,23 @@ test('the server refuses a bomb rule on save (WebSocket); a later real edit save
     const at = (h) => { const x = new Date(); x.setHours(h, 0, 0, 0); return x.toISOString(); };
     ws.send(JSON.stringify({ t: 'save', id: 's1', commands: [{ type: 'add', event: { id: 'evil', title: 'x', start: at(9), end: at(10), recurrencerule: 'FREQ=SECONDLY' } }] }));
     ws.send(JSON.stringify({ t: 'save', id: 's2', commands: [{ type: 'add', event: { id: 'fine', title: 'Lunch', start: at(12), end: at(13), recurrencerule: 'FREQ=DAILY;INTERVAL=1;COUNT=5' } }] }));
-    for (let i = 0; i < 50 && got.filter((m) => m.id === 's1' || m.id === 's2').length < 2; i++) await new Promise((r) => setTimeout(r, 100));
+    const mine = () => got.filter((m) => ['s1', 's2', 's3'].includes(m.id));
+    for (let i = 0; i < 50 && mine().length < 2; i++) await new Promise((r) => setTimeout(r, 100));
+    // Turning an existing event into a bomb is refused too.
+    ws.send(JSON.stringify({ t: 'save', id: 's3', commands: [{ type: 'update', key: { id: 'fine', recurrenceID: null }, changes: { recurrencerule: 'FREQ=SECONDLY' } }] }));
+    for (let i = 0; i < 50 && mine().length < 3; i++) await new Promise((r) => setTimeout(r, 100));
     ws.close();
-    return got.filter((m) => m.id === 's1' || m.id === 's2');
+    return mine();
   }, { id });
-  const s1 = replies.find((m) => m.id === 's1'), s2 = replies.find((m) => m.id === 's2');
+  const [s1, s2, s3] = ['s1', 's2', 's3'].map((k) => replies.find((m) => m.id === k));
   expect(s1.t).toBe('error');
   expect(JSON.stringify(s1)).toMatch(/repeats every second/);
   expect(s2.t).toBe('ack');
-  const ids = (await stored(request, id)).map((e) => e.id);
-  expect(ids).toContain('fine');
-  expect(ids).not.toContain('evil');
+  expect(s3.t).toBe('error');
+  expect(JSON.stringify(s3)).toMatch(/repeats every second/);
+  const events = await stored(request, id);
+  expect(events.map((e) => e.id)).not.toContain('evil');
+  expect(events.find((e) => e.id === 'fine').recurrencerule).toBe('FREQ=DAILY;INTERVAL=1;COUNT=5');
 });
 
 for (const rule of BOMBS) {
