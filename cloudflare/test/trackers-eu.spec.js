@@ -4,7 +4,8 @@ const { test, expect } = require('@playwright/test');
 
 const TRACKERS = /googletagmanager\.com|google-analytics\.com|clarity\.ms|hotjar\.com/;
 
-async function trackerRequests(browser, timezoneId, path) {
+// `until`: a request the page is expected to make (then it waits for that, not a fixed 1.5 s that proves the absence).
+async function trackerRequests(browser, timezoneId, path, until) {
   const ctx = await browser.newContext({ timezoneId });
   const page = await ctx.newPage();
   const seen = [];
@@ -12,7 +13,8 @@ async function trackerRequests(browser, timezoneId, path) {
   await page.route(TRACKERS, (r) => { seen.push(r.request().url()); return r.abort(); });
   await page.route(/firebaseio\.com/, (r) => r.abort());
   await page.goto(path);
-  await page.waitForTimeout(1500);
+  if (until) await expect.poll(() => seen.some((u) => until.test(u))).toBe(true);
+  else await page.waitForTimeout(1500);
   const inEurope = await page.evaluate(() => window.pcInEurope);
   await ctx.close();
   return { seen, inEurope };
@@ -29,7 +31,7 @@ for (const path of ['/', '/pricing']) {
 
   test(`trackers still load outside Europe on ${path}`, async ({ browser }) => {
     // ?backend=firebase: a local copy acts like the live site only when asked (it defaults to no production side effects).
-    const { seen, inEurope } = await trackerRequests(browser, 'America/New_York', path + '?backend=firebase');
+    const { seen, inEurope } = await trackerRequests(browser, 'America/New_York', path + '?backend=firebase', /googletagmanager\.com/);
     expect(inEurope).toBe(false);
     expect(seen.some((u) => /googletagmanager\.com/.test(u))).toBe(true);
   });

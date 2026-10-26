@@ -11,6 +11,7 @@
  * one view link (the Worker allows 10 creates a minute per IP, so the tests share them).
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./settle');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 // Nothing leaves this machine but fonts and the pinned script CDNs.
@@ -44,7 +45,7 @@ async function open(browser, path, viewport = { width: 1440, height: 900 }) {
   await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 
@@ -170,7 +171,7 @@ test('view link: notes are pinned beside the calendar, and hiding them sticks', 
   await expect(panel(page)).toHaveCount(0);
   await page.reload();
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(800);
+  await settled(page);
   await expect(panel(page)).toHaveCount(0);
   await page.locator('.pc-hdr-actions').getByRole('button', { name: 'Toggle notes' }).click();
   await expect(page.getByTestId('side-title')).toHaveText('About this calendar');
@@ -261,7 +262,7 @@ test('draft: Share, Activity and Stats say what they will hold, with one Save & 
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   await page.getByTestId('settings-button-desktop').click();
   expect(await tabIds(page)).toEqual(TABS);
   for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Numbers start once you share'], ['plus', 'plus-draft', 'Save it first']]) {

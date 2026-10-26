@@ -11,6 +11,7 @@
  * Needs `wrangler dev` on BASE_URL with LOCAL_NO_LIMITS (scripts/test-browser.sh).
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./settle');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -29,7 +30,7 @@ async function seed(events) {
   return id;
 }
 const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events || []);
-const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [200, 400, 800] });
+const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100, 250, 500] });
 const vm = (page, fn, arg) => page.evaluate(`(${fn})(document.querySelector('#app')._vnode.component.proxy, ${JSON.stringify(arg ?? null)})`);
 
 async function open(browser, id, query = '', { timezoneId = 'America/Los_Angeles' } = {}) {
@@ -43,7 +44,7 @@ async function open(browser, id, query = '', { timezoneId = 'America/Los_Angeles
   await page.goto(`/${id}?backend=cf&cal=native${query}`);
   await page.waitForFunction(() => { const p = document.querySelector('#app')?._vnode?.component?.proxy; return p && p.isLoading === false; }, null, { timeout: 20_000 });
   await expect(page.locator('.nc.nc-editable')).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(300);
+  await settled(page);
   await page.evaluate(() => { window.__tracked = []; Analytics.track = function (name, params) { window.__tracked.push({ name, ...this.baseParams(), ...params }); }; });
   return { ctx, page, errors };
 }
@@ -277,7 +278,7 @@ for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe
   test(`native skips the same occurrences of a timed series as classic for a viewer in ${zone}`, async ({ browser }) => {
     const id = await seed([timed('s1', 'Standup', '2026-10-05T09:00:00-07:00', '2026-10-05T09:30:00-07:00',
       { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;', recurrenceException: '20261109T170000Z' })]);
-    const shown = async (native) => {
+    const shown = async (native, check) => {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: zone, locale: 'en-US' });
       await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
       await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
@@ -285,14 +286,12 @@ for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe
       await page.goto(`/${id}?backend=cf&view=month&date=2026-11-09${native ? '&cal=native' : ''}`);
       await page.waitForFunction(() => document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 });
       await expect(page.locator(native ? '.nc' : '.e-schedule')).toBeVisible({ timeout: 20_000 });
-      await page.waitForTimeout(native ? 300 : 1500);
-      const out = await vm(page, (v) => v.calView.occurrences(new Date(2026, 10, 1), new Date(2026, 10, 20)).map((o) => o.start.toISOString()));
+      await check(() => vm(page, (v) => v.calView.occurrences(new Date(2026, 10, 1), new Date(2026, 10, 20)).map((o) => o.start.toISOString())));
       await ctx.close();
-      return out;
     };
-    const classic = await shown(false);
-    expect(classic.length, 'classic draws the series').toBeGreaterThan(1);
-    expect(await shown(true)).toEqual(classic);
+    let classic;
+    await shown(false, (occ) => expect.poll(async () => (classic = await occ()).length, { message: 'classic draws the series' }).toBeGreaterThan(1));
+    await shown(true, (occ) => expect.poll(occ).toEqual(classic));
   });
 }
 

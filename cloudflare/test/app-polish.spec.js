@@ -13,6 +13,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787). Seeds one calendar.
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./settle');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 const PHONE = { width: 390, height: 844 };
@@ -34,7 +35,7 @@ async function open(browser, { viewport = DESKTOP, path = '/?backend=cf', platfo
   if (path !== '/?backend=cf') await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 

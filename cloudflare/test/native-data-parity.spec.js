@@ -26,6 +26,7 @@
  * reruns don't spend the 10-per-minute create limit.
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./settle');
 const { sf, nat, localHM, localYMD } = require('../../test/native-audit/harness');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
@@ -129,7 +130,7 @@ const RENDERERS = {
       await page.goto(`/${id}${withBackend(query)}`);
       await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
       await page.waitForFunction(() => document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 }).catch(() => {});
-      await page.waitForTimeout(600);
+      await settled(page);
     },
     /** Month-view cells with their day (local midnight ms) */
     cellSel: '.e-work-cells[data-date]', cellAttr: 'data-date',
@@ -168,7 +169,7 @@ const RENDERERS = {
       await page.goto(main ? `/${id}${withBackend(query)}&cal=native` : `/beta/${id}${withBackend(query)}`);
       await page.waitForFunction(() => { const p = document.querySelector('#app')?._vnode?.component?.proxy; return p && p.isLoading === false; }, null, { timeout: 20_000 });
       await expect(page.locator('.nc')).toBeVisible({ timeout: 15_000 });
-      await page.waitForTimeout(400);
+      await settled(page);
     },
     cellSel: '.nc-cell[data-day]', cellAttr: 'data-day',
     async events(page) { return page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.events.map((e) => ({ ...e }))); },
@@ -198,7 +199,7 @@ async function reset(id, events, title = 'Data parity') {
 }
 /** The events as the server holds them. */
 const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events || []);
-const soon = (fn, timeout = 15_000) => expect.poll(fn, { timeout, intervals: [250, 500, 1000] });
+const soon = (fn, timeout = 15_000) => expect.poll(fn, { timeout, intervals: [100, 250, 500] });
 
 /** A browser in a time zone: only local hosts and fonts/CDNs, the Cloudflare backend, a fixed clock. */
 async function openBrowser(browser, timezoneId = 'America/Los_Angeles') {

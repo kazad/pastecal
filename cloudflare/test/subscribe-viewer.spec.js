@@ -8,6 +8,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787); seeds one calendar and view.
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./settle');
 
 const VM = `document.querySelector('#app')._vnode.component.proxy`;
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -32,7 +33,7 @@ async function open(browser, path, viewport = { width: 1440, height: 900 }) {
   await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 
