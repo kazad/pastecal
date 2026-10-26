@@ -141,5 +141,8 @@ About 1 MB less, two thirds of the page. The rest of the native page is fonts, V
 
 - Week / Day: classic tints the hours outside 9-5; native tints only weekends.
 - A multi-day bar cut by the week edge: classic draws « and »; native squares the corner.
+- Links with `?view=q`, `12w` or `custom&dur=&unit=`: classic opens them as Day (on branch `pro` too: the custom
+  view is replaced when the calendar loads); native opens the view the link names. Day/Week/Month/Year/Agenda
+  links open the same view and dates in both (tested).
 - No `location` field exists in the event model, so neither popup shows one.
 - The native editor, drag-to-create, Undo and Recent changes are milestone 2 (edit links); `openEditor` is a no-op.
