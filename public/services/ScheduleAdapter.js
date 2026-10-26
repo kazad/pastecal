@@ -116,6 +116,29 @@
             return new Date(when).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
         },
 
+        /** The instant an exception stamp names (stamp's inverse), or null. */
+        stampDate(s) {
+            const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/i.exec(String(s || '').trim());
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null;
+        },
+
+        /**
+         * Exception stamps moved as a series moved from `from` to `to` (a drag of "all events"): the same wall-clock
+         * days and minutes (CalendarView.edits.shiftBy), so each stamp still names its slot in the moved series.
+         * A stamp that can't be read is kept as it is.
+         */
+        shiftStamps(list, from, to) {
+            const a = new Date(from), b = new Date(to);
+            const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+            const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+            return String(list || '').split(',').map((x) => x.trim()).filter(Boolean).map((s) => {
+                const d = ScheduleAdapter.stampDate(s);
+                if (!d) return s;
+                d.setDate(d.getDate() + days); d.setMinutes(d.getMinutes() + minutes);
+                return ScheduleAdapter.stamp(d);
+            }).join(',');
+        },
+
         /**
          * Our events -> the records Syncfusion draws.
          *
@@ -257,6 +280,17 @@
                     const changes = ScheduleAdapter.changesFrom(r);
                     if (context.keepOccurrences && !blank(master.recurrenceException)) {
                         delete changes.recurrenceException;
+                        // The series was moved (context.shift: { from, to }, a drag of "all events"): its skipped
+                        // dates and its edited occurrences' slots move with it, or a deleted date comes back and an
+                        // edited one shows twice.
+                        const shift = context.shift;
+                        if (shift) {
+                            changes.recurrenceException = ScheduleAdapter.shiftStamps(master.recurrenceException, shift.from, shift.to);
+                            for (const e of ownOccurrences) {
+                                if (!blank(e.recurrenceException)) commands.push({ type: 'update', key: e,
+                                    changes: { recurrenceException: ScheduleAdapter.shiftStamps(e.recurrenceException, shift.from, shift.to) } });
+                            }
+                        }
                     } else {
                         changes.recurrenceException = null;
                         for (const e of ownOccurrences) commands.push({ type: 'remove', key: e });

@@ -1840,10 +1840,17 @@ const CalendarVueApp = {
                 const rec = this.nativeRecord(series);
                 rec.RecurrenceID = rec.Id;
                 ScheduleAdapter.noteStart(rec);
-                const shift = nativeShift(occurrence.start, start), stretch = nativeShift(occurrence.end, end);
+                // An edited occurrence is drawn at its edited time; the series moves from the slot it stands for (its
+                // exception stamp, read in the grid's frame as toView reads it).
+                const slot = kind === 'edited' ? ScheduleAdapter.stampDate(series.isAllDay
+                    ? Event.allDayExceptionsToLocal(row.recurrenceException) : row.recurrenceException) : null;
+                const fromStart = slot || new Date(occurrence.start);
+                const fromEnd = slot ? new Date(slot.getTime() + (new Date(occurrence.end) - new Date(occurrence.start))) : occurrence.end;
+                const shift = nativeShift(fromStart, start), stretch = nativeShift(fromEnd, end);
                 const moved = { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
-                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, occurrence.start, start) };
-                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] }, { action: 'EditSeries', keepOccurrences });
+                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, fromStart, start) };
+                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] },
+                    { action: 'EditSeries', keepOccurrences, shift: { from: fromStart, to: start } });
                 if (!this.nativeHasOwn(series)) return save(false);
                 this.nativeAskSeriesChange(save);
             };

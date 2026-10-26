@@ -281,8 +281,10 @@ test('a repeating event: dragging one occurrence asks; "this event" stores class
   await soon(async () => (await stored(id)).find((e) => e.id === 'w').start).toBe(iso('2026-10-08T09:00:00-07:00'));
   rows = await stored(id);
   master = rows.find((e) => e.id === 'w');
-  expect([master.end, master.recurrencerule, master.recurrenceException]).toEqual([iso('2026-10-08T10:00:00-07:00'), 'FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;', '20261020T170000Z']);
+  // The edited occurrence's slot moves with the series (Tue Oct 20 10:00 -> Thu Oct 22 9:00), in both rows.
+  expect([master.end, master.recurrencerule, master.recurrenceException]).toEqual([iso('2026-10-08T10:00:00-07:00'), 'FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;', '20261022T160000Z']);
   expect(rows).toHaveLength(2);
+  expect(rows.find((e) => e.id !== 'w').recurrenceException).toBe('20261022T160000Z');
   await expect(page.locator('.nc-timed', { hasText: 'Weekly sync' })).toHaveCount(1);   // Thursday Oct 29 only
   expect(errors).toEqual([]);
   await ctx.close();

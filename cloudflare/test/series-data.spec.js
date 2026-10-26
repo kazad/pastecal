@@ -100,3 +100,71 @@ test('renaming a series "All events" then Enter, Enter keeps its skipped and edi
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+// =====================================================================================================
+/** Drag an occurrence (programmatically, as NativeCalendar emits it), choose "All events", then keep the exceptions. */
+async function moveAllKeep(page, rowId, occ, toStart) {
+  await vm(page, (v, a) => {
+    const ev = v.calendar.events.find((e) => e.id === a.rowId);
+    const occurrence = { start: new Date(a.occ[0]), end: new Date(a.occ[1]) };
+    v.onNativeDragStart({ event: ev });
+    const start = new Date(a.toStart);
+    v.onNativeMove({ event: ev, occurrence, start, end: new Date(start.getTime() + (occurrence.end - occurrence.start)) });
+  }, { rowId, occ: occ.map(iso), toStart: iso(toStart) });
+  const dlg = page.getByTestId('confirm-dialog');
+  await dlg.getByTestId('scope-all').check();
+  await dlg.getByTestId('confirm-ok').click();
+  await dlg.getByTestId('confirm-no').click();
+}
+
+test('dragging a series "all events" and keeping its exceptions moves the skipped and edited dates with it', async ({ browser }) => {
+  const id = await seed(PIANO());
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-26');
+  await moveAllKeep(page, 's1', ['2026-10-26T09:00:00-07:00', '2026-10-26T10:00:00-07:00'], '2026-10-26T10:00:00-07:00');
+  await soon(async () => (await stored(id)).find((e) => e.id === 's1').start).toBe(iso('2026-10-05T10:00:00-07:00'));
+  const rows = await stored(id);
+  expect(rows.find((e) => e.id === 's1').recurrenceException).toBe('20261012T170000Z,20261019T170000Z');
+  expect(rows.find((e) => e.id === 'o1').recurrenceException).toBe('20261019T170000Z');
+  expect(await expand(page, rows)).toEqual(['Mon Oct 05 10:00 Piano', 'Wed Oct 21 14:00 Piano (moved)', 'Mon Oct 26 10:00 Piano',
+    'Mon Nov 02 10:00 Piano', 'Mon Nov 09 10:00 Piano']);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('dragging an EDITED occurrence "all events" moves the series from that occurrence\'s own slot', async ({ browser }) => {
+  const id = await seed(PIANO());
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-21');
+  // The Oct 19 occurrence (shown Wed Oct 21 14:00) dropped on Thu Oct 22 14:00: its slot, Mon Oct 19 9:00, moves there.
+  await moveAllKeep(page, 'o1', ['2026-10-21T14:00:00-07:00', '2026-10-21T15:00:00-07:00'], '2026-10-22T14:00:00-07:00');
+  await soon(async () => (await stored(id)).find((e) => e.id === 's1').start).toBe(iso('2026-10-08T14:00:00-07:00'));
+  const rows = await stored(id);
+  const s1 = rows.find((e) => e.id === 's1');
+  expect([s1.end, s1.recurrencerule, s1.recurrenceException]).toEqual([iso('2026-10-08T15:00:00-07:00'), 'FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;',
+    '20261015T210000Z,20261022T210000Z']);
+  expect(rows.find((e) => e.id === 'o1').recurrenceException).toBe('20261022T210000Z');
+  const shown = await expand(page, rows);
+  expect(shown).toEqual(['Thu Oct 08 14:00 Piano', 'Wed Oct 21 14:00 Piano (moved)', 'Thu Oct 29 14:00 Piano', 'Thu Nov 05 14:00 Piano', 'Thu Nov 12 14:00 Piano']);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('dragging a series that ends (UNTIL) "all events" to another day moves its end date too', async ({ browser }) => {
+  // Tuesdays Oct 6 - Oct 27 at 10:00, dragged from Tue Oct 20 to Thu Oct 22: Thursdays Oct 8 - Oct 29, still four.
+  const id = await seed([timed('u', 'Course', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00',
+    { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;UNTIL=20261027T170000Z;' })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-21');
+  await vm(page, (v) => {
+    const ev = v.calendar.events[0];
+    v.onNativeDragStart({ event: ev });
+    v.onNativeMove({ event: ev, occurrence: { start: new Date('2026-10-20T10:00:00-07:00'), end: new Date('2026-10-20T11:00:00-07:00') },
+      start: new Date('2026-10-22T10:00:00-07:00'), end: new Date('2026-10-22T11:00:00-07:00') });
+  });
+  const dlg = page.getByTestId('confirm-dialog');
+  await dlg.getByTestId('scope-all').check();
+  await dlg.getByTestId('confirm-ok').click();
+  await soon(async () => (await stored(id))[0].recurrencerule).toBe('FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;UNTIL=20261029T170000Z;');
+  expect(await expand(page, await stored(id))).toEqual(['Thu Oct 08 10:00 Course', 'Thu Oct 15 10:00 Course', 'Thu Oct 22 10:00 Course', 'Thu Oct 29 10:00 Course']);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
