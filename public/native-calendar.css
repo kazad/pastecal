@@ -292,7 +292,9 @@
 .nk-icon { width: var(--pc-h-md); height: var(--pc-h-md); padding: 0; display: inline-grid; place-items: center; border: 0; background: none; border-radius: var(--pc-radius-control);
     color: var(--pc-text-muted); cursor: pointer; flex: none; }
 .nk-icon.nk-sm { width: var(--pc-h-sm); height: var(--pc-h-sm); }
-.nk-del:hover { color: var(--pc-danger); background: var(--pc-danger-soft); }
+/* The trash is a neutral icon like its neighbors; red only while pointed at or pressed (never stuck on a touch screen). */
+.nk-del:active { color: var(--pc-danger); background: var(--pc-danger-soft); }
+@media (hover: hover) { .nk-del:hover { color: var(--pc-danger); background: var(--pc-danger-soft); } }
 .nk-ovf:hover, .nk-ovf[aria-expanded="true"], .nk-sm:hover { background: var(--pc-soft); color: var(--pc-text); }
 .nk-cancel { border: 0; background: var(--pc-soft); color: var(--pc-text); border-radius: var(--pc-radius-control); min-height: var(--pc-h-md); padding: 0 var(--pc-space-4);
     font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); cursor: pointer; }
