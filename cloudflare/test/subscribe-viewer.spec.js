@@ -260,3 +260,33 @@ test('phone: the edit link footer and beta pill wrap cleanly, no sideways scroll
   await page.screenshot({ path: 'snapshots/footer-phone-dark.png' });
   await ctx.close();
 });
+
+// Owner, Oct 26 2026: an embed shows the calendar's notes when it has any: a Notes button in its one line, opening a
+// small panel inside the embed (links open in a new tab); Esc or a click outside closes it.
+for (const [w, h] of [[720, 640], [400, 600]]) {
+  test(`embed ${w}px: Notes opens the calendar's notes in a panel inside the embed; Esc and a click outside close it`, async ({ browser, request }) => {
+    const { viewId } = await seed(request);
+    const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`, { width: w, height: h });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const btn = page.getByTestId('embed-notes-btn');
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveAttribute('aria-expanded', 'false');
+    await btn.click();
+    const panel = page.getByTestId('embed-notes');
+    await expect(panel).toHaveText('Bring water.');
+    await expect(btn).toHaveAttribute('aria-expanded', 'true');
+    const b = await panel.boundingBox();
+    expect(b.x >= 0 && b.x + b.width <= w && b.y + b.height <= h, `the panel stays inside the embed: ${JSON.stringify(b)}`).toBe(true);
+    await page.screenshot({ path: `snapshots/embed-notes-${w}.png` });
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await btn.click();
+    await expect(panel).toBeVisible();
+    await page.mouse.click(w / 2, h - 40);
+    await expect(panel).toHaveCount(0);
+    // One line still, with the Notes button in it.
+    const tops = await page.getByTestId('embed-bar').evaluate((el) => new Set([...el.children].filter((c) => c.getClientRects().length).map((c) => Math.round((c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2) / 6))).size);
+    expect(tops).toBe(1);
+    await ctx.close();
+  });
+}

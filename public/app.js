@@ -346,6 +346,7 @@ const CalendarVueApp = {
             showWelcome: false,
             showHelp: false,
             showNotes: false,
+            embedNotes: false,        // an embed's Notes panel (index.html embed-bar)
             showShare: false,
             showSearch: false,
             showSettings: false,

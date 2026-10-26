@@ -69,6 +69,16 @@ const watchAnalytics = (page) => page.evaluate(() => {
 });
 const newUiCalls = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('__newUi') || '[]'));
 
+/** Owner, Oct 26 2026: the dialog's close sat top-left on a row of its own. Every .pc-modal-panel's close is at the
+ *  panel's top-right corner, and the title starts at the top, beside it (not pushed down under it). */
+async function closeAtTopRight(panel) {
+  const [p, x, h] = await Promise.all([panel.boundingBox(), panel.getByRole('button', { name: 'Close' }).boundingBox(), panel.getByRole('heading').first().boundingBox()]);
+  expect(p.x + p.width - (x.x + x.width), 'close is at the right edge').toBeLessThan(24);
+  expect(Math.abs((x.y + x.height / 2) - (h.y + h.height / 2)), 'close sits on the title\'s line').toBeLessThan(10);
+  expect(h.y - p.y, 'the title is not pushed below the close button').toBeLessThan(40);
+  expect(x.x, 'close is right of the title start').toBeGreaterThan(h.x + 100);
+}
+
 test('the footer link opts in, the pill takes you back, and the choice sticks across reloads and calendars', async ({ browser }) => {
   const id = await seed(), other = await seed('Another calendar');
   const { ctx, page, sf } = await browserFor(browser);
@@ -193,6 +203,8 @@ test('Send feedback posts the message and where it came from, never the events; 
   const dialog = page.getByTestId('cal-feedback');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading')).toHaveText('The new calendar (beta)');
+  await page.screenshot({ path: 'snapshots/cal-feedback-dialog.png' });
+  await closeAtTopRight(dialog);
   await expect(dialog.getByLabel('What should we change?')).toBeFocused();
   await expect(dialog.getByLabel('Email (if you\'d like a reply)')).toBeVisible();
   await expect(dialog.getByTestId('cal-feedback-send')).toBeDisabled();

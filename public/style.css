@@ -1497,10 +1497,16 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   .pc-print-brand { display: inline-flex; align-items: center; gap: 1.5mm; font: 700 10pt var(--pc-font); color: var(--pc-ink-faint) }
 }
 /* Embedded view link: one quiet line above the calendar (index.html embed-bar). */
-.pc-embed-bar { display: flex; align-items: center; gap: var(--pc-space-3); min-height: 40px; padding: 2px 4px 8px }
+.pc-embed-bar { position: relative; display: flex; align-items: center; gap: var(--pc-space-3); min-height: 40px; padding: 2px 4px 8px }
 .pc-embed-title { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--pc-fw-semibold) var(--pc-fs-lg)/1.3 var(--pc-font); color: var(--pc-text) }
 .pc-embed-mark { display: inline-flex; align-items: center; gap: 5px; flex: none; font: var(--pc-fw-medium) var(--pc-fs-xs)/1 var(--pc-font); color: var(--pc-text-muted); text-decoration: none }
 .pc-embed-mark img { width: 14px; height: 14px; opacity: .85 }
 .pc-embed-mark:hover { color: var(--pc-link) }
 .pc-embed-bar .pc-addcal { flex: none }
-@media (max-width: 480px) { .pc-embed-bar .pc-addcal-btn span, .pc-embed-bar .pc-addcal-label { display: none } }
+@media (max-width: 480px) { .pc-embed-bar .pc-addcal-btn span, .pc-embed-bar .pc-addcal-label, .pc-embed-notes-label { display: none } }
+.pc-embed-notes { flex: none }   /* the panel anchors to the bar's right edge, so it fits any width */
+.pc-embed-notes-btn svg { width: 18px; height: 18px }
+.pc-embed-notes-panel { position: absolute; right: 4px; top: calc(100% - 2px); z-index: 30; width: min(420px, calc(100vw - 24px)); max-height: 60vh; overflow: auto; box-sizing: border-box;
+    padding: var(--pc-space-3) var(--pc-space-4); background: var(--pc-bg); color: var(--pc-text); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card);
+    box-shadow: var(--pc-shadow-md); font: var(--pc-fw-regular) var(--pc-fs-sm)/var(--pc-lh-body) var(--pc-font); overflow-wrap: anywhere; outline: none }
+.pc-embed-notes-panel a { color: var(--pc-link); text-decoration: underline }
