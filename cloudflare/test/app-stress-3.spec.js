@@ -109,7 +109,6 @@ async function quickAdd(page, text) {
 }
 
 test('A01 [notes] data-loss: notes typed while someone else adds an event lose what was typed before the event arrived', async ({ browser }) => {
-  finding('applyRemoteCalendar merges events but calendar.import() replaces options wholesale: the incoming snapshot puts back the server\'s notes over keystrokes still inside the 500 ms save debounce');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')], { options: { notes: 'Old notes' } });
   const A = await open(browser, `/${id}?backend=cf`);
   const B = await open(browser, `/${id}?backend=cf`);
@@ -130,7 +129,6 @@ test('A01 [notes] data-loss: notes typed while someone else adds an event lose w
 });
 
 test('A02 [feed] broken: a weekly Tuesday 5 PM practice (no per-event zone) reaches calendar apps on Mondays, and at 4 PM after Nov 1', async ({ browser }) => {
-  finding('ICSService writes an event without event.tz in UTC (DTSTART:20261007T000000Z + RRULE:BYDAY=TU): the rule repeats on UTC Tuesdays (Monday evening in LA) at a fixed UTC hour; the calendar\'s own zone (options.tz) is ignored');
   const { id, viewId } = await seed([timed('w', 'Weekly practice', '2026-10-06T17:00:00-07:00', '2026-10-06T18:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=8;' })],
     { options: { tz: 'America/Los_Angeles' } });
   // Every event made in the app has no zone of its own unless one is picked: quick add (classic) stores none.
@@ -162,7 +160,6 @@ test('A02 [feed] broken: a weekly Tuesday 5 PM practice (no per-event zone) reac
 });
 
 test('A03 [share] broken (#51): Share\'s links for a calendar named "50% off" or "a?b" open another, empty calendar; names with spaces are copied with raw spaces', async ({ browser }) => {
-  finding('getEditableURL / getEditableICSURL / getViewerBasePath build "/" + calendar.id without encodeURIComponent');
   const out = {}, want = {};
   for (const name of ['50% off', 'a?b', 'TEAM NUÑEZ']) {
     const real = `${name} ${rand().slice(-4)}`;
@@ -190,7 +187,6 @@ test('A03 [share] broken (#51): Share\'s links for a calendar named "50% off" or
 });
 
 test('A04 [homepage] data-loss: claiming "a?b" or "50% fun" saves the calendar, then lands on a blank draft under another name', async ({ browser }) => {
-  finding('create() redirects with location.href = "/" + slug, unencoded: "?" starts a query, "%" starts an escape');
   const out = {}, want = {};
   for (const name of ['a?b', '50% fun']) {
     const typed = `${name}${rand().slice(-4)}`;
@@ -227,7 +223,6 @@ test('A05 [homepage] broken: Save & share that fails (a name with "#", or a serv
 });
 
 test('A06 [share] broken: in Tokyo (or anywhere east of UTC), "This view" on Saturday Oct 24 links to Friday Oct 23', async ({ browser }) => {
-  finding('updateCurrentViewURL: selectedDate().toISOString().slice(0, 10) is the UTC date of local midnight');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-24T17:00:00-07:00', '2026-10-24T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf&view=day&date=2026-10-24`, { timezoneId: 'Asia/Tokyo' });
   await page.getByTestId('share-pill-more').click();
@@ -317,7 +312,6 @@ test('A10 [embed] ugly: embedded 300px wide, the page scrolls sideways: the cred
 });
 
 test('A11 [feed] nit: after a rename, a calendar app asking "changed?" (If-None-Match) is told 304 Not Modified, so it keeps the old name', async ({ browser }) => {
-  finding('serveFeed\'s ETag hashes the view link and the events only, not the title the feed carries (X-WR-CALNAME, NAME)');
   const { id, viewId } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00')], { title: 'Old name' });
   const etag = (await fetch(`${BASE}/view/${viewId}.ics`)).headers.get('etag');
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
@@ -386,7 +380,6 @@ test('A15 [grid] nit (new calendar): the current-time label sits on top of the s
 });
 
 test('A16 [activity] ugly: deleting one occurrence of a series, or changing only an event\'s time zone, is listed as a nameless "1 event edited"', async ({ browser }) => {
-  finding('describeEventDiff\'s hand-kept field list has no recurrenceException and no tz, so these edits have no words and no event name (sameEvent has both)');
   const { id } = await seed([timed('w', 'Weekly sync', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00', { recurrencerule: WEEKLY }),
     timed('z', 'Zoned call', '2026-10-22T10:00:00-07:00', '2026-10-22T11:00:00-07:00', { tz: 'America/Los_Angeles' })]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf&view=week&date=2026-10-20`, { now: NOW, cal: 'native' });
@@ -447,7 +440,6 @@ test('A18 [search] nit: "cafe" does not find "Café meetup" (accents must be typ
 });
 
 test('A19 [open] data-loss: a calendar whose name ends in a space ("royal city ") opens as an unsaved draft under the trimmed name (sometimes blank): edits there never reach it', async ({ browser }) => {
-  finding('CalendarDirectory /register trims actualSlug and targetId ("royal city"), /api/lookup returns that, and CloudCalendarService.findAndSubscribe re-subscribes to it because it differs from the real name');
   const out = {};
   for (const noView of [false, true]) {
     const real = `${rand().slice(-4)} royal city `;
