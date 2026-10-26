@@ -66,4 +66,18 @@ wellFormed(named);
 assert.ok(lines(named).includes('PRODID:-//PasteCal//a\\;b\\nX:y//EN'));
 step('PRODID carries the calendar name escaped');
 
+// 6. A stored rule too big to expand (EventStore.unsafeRecurrence) is published once, with no RRULE or EXDATE; a real
+//    series beside it keeps its rule.
+const bombs = ICSService.generateICS({ title: 'T', events: [
+    { id: 'b1', title: 'Bomb', start: at(12, 9), end: at(12, 10), recurrencerule: 'FREQ=SECONDLY', recurrenceException: '20261012T090001Z' },
+    { id: 'b2', title: 'Count', start: at(12, 9), end: at(12, 10), recurrencerule: 'FREQ=DAILY;COUNT=10000000' },
+    { id: 'w1', title: 'Choir', start: at(3, 18), end: at(3, 19), recurrencerule: 'FREQ=WEEKLY;COUNT=4' },
+] }, 'x');
+wellFormed(bombs);
+const block = (t) => unfold(bombs).split('BEGIN:VEVENT').find((b) => b.includes(`SUMMARY:${t}`));
+for (const t of ['Bomb', 'Count']) assert.ok(!/RRULE|EXDATE/.test(block(t)), `${t} must be published once`);
+assert.match(block('Choir'), /RRULE:FREQ=WEEKLY;COUNT=4/);
+assert.equal(count(bombs, 'BEGIN:VEVENT'), 3);
+step('a rule too big to expand is published once (no RRULE, no EXDATE); a real series keeps its RRULE');
+
 console.log('ics safety tests passed');
