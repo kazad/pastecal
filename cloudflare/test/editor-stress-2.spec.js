@@ -119,7 +119,6 @@ const inside = (b, w, h) => !!b && b.x >= -0.5 && b.y >= -0.5 && b.right <= w + 
 // =====================================================================================================
 
 test('S01 [tz] data-loss: a Tokyo event at 2:30 AM on the day Los Angeles springs forward reads 3:30 AM (0m long) to an LA viewer, and changing its length moves it an hour', async ({ browser }) => {
-  finding('EventZone.toWallDate builds the wall clock as a LOCAL Date: 2:30 AM does not exist on Mar 8 in Los Angeles, so it becomes 3:30');
   // Sun Mar 8 2026, 2:30-3:30 AM in Tokyo = Sat Mar 7 9:30-10:30 AM in Los Angeles (17:30Z-18:30Z).
   const id = await seed([timed('jp', 'Tokyo call', '2026-03-07T17:30:00Z', '2026-03-07T18:30:00Z', { tz: 'Asia/Tokyo' })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-03-07');
@@ -137,7 +136,6 @@ test('S01 [tz] data-loss: a Tokyo event at 2:30 AM on the day Los Angeles spring
 });
 
 test('S02 [tz] broken: viewed from Tokyo, an LA event on LA\'s spring-forward day offers 2:00-2:45 AM, and "2:30a" is quietly stored as 3:30 AM', async ({ browser }) => {
-  finding('the DST-gap filter (EventCard timeList / typedTime) checks the viewer\'s zone, not the event\'s');
   // Sun Mar 8 2026, 1:00-1:30 AM in Los Angeles (09:00Z): 6 PM in Tokyo.
   const id = await seed([timed('la', 'LA early', '2026-03-08T09:00:00Z', '2026-03-08T09:30:00Z', { tz: 'America/Los_Angeles' })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-03-08', { timezoneId: 'Asia/Tokyo' });
@@ -156,7 +154,6 @@ test('S02 [tz] broken: viewed from Tokyo, an LA event on LA\'s spring-forward da
 });
 
 test('S03 [drag] data-loss: an Option-drag copy of a Tokyo-zoned event loses its time zone (Duplicate keeps it)', async ({ browser }) => {
-  finding('app.js nativeDropCopy builds the copy without Tz');
   const id = await seed([timed('jp', 'Tokyo standup', '2026-10-27T17:00:00Z', '2026-10-27T18:00:00Z', { tz: 'Asia/Tokyo' })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   const b = await ev(page, 'jp').first().boundingBox();
@@ -174,7 +171,6 @@ test('S03 [drag] data-loss: an Option-drag copy of a Tokyo-zoned event loses its
 });
 
 test('S04 [repeat] data-loss: another browser renames the series while I am asked "this event / all events"; my "this event" keeps their new name', async ({ browser }) => {
-  finding('nativeCardWrite("this") writes the card\'s whole stale value (Subject from before the rename), not just what I changed');
   const id = await seed([timed('w', 'Weekly sync', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00', { recurrencerule: WEEKLY })]);
   const A = await open(browser, id, '&view=week&date=2026-10-20');
   const B = await open(browser, id, '&view=week&date=2026-10-20');
@@ -198,7 +194,6 @@ test('S04 [repeat] data-loss: another browser renames the series while I am aske
 });
 
 test('S05 [card] broken: on an 11 PM - midnight event, typing the end "11:30p" makes it 24h 30m long instead of ending at 11:30 PM', async ({ browser }) => {
-  finding('typedTime reads the end on the end\'s date (the next day) when the event ends at midnight');
   const id = await seed([timed('l', 'Late show', '2026-10-27T23:00:00-07:00', '2026-10-28T00:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   await openCard(page, ev(page, 'l'));
@@ -262,7 +257,6 @@ test('S08 [card] broken (de-DE): a German date typed in the date picker ("28.10.
 });
 
 test('S09 [tz] broken: classic and native show a Tokyo-zoned weekly series on different days (classic repeats it in the viewer\'s zone)', async ({ browser }) => {
-  finding('ScheduleAdapter hands Syncfusion the rule as is: classic expands BYDAY=TU in Los Angeles, native in Tokyo');
   // Every Tuesday 10 AM in Tokyo = Monday 6 PM in Los Angeles.
   const id = await seed([timed('jp', 'Tokyo standup', '2026-10-20T01:00:00Z', '2026-10-20T01:30:00Z', { tz: 'Asia/Tokyo', recurrencerule: WEEKLY })]);
   const N = await open(browser, id, '&view=week&date=2026-10-27');
@@ -339,7 +333,6 @@ test('S14 [card] nit: on Windows and Linux the shortcuts sheet and the event men
 // =====================================================================================================
 
 test('S15 [sync] data-loss: A edits offline while B renames; when A reconnects, B\'s rename is undone (A\'s offline save carries the old title back)', async ({ browser }) => {
-  finding('the reconnect write sends what A last saw for the event, not only the fields A changed');
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00'),
     timed('q', 'Game', '2026-10-23T17:00:00-07:00', '2026-10-23T18:00:00-07:00'), timed('r', 'Party', '2026-10-21T17:00:00-07:00', '2026-10-21T18:00:00-07:00')]);
   const A = await open(browser, id, '&view=week&date=2026-10-22');

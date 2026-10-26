@@ -11,9 +11,11 @@
  *
  *   props.card   { key, value, isNew, full, canRepeat, anchor: { testid, rect }, edited, place }
  *                value: { title, type, description, isAllDay, start: Date, end: Date, rule, tz }
- *                (all day: start = local midnight of the first day, end = local midnight of the LAST day)
- *                tz: the event's own time zone ('' = each person's own). With one, start and end read that zone's
- *                wall clock in their local fields (app.js nativeCardValue), so every picker here edits its time.
+ *                (start, end: instants; all day: the midnights, here, of the first and the LAST day)
+ *                tz: the event's own time zone ('' = each person's own). The card shows and edits the times as WALL
+ *                CLOCK values in that zone (wv: cardKit's Dates whose UTC fields read the date and time), and asks the
+ *                zone whether a time exists (K.exists). It never reads or builds a local Date: the viewer's zone has
+ *                its own DST gaps (stress S01, S02). change() turns wall values back into instants.
  *   props.calendarZone  the calendar's zone (offered in the time zone list when it is not yours)
  *   emits        'change' (patch, message)   'done' ({ title, description })   'cancel'   'delete'   'duplicate'
  *                'labels' (names)            'expand'
@@ -26,8 +28,8 @@ const EventCard = (() => {
     const M = 12;        // the gap kept from every edge of the screen
     const PHONE = 760;
     const clone = (v) => ({ ...v, start: new Date(v.start), end: new Date(v.end) });
-    const sameDate = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    const at = (day, minutes) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
+    const sameDate = (a, b) => K.sameDate(a, b);
+    const at = (day, minutes) => K.at(day, minutes);
     const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     // The card moved, grew or closed: a toast showing keeps clear of it (components/ToastNotification.js place).
     const moved = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('nk-card-moved')); };
@@ -63,11 +65,24 @@ const EventCard = (() => {
             color() { const p = this.colors.length ? this.colors : ['#3f51b5']; return p[((Number(this.v.type) || 1) - 1) % p.length] || p[0]; },
             typeName() { return this.labels[(Number(this.v.type) || 1) - 1] || `Type ${Number(this.v.type) || 1}`; },
             isNew() { return !!this.card.isNew; },
-            sameDay() { return !this.v.isAllDay && sameDate(this.v.start, this.v.end); },
+            sameDay() { return !this.v.isAllDay && sameDate(this.wv.start, this.wv.end); },
+            /** The end is on the start's day: the same date, or the midnight that ends it (11 PM - 12 AM). */
+            endsSameDay() { return !this.v.isAllDay && K.endsOnStartDay(this.wv.start, this.wv.end); },
+            /** The day an end's clock time is on (K.endDayOf). */
+            endDay() { return K.endDayOf(this.wv.start, this.wv.end); },
             fmt() { return this.timeFormat === '24' ? '24' : '12'; },
+            /** The zone the card's times are in (the event's own, or this browser's). */
+            wz() { return K.zoneOf(this.v); },
+            /**
+             * The value with its start and end as WALL CLOCK values in that zone (cardKit: Dates whose UTC fields read
+             * the date and time). v itself holds the instants. Every date and time choice is made on these; change()
+             * turns them back into instants in the event's zone.
+             */
+            wv() { return { ...this.v, start: K.wallOf(this.v.start, this.wz), end: K.wallOf(this.v.end, this.wz) }; },
+            /** How long the event really is (the instants: across a DST change in its zone, the hours that pass). */
             minutes() { return Math.round((this.v.end - this.v.start) / 60000); },
-            lengthText() { return this.v.isAllDay ? K.fmtDays(K.dayDiff(this.v.start, this.v.end) + 1) : K.fmtLen(this.minutes); },
-            repText() { return K.describeRule(this.v.rule, this.v.start); },
+            lengthText() { return this.v.isAllDay ? K.fmtDays(K.dayDiff(this.wv.start, this.wv.end) + 1) : K.fmtLen(this.minutes); },
+            repText() { return K.describeRule(this.v.rule, this.wv.start); },
             // ---- the time zone line (services/EventZone.js) ----
             myZone() { return Zf() ? Zf().localZone() : ''; },
             evZone() { return Zf() && this.v.tz ? Zf().validZone(this.v.tz) || '' : ''; },
@@ -77,10 +92,11 @@ const EventCard = (() => {
             yourTime() {
                 const z = this.evZone;
                 if (!z || this.v.isAllDay) return '';
-                const s = Zf().fromWallDate(this.v.start, z), e = Zf().fromWallDate(this.v.end, z);
-                if (s.getTime() === this.v.start.getTime() && e.getTime() === this.v.end.getTime()) return '';
-                const day = sameDate(s, this.v.start) ? '' : `${K.DAY_NAMES[s.getDay()].slice(0, 3)} `;
-                const endDay = sameDate(s, e) ? '' : `${K.DAY_NAMES[e.getDay()].slice(0, 3)} `;
+                const mine = Zf().localZone();
+                const s = K.wallOf(this.v.start, mine), e = K.wallOf(this.v.end, mine);
+                if (s.getTime() === this.wv.start.getTime() && e.getTime() === this.wv.end.getTime()) return '';
+                const day = sameDate(s, this.wv.start) ? '' : `${K.DAY_NAMES[K.weekday(s)].slice(0, 3)} `;
+                const endDay = sameDate(s, e) ? '' : `${K.DAY_NAMES[K.weekday(e)].slice(0, 3)} `;
                 return `${day}${this.t(s, false)} – ${endDay}${this.t(e, false)} your time`;
             },
             /** The zone picker's rows: yours first, the calendar's, the event's, the common ones; or what was typed. */
@@ -116,28 +132,27 @@ const EventCard = (() => {
                 }
                 return { ...s, ...this.pos };
             },
-            presets() { return K.presets(this.v.start).map((p) => ({ ...p, text: K.describeRule(p.rule, this.v.start) })); },
-            presetNow() { return K.presetOf(this.v.rule, this.v.start); },
+            presets() { return K.presets(this.wv.start).map((p) => ({ ...p, text: K.describeRule(p.rule, this.wv.start) })); },
+            presetNow() { return K.presetOf(this.v.rule, this.wv.start); },
             timeList() {
                 const kind = this.picker && this.picker.kind;
                 if (kind !== 's' && kind !== 'e') return [];
-                const out = [];
-                for (let m = 0; m < 1440; m += 15) out.push(m);
-                if (kind === 'e') out.push(1440);
-                const startMin = K.minutesOf(this.v.start);
-                const endMin = K.minutesOf(this.v.end);
-                // Only clock times that happen that day (the spring-forward day has no 2:00-2:59 AM).
-                const day = kind === 's' ? this.v.start : this.v.end;
-                return out.filter((m) => (kind === 's' || !this.sameDay || m > startMin) && (m === 1440 || K.minutesOf(at(day, m)) === m)).map((m) => {
-                    const cur = kind === 's' ? m === startMin : m === endMin && m !== 1440;
+                const startMin = K.minutesOf(this.wv.start);
+                const endMin = this.endsSameDay && !this.sameDay ? 1440 : K.minutesOf(this.wv.end);
+                // Only clock times that happen that day in the EVENT's zone (its spring-forward day has no 2:00-2:59 AM);
+                // an end on the start's day, after the start (and the midnight that ends the day).
+                const list = kind === 's' ? K.dayTimes(this.wv.start, this.wz)
+                    : [...K.dayTimes(this.endDay, this.wz).filter((m) => !this.endsSameDay || m > startMin), 1440];
+                return list.map((m) => {
+                    const cur = kind === 's' ? m === startMin : m === endMin && (m !== 1440 || this.endsSameDay);
                     // The end on its own date (midnight at the end of a same-day event is the next day's 0:00).
-                    const len = kind === 'e' ? Math.round((at(this.v.end, m) - this.v.start) / 60000) : 0;
+                    const len = kind === 'e' ? Math.round((K.instantOf(at(this.endDay, m), this.wz) - this.v.start) / 60000) : 0;
                     return { m, cur, label: m === 1440 ? `${K.fmtMinutes(0, this.fmt)} (midnight)` : K.fmtMinutes(m, this.fmt), len: len > 0 ? K.fmtLen(len) : '' };
                 });
             },
             lengths() {
-                if (this.v.isAllDay) return [1, 2, 3, 7].map((n) => ({ n, label: K.fmtDays(n), sub: '', cur: n === K.dayDiff(this.v.start, this.v.end) + 1 }));
-                return [15, 30, 45, 60, 90, 120, 180, 240].map((n) => ({ n, label: K.fmtLen(n), sub: `until ${K.fmtTime(new Date(this.v.start.getTime() + n * 60000), this.fmt, true)}`, cur: n === this.minutes }));
+                if (this.v.isAllDay) return [1, 2, 3, 7].map((n) => ({ n, label: K.fmtDays(n), sub: '', cur: n === K.dayDiff(this.wv.start, this.wv.end) + 1 }));
+                return [15, 30, 45, 60, 90, 120, 180, 240].map((n) => ({ n, label: K.fmtLen(n), sub: `until ${K.fmtTime(this.later(n), this.fmt, true)}`, cur: n === this.minutes }));
             },
             cells() { return this.month ? K.monthCells(this.month.y, this.month.m, Number(this.firstDayOfWeek) || 0) : []; },
             weekHeads() { const f = Number(this.firstDayOfWeek) || 0; return [0, 1, 2, 3, 4, 5, 6].map((i) => K.DAY_NAMES[(i + f) % 7]); },
@@ -328,13 +343,24 @@ const EventCard = (() => {
             // ---- words ---------------------------------------------------------------------------------
             t(d, short = true) { return K.fmtTime(d, this.fmt, short); },
             d(d, o) { return K.fmtDate(d, o); },
-            summary(v = this.v) {
+            summary(v = this.wv) {
                 if (v.isAllDay) return sameDate(v.start, v.end) ? `${K.fmtDate(v.start)} · All day` : `${K.fmtDate(v.start)} – ${K.fmtDate(v.end)} · All day`;
                 if (sameDate(v.start, v.end)) return `${K.fmtDate(v.start)} · ${this.t(v.start)} – ${this.t(v.end)}`;
                 return `${K.fmtDate(v.start)}, ${this.t(v.start)} – ${K.fmtDate(v.end)}, ${this.t(v.end)}`;
             },
             // ---- changes -----------------------------------------------------------------------------
+            /** The wall clock n real minutes after the start (in the event's zone). */
+            later(n) { return K.wallOf(this.v.start.getTime() + n * 60000, this.wz); },
+            /**
+             * A change. Its start and end are wall clock values (from wv): they become instants here, in the zone the
+             * event has after the change. Another time zone alone keeps the date and clock time shown and means them in
+             * that zone (as Google Calendar does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo.
+             */
             change(patch, msg) {
+                patch = { ...patch };
+                if ('tz' in patch && !('start' in patch) && !this.v.isAllDay) Object.assign(patch, { start: this.wv.start, end: this.wv.end });
+                const zone = K.zoneOf({ ...this.v, ...patch });
+                for (const f of ['start', 'end']) if (f in patch) patch[f] = K.instantOf(patch[f], zone);
                 Object.assign(this.v, patch);
                 this.$emit('change', { ...patch }, msg || this.summary());
                 this.$nextTick(() => { this.grow(); this.fit(); });
@@ -511,7 +537,7 @@ const EventCard = (() => {
             onFocusIn(e) { const t = e.target; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
-                const v = this.v;
+                const v = this.wv;
                 if (!v.isAllDay) {
                     this.keep = { s: K.minutesOf(v.start), e: K.minutesOf(v.end) };
                     const end = K.minutesOf(v.end) === 0 && !sameDate(v.start, v.end) ? K.addDays(K.startOfDay(v.end), -1) : K.startOfDay(v.end);
@@ -519,7 +545,7 @@ const EventCard = (() => {
                 } else {
                     const s = this.keep ? this.keep.s : 9 * 60, e = this.keep ? this.keep.e : 10 * 60;
                     let start = at(v.start, s), end = at(v.end, e);
-                    if (end <= start) end = new Date(start.getTime() + 60 * 60000);
+                    if (end <= start) end = at(start, K.minutesOf(start) + 60);
                     this.change({ isAllDay: false, start, end });
                 }
             },
@@ -531,8 +557,8 @@ const EventCard = (() => {
                 this.menu = false;
                 this.typed = ''; this.typedBad = false; this.labelNames = null;
                 if (kind === 'sd' || kind === 'ed' || kind === 'until') {
-                    const d = kind === 'sd' ? this.v.start : kind === 'ed' ? this.v.end : this.untilDate();
-                    this.month = { y: d.getFullYear(), m: d.getMonth() }; this.focusDay = K.startOfDay(d);
+                    const d = kind === 'sd' ? this.wv.start : kind === 'ed' ? this.wv.end : this.untilDate();
+                    this.month = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; this.focusDay = K.startOfDay(d);
                 }
                 this.picker = { kind, el, at: el.getBoundingClientRect(), align: kind === 'dur' || kind === 'cat' ? 'right' : 'left' };
                 el.setAttribute('aria-expanded', 'true');
@@ -579,30 +605,25 @@ const EventCard = (() => {
             },
             setAndClose(patch, msg) { this.closePicker(); this.change(patch, msg); },
             pickTime(m) {
-                const v = this.v, kind = this.picker && this.picker.kind;
+                const v = this.wv, kind = this.picker && this.picker.kind;
                 if (kind === 's') {
-                    const L = v.end - v.start, start = at(v.start, m);
-                    this.setAndClose({ start, end: new Date(start.getTime() + L) }, `Starts ${this.t(start)}`);
+                    // A new start keeps the event's length (the time that really passes, in its zone).
+                    const L = this.minutes, start = at(v.start, m);
+                    this.setAndClose({ start, end: K.wallOf(K.instantOf(start, this.wz).getTime() + L * 60000, this.wz) }, `Starts ${this.t(start)}`);
                 } else {
-                    const end = at(v.end, m);
-                    if (end <= v.start) { this.typedBad = true; return; }
-                    this.setAndClose({ end }, `Ends ${this.t(end)}`);
+                    // (Read against the start, never the old end: K.endAt.)
+                    const end = K.endAt(v.start, v.end, m, this.wz);
+                    if (!end) { this.typedBad = true; return; }
+                    const next = this.endsSameDay && m < K.minutesOf(v.start);   // "1a" for an 11 PM event
+                    this.setAndClose({ end }, `Ends ${this.t(end)}${next ? ' the next day' : ''}`);
                 }
             },
             typedTime() {
                 const m = K.parseTime(this.typed, this.fmt);
                 if (m == null) { this.typedBad = true; return; }
-                const kind = this.picker.kind, startMin = K.minutesOf(this.v.start);
-                if (kind === 'e' && this.sameDay && m === startMin) { this.typedBad = true; return; }
-                // A clock time that day does not have (2:30 AM on the spring-forward day) is refused, not moved.
-                const day = kind === 's' ? this.v.start : this.v.end;
-                if (m < 1440 && K.minutesOf(at(day, m)) !== m && !(kind === 'e' && this.sameDay && m < startMin)) { this.typedBad = true; return; }
-                // An end typed before the start ("1a" for an 11 PM event) is after midnight, the next day.
-                if (kind === 'e' && this.sameDay && m < startMin) {
-                    const end = at(K.addDays(K.startOfDay(this.v.start), 1), m);
-                    this.setAndClose({ end }, `Ends ${this.t(end)} the next day`);
-                    return;
-                }
+                // A clock time that day does not have in the EVENT's zone (2:30 AM on its spring-forward day) is refused,
+                // not moved (stress S02: the viewer's zone was asked). An end: K.endAt, in pickTime.
+                if (this.picker.kind === 's' && !K.exists(at(this.wv.start, m), this.wz)) { this.typedBad = true; return; }
                 this.pickTime(m);
             },
             listKey(e) {
@@ -614,7 +635,7 @@ const EventCard = (() => {
             },
             // Dates: a new start date moves the whole event (its length kept); a new end date moves only the end.
             pickDate(day) {
-                const v = this.v, kind = this.picker.kind;
+                const v = this.wv, kind = this.picker.kind;
                 if (kind === 'until') {
                     if (day < K.startOfDay(v.start)) { this.typedBad = true; this.customError = 'The repeat ends before the event starts.'; return; }
                     this.closePicker();
@@ -629,28 +650,29 @@ const EventCard = (() => {
                 } else {
                     if (day < K.startOfDay(v.start)) { this.typedBad = true; return; }
                     let end = v.isAllDay ? K.startOfDay(day) : at(day, K.minutesOf(v.end));
-                    if (!v.isAllDay && end <= v.start) end = new Date(v.start.getTime() + 60 * 60000);
+                    if (!v.isAllDay && end <= v.start) end = this.later(60);
                     this.say(`Ends ${K.fmtDate(end, { weekday: 'long', month: 'long', day: 'numeric' })}`);
                     this.setAndClose({ end });
                 }
             },
             sameDayEnd() {
-                const v = this.v;
+                const v = this.wv;
                 let end = at(v.start, K.minutesOf(v.end));
-                if (end <= v.start) end = new Date(Math.min(at(K.addDays(K.startOfDay(v.start), 1), 0), v.start.getTime() + 60 * 60000));
+                if (end <= v.start) { const midnight = at(K.addDays(K.startOfDay(v.start), 1), 0), hour = this.later(60); end = hour < midnight ? hour : midnight; }
                 this.setAndClose({ end });
             },
             typedDate() {
-                const ref = this.month ? new Date(this.month.y, this.month.m, 1) : new Date();
-                const d = K.parseDate(this.typed, new Date(), ref);
+                const today = K.today(this.wz);
+                const ref = this.month ? K.wallDate(this.month.y, this.month.m, 1) : today;
+                const d = K.parseDate(this.typed, today, ref);
                 if (!d) { this.typedBad = true; return; }
                 this.pickDate(d);
             },
-            stepMonth(n) { const d = new Date(this.month.y, this.month.m + n, 1); this.month = { y: d.getFullYear(), m: d.getMonth() }; this.$nextTick(() => this.mountPicker()); },
+            stepMonth(n) { const d = K.wallDate(this.month.y, this.month.m + n, 1); this.month = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; this.$nextTick(() => this.mountPicker()); },
             dayClass(d) {
-                const v = this.v, k = this.picker && this.picker.kind;
+                const v = this.wv, k = this.picker && this.picker.kind;
                 const sel = k === 'sd' ? v.start : k === 'ed' ? v.end : this.untilDate();
-                return { cur: sameDate(d, sel), in: k !== 'until' && d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, new Date()),
+                return { cur: sameDate(d, sel), in: k !== 'until' && d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, K.today(this.wz)),
                     off: (k === 'ed' || k === 'until') && d < K.startOfDay(v.start) };
             },
             dayKey(e) {
@@ -659,20 +681,20 @@ const EventCard = (() => {
                 e.preventDefault();
                 const n = K.addDays(this.focusDay, step);
                 this.focusDay = n;
-                if (n.getMonth() !== this.month.m || n.getFullYear() !== this.month.y) this.month = { y: n.getFullYear(), m: n.getMonth() };
+                if (n.getUTCMonth() !== this.month.m || n.getUTCFullYear() !== this.month.y) this.month = { y: n.getUTCFullYear(), m: n.getUTCMonth() };
                 this.$nextTick(() => { const b = this.$refs.pick && this.$refs.pick.querySelector('.nk-month [tabindex="0"]'); if (b) b.focus(); });
             },
-            dayLabel(d) { return `${K.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })}${sameDate(d, new Date()) ? ', today' : ''}`; },
+            dayLabel(d) { return `${K.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })}${sameDate(d, K.today(this.wz)) ? ', today' : ''}`; },
             pickLength(n) {
-                const v = this.v;
+                const v = this.wv;
                 if (v.isAllDay) this.setAndClose({ end: K.addDays(K.startOfDay(v.start), n - 1) }, K.fmtDays(n));
-                else { const end = new Date(v.start.getTime() + n * 60000); this.setAndClose({ end }, `${K.fmtLen(n)}, until ${this.t(end)}`); }
+                else { const end = this.later(n); this.setAndClose({ end }, `${K.fmtLen(n)}, until ${this.t(end)}`); }
             },
             pickType(i) { this.setAndClose({ type: i + 1 }, this.labels[i] || `Type ${i + 1}`); },
             editTypes() { this.labelNames = this.colors.map((_, i) => this.labels[i] || `Type ${i + 1}`); this.$nextTick(() => { this.mountPicker(); const i = this.$refs.pick && this.$refs.pick.querySelector('input'); if (i) i.focus(); }); },
             saveTypes() { const names = this.labelNames; this.labelNames = null; this.closePicker(); this.$emit('labels', names); },
-            pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.v.start)); },
-            /** A time zone: the same instants, shown and edited in it from now on (app.js nativeCardChange). */
+            pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.wv.start)); },
+            /** A time zone: the date and clock time shown, meant in it from now on (change). */
             pickZone(id) { this.setAndClose({ tz: id || '' }, id ? `Times in ${Zf().zoneName(id)}` : 'Times in your time zone'); },
             zoneEnter() { const first = this.zoneOptions[0]; if (first) this.pickZone(first.id); else this.typedBad = true; },
             // ---- Custom…: the repeat's own settings, inside the card under the Repeat row ---------------------------
@@ -695,9 +717,9 @@ const EventCard = (() => {
             },
             /** The section's fields from the stored rule; reading saves nothing. */
             readCustom() {
-                const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.v.start);
+                const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.wv.start);
                 if (!s.freq) s.freq = 'WEEKLY';
-                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
+                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.wv.start, 14));
                 this.custom = s; this.customError = '';
                 // Set back to exactly what it was opened with: the stored rule again, character for character (one
                 // classic wrote may differ in form from the one the section would build).
@@ -711,20 +733,20 @@ const EventCard = (() => {
             customDay(d) { const s = this.custom; const i = s.byDay.indexOf(d); if (i >= 0) { if (s.byDay.length > 1) s.byDay.splice(i, 1); } else s.byDay.push(d); },
             untilDate() {
                 const u = this.custom && this.custom.until;
-                if (u) { const [y, m, d] = u.split('-').map(Number); return new Date(y, m - 1, d); }
-                return K.addDays(K.startOfDay(this.v.start), 14);
+                if (u) { const [y, m, d] = u.split('-').map(Number); return K.wallDate(y, m - 1, d); }
+                return K.addDays(K.startOfDay(this.wv.start), 14);
             },
             applyCustom() {
                 const s = this.custom;
                 if (!s) return;
-                if (s.endMode === 'until' && !s.until) { s.until = K.dateStr(K.addDays(this.v.start, 14)); return; }   // (saved on the next tick)
-                const problem = K.ruleProblem(s, this.v.start, this.v.isAllDay ? K.addDays(this.v.end, 1) : this.v.end, this.v.isAllDay);
+                if (s.endMode === 'until' && !s.until) { s.until = K.dateStr(K.addDays(this.wv.start, 14)); return; }   // (saved on the next tick)
+                const problem = K.ruleProblem(s, this.wv.start, this.v.isAllDay ? K.addDays(this.wv.end, 1) : this.wv.end, this.v.isAllDay);
                 this.customError = problem;
                 if (problem) return;
                 const rule = this._customRule != null && JSON.stringify(s) === this._customAt ? this._customRule : K.buildRule(s, { firstDay: this.firstDayOfWeek });
                 if (rule === (this.v.rule || '')) return;
                 this._customSent = rule;
-                this.change({ rule }, K.describeRule(rule, this.v.start));
+                this.change({ rule }, K.describeRule(rule, this.wv.start));
             },
             // ---- the ⋯ menu ----------------------------------------------------------------------------
             toggleMenu(e) {
@@ -805,15 +827,15 @@ const EventCard = (() => {
     <div v-if="titleNote" class="nk-count" data-testid="card-title-note" aria-live="polite">{{ titleNote }}</div>
     <div v-if="!full" class="nk-qline" data-testid="card-time-line">
       <template v-if="v.isAllDay">
-        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
-        <template v-if="!sameDayAllDay"> – <button type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end) }}</button></template>
+        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button>
+        <template v-if="!sameDayAllDay"> – <button type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end) }}</button></template>
         <span> · All day</span>
       </template>
       <template v-else>
-        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button><span> · </span>
-        <button type="button" class="nk-qs" data-testid="card-q-s" aria-expanded="false" :aria-label="'Start time: ' + t(v.start)" @click="openPicker('s', $event)">{{ t(v.start) }}</button><span> – </span>
-        <button v-if="!sameDay" type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end, { weekday: 'short' }) }}</button>
-        <button type="button" class="nk-qs" data-testid="card-q-e" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end) }}</button>
+        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button><span> · </span>
+        <button type="button" class="nk-qs" data-testid="card-q-s" aria-expanded="false" :aria-label="'Start time: ' + t(wv.start)" @click="openPicker('s', $event)">{{ t(wv.start) }}</button><span> – </span>
+        <button v-if="!sameDay" type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end, { weekday: 'short' }) }}</button>
+        <button type="button" class="nk-qs" data-testid="card-q-e" aria-expanded="false" :aria-label="'End time: ' + t(wv.end)" @click="openPicker('e', $event)">{{ t(wv.end) }}</button>
       </template>
       <span v-if="v.rule" class="nk-qrep"> · {{ repText }}</span>
       <span v-if="yourTime" class="nk-qtz" data-testid="card-q-tz"> · {{ zone }}</span>
@@ -827,15 +849,15 @@ const EventCard = (() => {
 
     <div v-if="full" class="nk-when">
       <span class="nk-gi" title="Time"><nc-icon name="clock" :size="18"></nc-icon></span>
-      <button type="button" class="nk-tp nk-dp" data-testid="card-start-date" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
+      <button type="button" class="nk-tp nk-dp" data-testid="card-start-date" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button>
       <span v-if="v.isAllDay" class="nk-tp off" aria-hidden="true">–</span>
-      <button v-else type="button" class="nk-tp" data-testid="card-start-time" aria-expanded="false" :aria-label="'Start time: ' + t(v.start)" @click="openPicker('s', $event)">{{ t(v.start, false) }}</button>
+      <button v-else type="button" class="nk-tp" data-testid="card-start-time" aria-expanded="false" :aria-label="'Start time: ' + t(wv.start)" @click="openPicker('s', $event)">{{ t(wv.start, false) }}</button>
       <button type="button" class="nk-switch" role="switch" :aria-checked="String(!!v.isAllDay)" data-testid="card-allday" @click="toggleAllDay"><i></i>All day</button>
       <span></span>
       <button type="button" class="nk-tp nk-dp" :class="{ same: sameDay }" data-testid="card-end-date" aria-expanded="false"
-        :aria-label="'End date: ' + (sameDay ? 'same day, ' : '') + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end) }}</button>
+        :aria-label="'End date: ' + (sameDay ? 'same day, ' : '') + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end) }}</button>
       <span v-if="v.isAllDay" class="nk-tp off" aria-hidden="true">–</span>
-      <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end, false) }}</button>
+      <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(wv.end)" @click="openPicker('e', $event)">{{ t(wv.end, false) }}</button>
       <button type="button" class="nk-durb" data-testid="card-length" aria-expanded="false" :aria-label="'Length: ' + lengthText" @click="openPicker('dur', $event)">{{ lengthText }}<nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
     </div>
     <div v-if="full" v-show="!v.isAllDay" class="nk-tz" data-testid="card-tz" @click="!$event.target.closest('.nk-tzb') && $refs.tzb && $refs.tzb.click()">
@@ -915,7 +937,7 @@ const EventCard = (() => {
   <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed' || picker.kind === 'until'">
     <div v-if="picker.kind === 'ed' && !v.isAllDay" class="nk-plist nk-plist-top">
       <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
-      <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(v.start, 1))">Next day <small>{{ d(addDays(v.start, 1)) }}</small></button>
+      <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(wv.start, 1))">Next day <small>{{ d(addDays(wv.start, 1)) }}</small></button>
     </div>
     <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Oct 20, Fri, tomorrow" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedDate">
@@ -926,7 +948,7 @@ const EventCard = (() => {
       <template v-for="(c, i) in cells" :key="i">
         <span v-if="!c"></span>
         <button v-else type="button" role="gridcell" :class="dayClass(c)" :disabled="dayClass(c).off" :data-d="dateStr(c)" :aria-label="dayLabel(c)"
-          :aria-selected="String(dayClass(c).cur)" :tabindex="focusDay && sameDateFn(c, focusDay) ? 0 : -1" @click="pickDate(c)">{{ c.getDate() }}</button>
+          :aria-selected="String(dayClass(c).cur)" :tabindex="focusDay && sameDateFn(c, focusDay) ? 0 : -1" @click="pickDate(c)">{{ c.getUTCDate() }}</button>
       </template>
     </div>
   </template>
@@ -966,12 +988,12 @@ const EventCard = (() => {
     };
 })();
 // Template helpers that read cardKit directly.
-EventCard.computed.sameDayAllDay = function () { return this.v.isAllDay && this.v.start.toDateString() === this.v.end.toDateString(); };
+EventCard.computed.sameDayAllDay = function () { return this.v.isAllDay && cardKit.sameDate(this.wv.start, this.wv.end); };
 EventCard.computed.dayNames = function () { return cardKit.DAY_NAMES; };
 /** The days 0-6 from the calendar's first day of the week (classic's weekday buttons and its weekday list). */
 EventCard.computed.weekOrder = function () { const f = Number(this.firstDayOfWeek) || 0; return [0, 1, 2, 3, 4, 5, 6].map((i) => (i + f) % 7); };
 EventCard.computed.monthNames = function () { return cardKit.MONTH_NAMES; };
 EventCard.methods.addDays = function (d, n) { return cardKit.addDays(cardKit.startOfDay(d), n); };
 EventCard.methods.dateStr = function (d) { return cardKit.dateStr(d); };
-EventCard.methods.sameDateFn = function (a, b) { return a.toDateString() === b.toDateString(); };
+EventCard.methods.sameDateFn = function (a, b) { return cardKit.sameDate(a, b); };
 if (typeof window !== 'undefined') window.EventCard = EventCard;

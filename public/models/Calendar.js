@@ -21,7 +21,7 @@ class Calendar {
     // What Syncfusion draws. The mapping (and every Syncfusion quirk it absorbs) lives in
     // ScheduleAdapter, the one boundary between Syncfusion and our events.
     getSyncFusionEvents() {
-        return ScheduleAdapter.toView(this.events);
+        return ScheduleAdapter.toView(this.events, { grid: true });
     }
 
     defaultEvent(title) {

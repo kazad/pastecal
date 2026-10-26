@@ -1892,10 +1892,9 @@ const CalendarVueApp = {
             ScheduleAdapter.noteStart(rec);
             // A series in its own zone moves by that zone's days and minutes (its repeat days are that zone's).
             const z = this.nativeCardZone({ tz: rec.Tz, isAllDay: rec.IsAllDay });
-            const W = (d) => (z ? EventZone.toWallDate(d, z) : d), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
-            const shift = nativeShift(W(from.start), W(to.start)), stretch = nativeShift(W(from.end), W(to.end));
-            return { ...rec, StartTime: U(shift(W(rec.StartTime))), EndTime: U(stretch(W(rec.EndTime))),
-                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, W(from.start), W(to.start)) };
+            const shift = nativeShift(from.start, to.start, z), stretch = nativeShift(from.end, to.end, z);
+            return { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
+                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start, z) };
         },
         /**
          * Save an "all events" change (record: the series' record as it should be). A series with skipped dates or
@@ -2046,42 +2045,35 @@ const CalendarVueApp = {
         //   kind 'row': a single event or an edited occurrence (its own row); 'occ': one occurrence of a series, not yet
         //   asked "this event / all events"; 'series': the whole series (asked, or opened from a search result).
 
-        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at local midnight. */
+        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at midnight here. */
         nativeCardValue(row, occurrence) {
             const rec = this.nativeRecord(row);
-            const allDay = !!rec.IsAllDay;
+            const value = { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: !!rec.IsAllDay, rule: rec.RecurrenceRule || '', tz: rec.Tz || '' };
             let start = new Date(occurrence ? occurrence.start : rec.StartTime), end = new Date(occurrence ? occurrence.end : rec.EndTime);
-            if (allDay) {
-                start = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                const exclusive = !end.getHours() && !end.getMinutes() && !end.getSeconds() && !end.getMilliseconds();
-                end = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (exclusive ? 1 : 0));
+            if (value.isAllDay) {
+                // (Dates: read and made in this browser's wall clock, cardKit, never a local Date built from parts.)
+                const here = EventZone.localZone(), s = cardKit.wallOf(start, here), e = cardKit.wallOf(end, here);
+                const exclusive = !cardKit.minutesOf(e) && !e.getUTCSeconds() && !e.getUTCMilliseconds();
+                start = cardKit.instantOf(cardKit.startOfDay(s), here);
+                end = cardKit.instantOf(cardKit.addDays(cardKit.startOfDay(e), exclusive ? -1 : 0), here);
                 if (end < start) end = new Date(start);
             }
-            const value = { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '', tz: rec.Tz || '' };
-            return this.nativeCardRezone({ ...value, tz: '' }, value.tz);
+            return { ...value, start, end };
         },
-        // ---- An event's own time zone (services/EventZone.js) on the card. With one, the card's start and end are its
-        // wall clock there: Dates whose LOCAL fields read that zone's time, so every picker (built on local getters)
-        // shows and edits the zone's time, and "2:00 PM" typed with Tokyo picked means 2 PM in Tokyo. They become
-        // instants again only here, on the way to the write path (nativeCardTimes, nativeCardInstants).
-        /** The zone a card value's times are in, or null (none, or all day: dates are dates). */
+        // ---- The card's start and end are instants. It shows and edits them as wall clock values in the event's own zone
+        // (services/EventZone.js), or this browser's (EventCard wv, cardKit): "2:00 PM" typed with Tokyo picked means
+        // 2 PM in Tokyo, and 2:30 AM in Tokyo exists on the day Los Angeles springs forward (stress S01).
+        /** The event's own zone for a card value's times, or null (none, or all day: dates are dates). */
         nativeCardZone(v) { return v && v.tz && !v.isAllDay && typeof EventZone !== 'undefined' ? EventZone.validZone(v.tz) : null; },
-        /** The instants a card value stands for (an all-day value as it is: its display dates). */
-        nativeCardInstants(v) {
-            const z = this.nativeCardZone(v);
-            return z ? { start: EventZone.fromWallDate(v.start, z), end: EventZone.fromWallDate(v.end, z) } : { start: new Date(v.start), end: new Date(v.end) };
-        },
+        /** The instants a card value stands for (all day: the first and the last day's midnights, here). */
+        nativeCardInstants(v) { return { start: new Date(v.start), end: new Date(v.end) }; },
         /** The same instants, shown in zone `tz` ('' = this browser's own). */
-        nativeCardRezone(v, tz) {
-            const real = this.nativeCardInstants(v), out = { ...v, tz: tz || '' }, z = this.nativeCardZone(out);
-            if (v.isAllDay) return out;
-            return { ...out, start: z ? EventZone.toWallDate(real.start, z) : real.start, end: z ? EventZone.toWallDate(real.end, z) : real.end };
-        },
-        /** The card's start / end in the shapes classic's records carry (an all-day end: the next local midnight). */
+        nativeCardRezone(v, tz) { return { ...v, tz: tz || '' }; },
+        /** The card's start / end in the shapes classic's records carry (an all-day end: the next midnight here). */
         nativeCardTimes(v) {
-            if (!v.isAllDay) { const r = this.nativeCardInstants(v); return { StartTime: r.start, EndTime: r.end }; }
-            const s = new Date(v.start), e = new Date(v.end);
-            return { StartTime: new Date(s.getFullYear(), s.getMonth(), s.getDate()), EndTime: nativeEnd(new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999), true) };
+            if (!v.isAllDay) return { StartTime: new Date(v.start), EndTime: new Date(v.end) };
+            const here = EventZone.localZone(), day = (x, n) => cardKit.instantOf(cardKit.addDays(cardKit.startOfDay(cardKit.wallOf(x, here)), n), here);
+            return { StartTime: day(v.start, 0), EndTime: day(v.end, 1) };
         },
         /** The fields a change touched, as record fields. */
         nativeCardFields(before, after) {
@@ -2131,10 +2123,10 @@ const CalendarVueApp = {
         },
         /** A new event from a click or drag on the grid (or N): a draft until Done. */
         openNativeNewCard({ start, end, isAllDay, jsEvent, full = false }) {
-            const s = new Date(start), e = new Date(end);
-            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '',
-                start: isAllDay ? new Date(s.getFullYear(), s.getMonth(), s.getDate()) : s,
-                end: isAllDay ? (() => { const x = new Date(e.getTime() - 1); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); })() : e };
+            // (All day: the first and the last day's midnights here, read in this browser's wall clock.)
+            const here = EventZone.localZone(), day = (x) => cardKit.instantOf(cardKit.startOfDay(cardKit.wallOf(x, here)), here);
+            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '', tz: '',
+                start: isAllDay ? day(start) : new Date(start), end: isAllDay ? day(new Date(end).getTime() - 1) : new Date(end) };
             if (value.isAllDay && value.end < value.start) value.end = new Date(value.start);
             const r = jsEvent && jsEvent.clientX != null ? { left: jsEvent.clientX, top: jsEvent.clientY, width: 1, height: 1, right: jsEvent.clientX + 1, bottom: jsEvent.clientY + 1 } : null;
             this.showNativeCard({ isNew: true, full, target: { kind: 'new' }, value, canRepeat: true, anchor: { testid: 'draft-block', rect: r }, returnTo: null });
@@ -2162,8 +2154,8 @@ const CalendarVueApp = {
             if (!c) return;
             if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
             // Another time zone keeps the date and clock time shown and means them in that zone (as Google Calendar
-            // does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo. The card's start and end are wall-clock Dates,
-            // so that is just the new tz beside them (nativeCardTimes turns them into instants in it).
+            // does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo. The card sends the new tz with the start and end
+            // that now mean (EventCard change).
             const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
             // Whether people categorize events at all (classic sends it too).
             if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
@@ -2268,10 +2260,8 @@ const CalendarVueApp = {
             t.series = now;
             if (!was || !t.occurrence || (was.start === now.start && was.end === now.end)) return null;
             const z = this.nativeCardZone(this.nativeCardValue(series));
-            const W = (d) => (z ? EventZone.toWallDate(new Date(d), z) : new Date(d)), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
-            const s = nativeShift(W(was.start), W(now.start)), e = nativeShift(W(was.end), W(now.end));
-            t.occurrence = { start: U(s(W(t.occurrence.start))), end: U(e(W(t.occurrence.end))) };
-            // (A card value's times are already the zone's wall clock.)
+            const s = nativeShift(was.start, now.start, z), e = nativeShift(was.end, now.end, z);
+            t.occurrence = { start: s(t.occurrence.start), end: e(t.occurrence.end) };
             return (v) => ({ ...v, start: s(v.start), end: e(v.end) });
         },
         nativeCardWrite(scope, before, after, message) {
@@ -2324,8 +2314,8 @@ const CalendarVueApp = {
                 ScheduleAdapter.noteStart(moved);
                 if (timed && 'Tz' in fields && !!before.isAllDay === !!after.isAllDay) {
                     // Another zone: the series' own dates and clock times, meant in the new zone (its repeat days too).
-                    const oz = this.nativeCardZone(before), nz = this.nativeCardZone(after);
-                    const re = (d) => { const w = oz ? EventZone.toWallDate(d, oz) : new Date(d); return nz ? EventZone.fromWallDate(w, nz) : w; };
+                    const oz = this.nativeCardZone(before) || EventZone.localZone(), nz = this.nativeCardZone(after) || EventZone.localZone();
+                    const re = (d) => EventZone.unfloating(EventZone.floating(new Date(d).getTime(), oz), nz);
                     moved = { ...moved, StartTime: re(moved.StartTime), EndTime: re(moved.EndTime) };
                 } else if (timed) {
                     moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
@@ -2461,18 +2451,21 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c || c.isNew) return;
             const v = this.nativeCardClone(c.value);
-            const next = { ...v, start: cardKit.addDays(v.start, 1), end: cardKit.addDays(v.end, 1), rule: '' };
+            // The next day on the event's own wall clock (its zone, or this browser's).
+            const W = cardKit.zoneOf(v), nextDay = (x) => cardKit.instantOf(cardKit.addDays(cardKit.wallOf(x, W), 1), W);
+            const next = { ...v, start: nextDay(v.start), end: nextDay(v.end), rule: '' };
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
-            const t = c.target, row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
-            if (!row) return this.nativeCardGone(t.kind !== 'row');
-            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(row, { ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay })] }, { action: 'Add' });
+            const t = c.target, src = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!src) return this.nativeCardGone(t.kind !== 'row');
+            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(src, { ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay })] }, { action: 'Add' });
             const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             if (!row) return;
             c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
             c.canRepeat = true;
             c.anchor = { testid: `event-${row.id}`, rect: null };
-            const when = v.isAllDay ? cardKit.fmtDate(next.start) : `${cardKit.fmtDate(next.start, { weekday: 'short' })} ${cardKit.fmtTime(next.start, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
+            const ns = cardKit.wallOf(next.start, W);
+            const when = v.isAllDay ? cardKit.fmtDate(ns) : `${cardKit.fmtDate(ns, { weekday: 'short' })} ${cardKit.fmtTime(ns, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
             this.nativeCardSaved(c, snapshot, next, `Duplicated to ${when}`);
             this.$nextTick(() => { c.place++; });
         },
@@ -2519,7 +2512,8 @@ const CalendarVueApp = {
             if (payload.copy) return this.nativeDropCopy(payload);
             const len = this.store().undoStack.length;
             const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
-            const s = new Date(payload.start), e = new Date(payload.end);
+            // (Said in this browser's wall clock, as the grid shows it.)
+            const here = EventZone.localZone(), s = cardKit.wallOf(payload.start, here), e = cardKit.wallOf(payload.end, here);
             const msg = payload.mode === 'resize' ? (payload.allDay ? `Ends ${cardKit.fmtDate(new Date(e.getTime() - 1))}` : `Ends ${cardKit.fmtTime(e, f, true)}`)
                 : payload.mode === 'resize-top' ? `Starts ${cardKit.fmtTime(s, f, true)}`
                     : `Moved to ${cardKit.fmtDate(s, { weekday: 'short' })}${payload.allDay ? '' : ' ' + cardKit.fmtTime(s, f, true)}`;

@@ -214,7 +214,9 @@
             // Edit links: the editor and the quick box (a view link never edits, so never downloads them).
             + (window.pcNativeEdit ? '<script src="/nativecal/components/cardKit.js?v=1792797113"><\/script>'
                 + '<script src="/nativecal/components/EventCard.js?v=1792797113"><\/script>' : ''));
-        else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>');
+        // (rrule too: a series in its own zone is expanded there for classic's grid, as native draws it: ScheduleAdapter.toView.)
+        else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>'
+            + '<script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"><\/script>');
     </script>
     <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
          scripts (92 KB, plus an anonymous sign-in chain) no longer load there. A local copy can still choose

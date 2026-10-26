@@ -81,6 +81,19 @@
         repeat: (v) => v || '',
         tz: (v) => v || null,
     };
+    // A series in its own zone (event.tz) as the occurrences the grid draws, when this browser is in another zone, or
+    // null (no zone, the same zone, or no rrule.js: the grid repeats the rule itself). Expanded from a year back to three
+    // years ahead (at most EventZone's 2000).
+    const ZONED_YEARS_BACK = 1, ZONED_YEARS_AHEAD = 3;
+    const zonedOccurrences = (e) => {
+        const EZ = root.EventZone, RR = root.rrule && root.rrule.RRule;
+        const zone = EZ && RR && EZ.validZone(e.tz);
+        if (!zone || zone === EZ.localZone()) return null;
+        const now = Date.now(), year = 365 * 864e5;
+        return EZ.occurrences(e, new Date(now - ZONED_YEARS_BACK * year), new Date(now + ZONED_YEARS_AHEAD * year), RR);
+    };
+    // The id of a new row for "this event" of a zoned series (never a stored id: toCommand adds it).
+    const ZONED_OCCURRENCE_ID = '__zoned_occurrence__';
     const recKey = (r) => `${blank(r.Id) ? '' : String(r.Id)}|${blank(r.RecurrenceID) ? '' : String(r.RecurrenceID)}`;
 
     // Text on an event chip: one of these two, by contrast with the event's color.
@@ -188,15 +201,13 @@
          * days and minutes (CalendarView.edits.shiftBy), so each stamp still names its slot in the moved series.
          * A stamp that can't be read is kept as it is.
          */
-        shiftStamps(list, from, to) {
-            const a = new Date(from), b = new Date(to);
-            const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
-            const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+        shiftStamps(list, from, to, zone = null) {
+            // (In the series' zone: its own, or none for this browser's -- the days and minutes it moved there.)
+            const EZ = root.EventZone || (typeof require === 'function' ? require('./EventZone.js') : null);
+            const move = EZ.shiftBy(from, to, zone);
             return String(list || '').split(',').map((x) => x.trim()).filter(Boolean).map((s) => {
                 const d = ScheduleAdapter.stampDate(s);
-                if (!d) return s;
-                d.setDate(d.getDate() + days); d.setMinutes(d.getMinutes() + minutes);
-                return ScheduleAdapter.stamp(d);
+                return d ? ScheduleAdapter.stamp(move(d)) : s;
             }).join(',');
         },
 
@@ -209,11 +220,11 @@
          * way. Each record also carries the stored values it was built from (_stored*), so
          * fromRecord can keep a value verbatim when its meaning is unchanged.
          */
-        toView(events) {
+        toView(events, { grid = false } = {}) {
             const list = events || [];
             const allDayAware = typeof Event === 'function' && typeof Event.allDayToLocal === 'function';
             const byId = new Map(list.filter((e) => e && e.recurrencerule).map((e) => [String(e.id), e]));
-            return list.map((e) => {
+            return list.flatMap((e) => {
                 const allDay = !!e.isAllDay && allDayAware;
                 const toD = allDay ? (v) => Event.allDayToLocal(v) : toDate;
                 // An edited occurrence's exception names a slot in its PARENT's grid, so the
@@ -234,6 +245,19 @@
                     ? EventStore.unsafeRecurrence(e.recurrencerule) : null;
                 if (unsafe && !warnedRules.has(e.id)) { warnedRules.add(e.id); console.warn(`[pastecal] event ${e.id}: ${unsafe}; shown once, not repeated`); }
                 const rule = unsafe ? '' : e.recurrencerule;
+                // A series in its own zone, seen from another: Syncfusion would repeat it in THIS browser's wall clock,
+                // on other days and, across either zone's DST change, at other hours than native (stress S09). So the
+                // grid (`grid`: Calendar.getSyncFusionEvents) is given its occurrences, expanded in the event's zone
+                // (EventZone.occurrences, the native calendar's own), each one event standing for "this event" of the
+                // series (toCommand). Any other caller gets the series' own record.
+                const zoned = grid && !e.isAllDay && rule && blank(e.recurrenceID) ? zonedOccurrences({ ...e, recurrencerule: rule }) : null;
+                if (zoned) {
+                    const one = { Id: null };
+                    for (const [f, R] of Object.entries(Store().RECORD)) if (f !== 'tz' || e.tz) one[R] = e[f];
+                    return zoned.map((o) => ({ ...one, Id: `${asText(e.id)}@${o.start.getTime()}`, StartTime: o.start, EndTime: o.end,
+                        Type: parseInt(e.type || 1, 10), IsAllDay: false, RecurrenceRule: '', RecurrenceException: null, RecurrenceID: null,
+                        _zonedOf: asText(e.id), _zonedStart: o.start }));
+                }
                 const shownRule = allDaySeries ? Event.allDayRuleToLocal(rule) : rule;
                 const gridRule = yearlyByPosToGrid(shownRule, start);
                 // Every field of the one list (EventStore.RECORD) under its record name, as stored; then the ones
@@ -241,7 +265,7 @@
                 // event's own zone too: classic neither shows nor edits it, and fromRecord hands it back.)
                 const rec = { Id: asText(e.id) };
                 for (const [f, R] of Object.entries(Store().RECORD)) if (f !== 'tz' || e.tz) rec[R] = e[f];
-                return Object.assign(rec, {
+                return [Object.assign(rec, {
                     StartTime: start,
                     EndTime: end,
                     ...(shownEnd ? { _shownEnd: shownEnd } : {}),
@@ -256,7 +280,7 @@
                     RecurrenceID: asText(e.recurrenceID),
                     RecurrenceException: allDaySeries
                         ? Event.allDayExceptionsToLocal(e.recurrenceException) : e.recurrenceException,
-                });
+                })];
             });
         },
 
@@ -300,6 +324,18 @@
          * with RecurrenceID), so each record maps to one primitive command.
          */
         toCommand(args, store, context = {}) {
+            // A grid record that stands for one occurrence of a series in its own zone (toView): an edit, a move or a
+            // delete of it is "this event" of the series -- its slot at that instant, as native writes it.
+            const zonedRec = [...(args.changedRecords || []), ...(args.deletedRecords || [])].find((r) => r && !blank(r._zonedOf));
+            if (zonedRec) {
+                const master = store.find({ id: zonedRec._zonedOf, recurrenceID: null });
+                const deleting = (args.deletedRecords || []).includes(zonedRec);
+                if (!master) throw seriesDeleted(deleting ? 'DeleteOccurrence' : 'EditOccurrence');
+                const { _zonedOf, _zonedStart, ...rest } = zonedRec;
+                const r = { ...rest, Id: ZONED_OCCURRENCE_ID, RecurrenceID: master.id, RecurrenceRule: master.recurrencerule };
+                return ScheduleAdapter.toCommand({ ...args, addedRecords: [], changedRecords: [r], deletedRecords: [] }, store,
+                    { ...context, action: deleting ? 'DeleteOccurrence' : 'EditOccurrence', occurrenceStart: new Date(_zonedStart) });
+            }
             const commands = [];
             const keyOf = (r) => ({ id: r.Id, recurrenceID: r.RecurrenceID });
 
@@ -373,10 +409,11 @@
                         // edited one shows twice.
                         const shift = context.shift;
                         if (shift) {
-                            changes.recurrenceException = ScheduleAdapter.shiftStamps(master.recurrenceException, shift.from, shift.to);
+                            const zone = master.isAllDay ? null : master.tz || null;
+                            changes.recurrenceException = ScheduleAdapter.shiftStamps(master.recurrenceException, shift.from, shift.to, zone);
                             for (const e of ownOccurrences) {
                                 if (!blank(e.recurrenceException)) commands.push({ type: 'update', key: e,
-                                    changes: { recurrenceException: ScheduleAdapter.shiftStamps(e.recurrenceException, shift.from, shift.to) } });
+                                    changes: { recurrenceException: ScheduleAdapter.shiftStamps(e.recurrenceException, shift.from, shift.to, zone) } });
                             }
                         }
                     } else {

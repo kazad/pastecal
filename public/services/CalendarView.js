@@ -108,7 +108,8 @@
             occurrences(start, end) {
                 // getEvents expands repeats from the (color-filtered) dataSource the grid draws.
                 return (sch.getEvents(new Date(start), new Date(end), true) || []).map((e) => ({
-                    event: stored(vm, e.Id, e.RecurrenceID) || stored(vm, e.Id, null) || stored(vm, e.RecurrenceID, null),
+                    event: stored(vm, e.Id, e.RecurrenceID) || stored(vm, e.Id, null) || stored(vm, e.RecurrenceID, null)
+                        || (e._zonedOf != null ? stored(vm, e._zonedOf, null) : null),   // (an occurrence of a zoned series: ScheduleAdapter.toView)
                     start: new Date(e.StartTime), end: new Date(e.EndTime), allDay: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type,
                 }));
             },
@@ -165,9 +166,12 @@
     // ---- Editing on the native calendar: its dates in the shapes classic's grid records carry (app.js nativeAction).
     // A repeat rule for a series moved from `from` to `to` (dragging "all events" to another day): the weekdays,
     // day of the month and month it names move with it. Anything else, and a move within the same day, keeps it.
-    function shiftRule(rule, from, to) {
-        const a = new Date(from), b = new Date(to);
-        const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+    // (Read in the series' zone, `zone`: its own, or none for this browser's. Its weekdays are that zone's.)
+    const EZ = () => root.EventZone || (typeof require === 'function' ? require('./EventZone.js') : null);
+    function shiftRule(rule, from, to, zone = null) {
+        const z = EZ().validZone(zone) || EZ().localZone();
+        const a = EZ().floating(new Date(from).getTime(), z), b = EZ().floating(new Date(to).getTime(), z);
+        const days = Math.round((Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate()) - Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate())) / 864e5);
         if (!rule || !days) return rule;
         const DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
         const parts = String(rule).split(';');
@@ -182,10 +186,10 @@
             });
             set('BYDAY', shifted.join(','));
             // "The 2nd Tuesday" dragged to another week: the position of the new date in its month.
-            if (get('BYSETPOS') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYSETPOS', Math.ceil(b.getDate() / 7) > 4 ? -1 : Math.ceil(b.getDate() / 7));
+            if (get('BYSETPOS') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYSETPOS', Math.ceil(b.getUTCDate() / 7) > 4 ? -1 : Math.ceil(b.getUTCDate() / 7));
         }
-        if (get('BYMONTHDAY') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYMONTHDAY', b.getDate());
-        if (get('BYMONTH') && freq === 'YEARLY') set('BYMONTH', b.getMonth() + 1);
+        if (get('BYMONTHDAY') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYMONTHDAY', b.getUTCDate());
+        if (get('BYMONTH') && freq === 'YEARLY') set('BYMONTH', b.getUTCMonth() + 1);
         // The end date moves with it (Tuesdays until Oct 27 dragged to Thursdays run until Oct 29), by whole days:
         // UNTIL is read as a day (through its end), so moving it by the minutes too could add an occurrence.
         const until = get('UNTIL');
@@ -200,8 +204,9 @@
                 d.setDate(d.getDate() + days);
                 set('UNTIL', d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
             } else {
-                const d = new Date(+m[1], +m[2] - 1, +m[3] + days, +m[4], +m[5], +m[6]);
-                set('UNTIL', `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`);
+                // A floating UNTIL is a wall clock: moved as one (never through a local Date, which bends at DST).
+                const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + days, +m[4], +m[5], +m[6]));
+                set('UNTIL', `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`);
             }
         }
         return parts.join(';');
@@ -214,14 +219,9 @@
         if (d.getHours() || d.getMinutes() || d.getSeconds() || d.getMilliseconds()) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
         return d;
     }
-    // Moving `from` to `to` as wall-clock days and minutes, applied to another time (a series moved with one occurrence):
-    // across a DST change the clock time stays the same.
-    function shiftBy(from, to) {
-        const a = new Date(from), b = new Date(to);
-        const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
-        const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
-        return (t) => { const x = new Date(t); x.setDate(x.getDate() + days); x.setMinutes(x.getMinutes() + minutes); return x; };
-    }
+    // Moving `from` to `to` as wall-clock days and minutes in the series' zone (none: this browser's), applied to another
+    // time (a series moved with one occurrence): across a DST change the clock time stays the same (EventZone.shiftBy).
+    function shiftBy(from, to, zone = null) { return EZ().shiftBy(from, to, zone); }
 
     const CalendarView = { native, syncfusion, displayEvents, edits: { endOf, shiftBy, shiftRule } };
     if (typeof module !== 'undefined' && module.exports) module.exports = CalendarView;

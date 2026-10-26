@@ -13,9 +13,12 @@
  *   wall(ms, tz)               { y, m (0-11), d, h, min, s } of an instant in tz
  *   fromWall(y, m, d, h, min, s, tz)   the instant whose wall clock in tz reads that. A time skipped by DST moves
  *                              forward by the gap (2:30 on spring-forward is 3:30); a repeated one is the first.
- *   toWallDate(date, tz)       a Date whose LOCAL fields read tz's wall clock (what a picker built on local
- *                              getters edits); fromWallDate is the way back
- *   floating(ms, tz) / unfloating(f, tz)   the same wall clock as a UTC-fields Date (rrule's floating frame)
+ *   floating(ms, tz) / unfloating(f, tz)   the wall clock in tz as a Date whose UTC fields read it, and back: the one
+ *                              wall-time frame (rrule's floating frame; the event card's values, nativecal/cardKit.js).
+ *                              Never a Date whose LOCAL fields read it: the viewer's zone has its own DST gaps, and
+ *                              2:30 AM on the day Los Angeles springs forward became 3:30 there (stress S01).
+ *   occurrences(ev, from, to, RRule)  a series in its own zone, expanded there (both calendars draw this)
+ *   shiftBy(from, to, tz)      a function moving a time by as many wall-clock days and minutes in tz as from -> to
  *   localZone()                this browser's zone
  *   zoneName(tz) "Japan Time", zoneCity(tz) "Tokyo", zoneLabel(tz) "Tokyo — Japan Time"
  *   zones()                    every zone the browser knows, labeled, for search (cached)
@@ -64,16 +67,72 @@
         return guess - before * 60000;   // skipped by DST: read with the offset before the change, i.e. moved forward
     }
 
-    const toWallDate = (date, tz) => {
-        const ms = new Date(date).getTime(), w = wall(ms, tz);
-        return new Date(w.y, w.m, w.d, w.h, w.min, w.s, ((ms % 1000) + 1000) % 1000);
-    };
-    const fromWallDate = (date, tz) => {
-        const d = new Date(date);
-        return new Date(fromWall(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), tz) + d.getMilliseconds());
-    };
-    const floating = (ms, tz) => { const w = wall(new Date(ms).getTime(), tz); return new Date(Date.UTC(w.y, w.m, w.d, w.h, w.min, w.s)); };
-    const unfloating = (f, tz) => new Date(fromWall(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate(), f.getUTCHours(), f.getUTCMinutes(), f.getUTCSeconds(), tz));
+    const floating = (ms, tz) => { const t = new Date(ms).getTime(), w = wall(t, tz); return new Date(Date.UTC(w.y, w.m, w.d, w.h, w.min, w.s) + (((t % 1000) + 1000) % 1000)); };
+    const unfloating = (f, tz) => new Date(fromWall(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate(), f.getUTCHours(), f.getUTCMinutes(), f.getUTCSeconds(), tz) + f.getUTCMilliseconds());
+
+    /**
+     * Moving `from` to `to` as wall-clock days and minutes in zone tz (none: this browser's), applied to another time:
+     * a series moved with one of its occurrences, its skipped dates with it. Across a DST change the clock time stays.
+     */
+    function shiftBy(from, to, tz) {
+        const z = validZone(tz) || localZone();
+        const a = floating(new Date(from).getTime(), z), b = floating(new Date(to).getTime(), z);
+        const day = (f) => Math.floor(f.getTime() / DAY_MS), mins = (f) => f.getUTCHours() * 60 + f.getUTCMinutes();
+        const by = (day(b) - day(a)) * DAY_MS + (mins(b) - mins(a)) * 60000;
+        return (t) => unfloating(new Date(floating(new Date(t).getTime(), z).getTime() + by), z);
+    }
+
+    // ---- a series in its own zone ---------------------------------------------------------------------------
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const ymdKey = (y, m, d) => `${y}${pad2(m + 1)}${pad2(d)}`;
+    /**
+     * The DATE ('YYYYMMDD') a day stamp names: a floating stamp or a bare date as written; a UTC one as its WRITER's
+     * local midnight ("20261012T150000Z" is Tokyo's Oct 13), from just east of UTC-11 to UTC+13 (models/Event.js).
+     */
+    function stampDay(s) {
+        const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(String(s).trim());
+        if (!m) return null;
+        if (!m[4] || !m[7]) return m[1] + m[2] + m[3];
+        const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+        const d = new Date(Math.floor((ms + 13 * 3600000 + 1000) / DAY_MS) * DAY_MS);
+        return ymdKey(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    }
+    /**
+     * The occurrences of a timed series in its own zone (ev.tz) overlapping [rangeStart, rangeEnd): [{ start, end }]
+     * instants. It repeats in THAT zone's wall clock: a weekly 2 PM Tokyo meeting stays 2 PM Tokyo across DST and lands
+     * on Tokyo's weekday, wherever it is viewed. A skipped date is the zone's day of its stamp; UNTIL names a day (its
+     * writer's local midnight), through its end in the zone. RRule: rrule.js's class (the page's window.rrule.RRule).
+     * The one expansion both calendars draw: NativeCalendar, and classic's grid (ScheduleAdapter.toView), which would
+     * otherwise repeat it in the VIEWER's zone, on other days (stress S09). null if it cannot be expanded.
+     */
+    function occurrences(ev, rangeStart, rangeEnd, RRule, max = 2000) {
+        const zone = ev && !ev.isAllDay && validZone(ev.tz);
+        if (!zone || !ev.recurrencerule || !RRule) return null;
+        const start = new Date(ev.start), duration = new Date(ev.end) - start;
+        if (isNaN(start) || isNaN(duration)) return null;
+        const zoneDay = (ms) => { const w = wall(ms, zone); return ymdKey(w.y, w.m, w.d); };
+        const excluded = new Set(String(ev.recurrenceException || '').split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
+            const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(x);
+            if (!m) return null;
+            return !m[4] || !m[7] ? m[1] + m[2] + m[3] : zoneDay(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+        }).filter(Boolean));
+        let rule;
+        try {
+            const clean = String(ev.recurrencerule).replace(/^RRULE:/i, '').split(';').filter((p) => p.includes('=')).join(';');
+            const opts = RRule.parseString(clean);
+            if (opts.until) { const k = stampDay(opts.until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')); if (k) opts.until = new Date(Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8), 23, 59, 59)); }
+            rule = new RRule({ ...opts, dtstart: floating(start.getTime(), zone) });
+        } catch (e) { return null; }
+        const out = [];
+        const from = floating(new Date(rangeStart).getTime() - duration - DAY_MS, zone), to = floating(new Date(rangeEnd).getTime() + DAY_MS, zone);
+        for (const f of rule.between(from, to, true, (d, i) => i < max)) {
+            if (excluded.has(ymdKey(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate()))) continue;
+            const s = unfloating(f, zone), e = new Date(s.getTime() + duration);
+            if (e <= rangeStart || s >= rangeEnd) continue;
+            out.push({ start: s, end: e });
+        }
+        return out;
+    }
 
     function localZone() {
         try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; }
@@ -140,7 +199,7 @@
         return hits.sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label)).slice(0, max);
     }
 
-    const EventZone = { DAY_MS, COMMON, validZone, wall, offsetMin, fromWall, toWallDate, fromWallDate, floating, unfloating,
+    const EventZone = { DAY_MS, COMMON, validZone, wall, offsetMin, fromWall, floating, unfloating, shiftBy, stampDay, occurrences,
         localZone, zoneName, zoneCity, zoneLabel, zones, searchZones };
     if (typeof module !== 'undefined' && module.exports) module.exports = EventZone;
     else root.EventZone = EventZone;
