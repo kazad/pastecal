@@ -709,7 +709,7 @@ const EventCard = (() => {
             // ---- phone: drag the sheet down from its top to close it (keeps the changes) --------------------
             sheetStart(e) {
                 const c = this.$refs.card;
-                if (!this.phone || !c || c.scrollTop > 0 || !e.touches || e.touches.length !== 1 || e.target.closest('input, textarea, button, select, a')) return;
+                if (!this.phone || !c || c.scrollTop > 0 || !e.touches || e.touches.length !== 1 || e.target.closest('input, textarea, button, select, a, .nk-det-view')) return;   // (the details, links or not, scroll themselves)
                 this._sheet = { y0: e.touches[0].clientY };
             },
             sheetMove(e) {
