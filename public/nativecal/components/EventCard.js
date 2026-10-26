@@ -20,7 +20,8 @@
  */
 const EventCard = (() => {
     const K = (typeof cardKit !== 'undefined' && cardKit) || (typeof window !== 'undefined' && window.cardKit);
-    const Z = (typeof EventZone !== 'undefined' && EventZone) || (typeof window !== 'undefined' && window.EventZone) || null;
+    // (Read when used: services/EventZone.js loads after this file.)
+    const Zf = () => (typeof window !== 'undefined' && window.EventZone) || (typeof EventZone !== 'undefined' && EventZone) || null;
     const MAX = 20000;   // the server's per-field limit (cloudflare/src/CalendarRoom.js LIMITS.maxField)
     const M = 12;        // the gap kept from every edge of the screen
     const PHONE = 760;
@@ -63,15 +64,15 @@ const EventCard = (() => {
             lengthText() { return this.v.isAllDay ? K.fmtDays(K.dayDiff(this.v.start, this.v.end) + 1) : K.fmtLen(this.minutes); },
             repText() { return K.describeRule(this.v.rule, this.v.start); },
             // ---- the time zone line (services/EventZone.js) ----
-            myZone() { return Z ? Z.localZone() : ''; },
-            evZone() { return Z && this.v.tz ? Z.validZone(this.v.tz) || '' : ''; },
+            myZone() { return Zf() ? Zf().localZone() : ''; },
+            evZone() { return Zf() && this.v.tz ? Zf().validZone(this.v.tz) || '' : ''; },
             /** The zone the times are shown in: the event's own, or yours ("Pacific Time", "Japan Time"). */
-            zone() { return (Z && Z.zoneName(this.evZone || this.myZone)) || 'Your time zone'; },
+            zone() { return (Zf() && Zf().zoneName(this.evZone || this.myZone)) || 'Your time zone'; },
             /** "10:00 PM – 10:30 PM your time" when the event's zone shows other clock times than yours ("Tue 10:00 PM..." on another day). */
             yourTime() {
                 const z = this.evZone;
                 if (!z || this.v.isAllDay) return '';
-                const s = Z.fromWallDate(this.v.start, z), e = Z.fromWallDate(this.v.end, z);
+                const s = Zf().fromWallDate(this.v.start, z), e = Zf().fromWallDate(this.v.end, z);
                 if (s.getTime() === this.v.start.getTime() && e.getTime() === this.v.end.getTime()) return '';
                 const day = sameDate(s, this.v.start) ? '' : `${K.DAY_NAMES[s.getDay()].slice(0, 3)} `;
                 const endDay = sameDate(s, e) ? '' : `${K.DAY_NAMES[e.getDay()].slice(0, 3)} `;
@@ -79,17 +80,17 @@ const EventCard = (() => {
             },
             /** The zone picker's rows: yours first, the calendar's, the event's, the common ones; or what was typed. */
             zoneOptions() {
-                if (!Z || !this.picker || this.picker.kind !== 'tz') return [];
+                if (!Zf() || !this.picker || this.picker.kind !== 'tz') return [];
                 const cur = this.evZone;
                 const row = (id, label, sub = '') => ({ id, label, sub, cur: id === cur });
                 const q = this.typed.trim();
-                if (q) return Z.searchZones(q).map((z) => row(z.id, z.label));
-                const out = [row('', `Use mine (${Z.zoneName(this.myZone)})`)];
+                if (q) return Zf().searchZones(q).map((z) => row(z.id, z.label));
+                const out = [row('', `Use mine (${Zf().zoneName(this.myZone)})`)];
                 const seen = new Set(['', this.myZone]);
-                const cal = Z.validZone(this.calendarZone);
-                if (cal && !seen.has(cal)) { out.push(row(cal, Z.zoneLabel(cal), 'Calendar')); seen.add(cal); }
-                if (cur && !seen.has(cur)) { out.push(row(cur, Z.zoneLabel(cur))); seen.add(cur); }
-                for (const id of Z.COMMON) if (!seen.has(id)) { out.push(row(id, Z.zoneLabel(id))); seen.add(id); }
+                const cal = Zf().validZone(this.calendarZone);
+                if (cal && !seen.has(cal)) { out.push(row(cal, Zf().zoneLabel(cal), 'Calendar')); seen.add(cal); }
+                if (cur && !seen.has(cur)) { out.push(row(cur, Zf().zoneLabel(cur))); seen.add(cur); }
+                for (const id of Zf().COMMON) if (!seen.has(id)) { out.push(row(id, Zf().zoneLabel(id))); seen.add(id); }
                 return out;
             },
             linked() { return typeof Utils !== 'undefined' && Utils.linkify ? Utils.linkify(this.detText || '', { style: false }) : ''; },
@@ -584,7 +585,7 @@ const EventCard = (() => {
             saveTypes() { const names = this.labelNames; this.labelNames = null; this.closePicker(); this.$emit('labels', names); },
             pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.v.start)); },
             /** A time zone: the same instants, shown and edited in it from now on (app.js nativeCardChange). */
-            pickZone(id) { this.setAndClose({ tz: id || '' }, id ? `Times in ${Z.zoneName(id)}` : 'Times in your time zone'); },
+            pickZone(id) { this.setAndClose({ tz: id || '' }, id ? `Times in ${Zf().zoneName(id)}` : 'Times in your time zone'); },
             zoneEnter() { const first = this.zoneOptions[0]; if (first) this.pickZone(first.id); else this.typedBad = true; },
             openCustom() {
                 const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.v.start);
@@ -706,9 +707,9 @@ const EventCard = (() => {
       <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end, false) }}</button>
       <button type="button" class="nk-durb" data-testid="card-length" aria-expanded="false" :aria-label="'Length: ' + lengthText" @click="openPicker('dur', $event)">{{ lengthText }}<nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
     </div>
-    <div v-if="full && !v.isAllDay" class="nk-tz" data-testid="card-tz">
+    <div v-if="full" v-show="!v.isAllDay" class="nk-tz" data-testid="card-tz" @click="!$event.target.closest('.nk-tzb') && $refs.tzb && $refs.tzb.click()">
       <span class="nk-gi" title="Time zone"><nc-icon name="globe" :size="18"></nc-icon></span>
-      <button type="button" class="nk-tzb" data-testid="card-tz-button" aria-haspopup="dialog" aria-expanded="false" :aria-label="'Time zone: ' + zone"
+      <button ref="tzb" type="button" class="nk-tzb" data-testid="card-tz-button" aria-haspopup="dialog" aria-expanded="false" :aria-label="'Time zone: ' + zone"
         :title="evZone ? 'Times in ' + zone : 'Times in your time zone'" @click="openPicker('tz', $event)">{{ zone }}</button>
       <span v-if="yourTime" class="nk-tzyou" data-testid="card-tz-yours">· {{ yourTime }}</span>
     </div>

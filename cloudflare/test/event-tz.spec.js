@@ -3,6 +3,7 @@
  * An event's own time zone, on a native edit link (nativecal/components/EventCard.js, services/EventZone.js), driven
  * like a person and checked against what the SERVER saved (GET /cal/<id>):
  *   - the card's time zone line is a button; its list starts with "Use mine", searches every zone ("tokyo")
+ *   - picking Tokyo keeps the date and clock time shown and means them in Tokyo (as Google Calendar does)
  *   - with Tokyo picked, "2:00 PM" typed means 2 PM in Tokyo: 05:00Z (Japan has no DST)
  *   - reopened, the card shows 2:00 PM Japan Time and the same times in the viewer's zone
  *   - a title edited in classic's editor keeps the zone
@@ -92,33 +93,32 @@ test('pick Tokyo, type 2:00 PM: stored as 05:00Z; reopened it reads 2:00 PM Japa
   await rows.first().click();
   await expect(picker(page)).toHaveCount(0);
 
-  // The same instants, now shown in Tokyo: Wed 2:00 AM there. Saved as you go, with a toast.
+  // Tue 10:00 AM, now meant in Tokyo (01:00Z). Saved as you go.
   await soon(async () => (await byId(id, 'standup')).tz).toBe('Asia/Tokyo');
-  expect((await byId(id, 'standup')).start).toBe('2026-10-27T17:00:00.000Z');
-  await expect(page.locator('.pc-toast').filter({ hasText: 'Times in Japan Time' })).toBeVisible();
+  expect((await byId(id, 'standup')).start).toBe('2026-10-27T01:00:00.000Z');
   await expect(tzb).toHaveText('Japan Time');
-  await expect(page.getByTestId('card-start-time')).toHaveText(/^0?2:00 AM$/);
-  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Tue 10:00 AM – 10:30 AM your time');
+  await expect(page.getByTestId('card-start-time')).toHaveText(/^10:00 AM$/);
+  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Mon 6:00 PM – 6:30 PM your time');
 
-  // 2:00 PM typed with Tokyo picked is 2 PM in Tokyo (Oct 28, standard time: 05:00Z). The length stays 30 minutes.
+  // 2:00 PM typed with Tokyo picked is 2 PM in Tokyo (standard time: 05:00Z). The length stays 30 minutes.
   await page.getByTestId('card-start-time').click();
   await picker(page).getByTestId('picker-input').fill('2:00 PM');
   await picker(page).getByTestId('picker-input').press('Enter');
-  await soon(async () => (await byId(id, 'standup')).start).toBe('2026-10-28T05:00:00.000Z');
-  expect((await byId(id, 'standup')).end).toBe('2026-10-28T05:30:00.000Z');
-  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Tue 10:00 PM – 10:30 PM your time');
+  await soon(async () => (await byId(id, 'standup')).start).toBe('2026-10-27T05:00:00.000Z');
+  expect((await byId(id, 'standup')).end).toBe('2026-10-27T05:30:00.000Z');
+  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Mon 10:00 PM – 10:30 PM your time');
   await shot(page, 'tz-card-desktop-light');
   await page.getByTestId('card-done').click();
   await expect(card(page)).toHaveCount(0);
 
-  // Reopened: 2:00 PM, Japan Time, and Tuesday 10 PM here. The grid shows it in Los Angeles' time, Tuesday evening.
+  // Reopened: 2:00 PM, Japan Time, and Monday 10 PM here. The grid shows it in Los Angeles' time, Monday evening.
   const day = await page.locator('.nc [data-testid="event-standup"]').first().evaluate((el) => new Date(Number(el.closest('.nc-col').dataset.day)).getDay());
-  expect(day).toBe(2);
+  expect(day).toBe(1);
   await openFull(page, 'standup');
   await expect(page.getByTestId('card-start-time')).toHaveText(/^0?2:00 PM$/);
-  await expect(page.getByTestId('card-start-date')).toHaveText(/Oct 28/);
+  await expect(page.getByTestId('card-start-date')).toHaveText(/Oct 27/);
   await expect(page.getByTestId('card-tz-button')).toHaveText('Japan Time');
-  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Tue 10:00 PM – 10:30 PM your time');
+  await expect(page.getByTestId('card-tz-yours')).toHaveText('· Mon 10:00 PM – 10:30 PM your time');
   await page.getByTestId('card-done').click();
   expect(errors).toEqual([]);
   await ctx.close();
@@ -134,12 +134,12 @@ test('pick Tokyo, type 2:00 PM: stored as 05:00Z; reopened it reads 2:00 PM Japa
   await dialog.locator('.e-event-save').click();
   await soon(async () => (await byId(id, 'standup')).title).toBe('Standup (Tokyo)');
   const after = await byId(id, 'standup');
-  expect([after.tz, after.start, after.end]).toEqual(['Asia/Tokyo', '2026-10-28T05:00:00.000Z', '2026-10-28T05:30:00.000Z']);
+  expect([after.tz, after.start, after.end]).toEqual(['Asia/Tokyo', '2026-10-27T05:00:00.000Z', '2026-10-27T05:30:00.000Z']);
   expect(c.errors).toEqual([]);
   await c.ctx.close();
 });
 
-test('"Use mine" takes the zone away: times shown in yours again, the same instants, Undo puts it back', async ({ browser }) => {
+test('"Use mine" takes the zone away: the same clock time, in yours; Undo puts it back', async ({ browser }) => {
   const id = await seed([{ ...standup(), start: '2026-10-28T05:00:00.000Z', end: '2026-10-28T05:30:00.000Z', tz: 'Asia/Tokyo' }]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-27');
   await openFull(page, 'standup');
@@ -147,15 +147,17 @@ test('"Use mine" takes the zone away: times shown in yours again, the same insta
   await page.getByTestId('card-tz-button').click();
   await picker(page).locator('[data-tz=""]').click();
   await soon(async () => 'tz' in (await byId(id, 'standup'))).toBe(false);
-  expect((await byId(id, 'standup')).start).toBe('2026-10-28T05:00:00.000Z');
+  expect((await byId(id, 'standup')).start).toBe('2026-10-28T21:00:00.000Z');   // Wed 2 PM in Los Angeles
   await expect(page.getByTestId('card-tz-button')).toHaveText('Pacific Time');
-  await expect(page.getByTestId('card-start-time')).toHaveText(/^10:00 PM$/);
-  await page.locator('.pc-toast').filter({ hasText: 'Times in your time zone' }).getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('card-start-time')).toHaveText(/^0?2:00 PM$/);
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => (await byId(id, 'standup')).tz).toBe('Asia/Tokyo');
+  expect((await byId(id, 'standup')).start).toBe('2026-10-28T05:00:00.000Z');
   await expect(page.getByTestId('card-tz-button')).toHaveText('Japan Time');
   // All day: no time zone line, and no gap where it was.
   await page.getByTestId('card-allday').click();
-  await expect(page.getByTestId('card-tz')).toHaveCount(0);
+  await expect(page.getByTestId('card-tz')).toBeHidden();
+  expect(await page.getByTestId('card-tz').boundingBox()).toBeNull();
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -165,15 +167,17 @@ test('a weekly 2 PM Tokyo meeting lands on Monday evening in Los Angeles, before
   const id = await seed([{ ...standup(), id: 'weekly', title: 'Tokyo weekly', start: '2026-10-27T05:00:00.000Z', end: '2026-10-27T05:30:00.000Z',
     tz: 'Asia/Tokyo', recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;' }]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-11-09');
-  const where = () => page.locator('.nc [data-testid="event-weekly"]').first().evaluate((el) => {
-    const d = new Date(Number(el.closest('.nc-col').dataset.day));
-    return `${d.getDay()} ${el.textContent.replace(/\s+/g, ' ').trim()}`;
-  });
+  // Where the grid draws it: its column's weekday, and the occurrences the calendar on screen expands (local time).
+  const where = () => page.locator('.nc [data-testid="event-weekly"]').first().evaluate((el) => new Date(Number(el.closest('.nc-col').dataset.day)).getDay());
+  const shown = (from, to) => page.evaluate(([a, b]) => document.querySelector('#app')._vnode.component.proxy.calView.occurrences(new Date(a), new Date(b))
+    .filter((o) => o.title === 'Tokyo weekly').map((o) => `${o.start.getDay()} ${o.start.getHours()}:${String(o.start.getMinutes()).padStart(2, '0')} ${o.start.toISOString()}`), [from, to]);
   await expect(page.locator('.nc [data-testid="event-weekly"]')).toHaveCount(1);
-  expect(await where()).toMatch(/^1 .*9(:00)?\s?PM/);       // Monday Nov 9, 9 PM PST
+  expect(await where()).toBe(1);                                   // Monday Nov 9
+  expect(await shown('2026-11-08T08:00:00Z', '2026-11-15T08:00:00Z')).toEqual(['1 21:00 2026-11-10T05:00:00.000Z']);   // 9 PM PST
   await page.goto(`/${id}?backend=cf&cal=native&view=week&date=2026-10-26`);
   await expect(page.locator('.nc [data-testid="event-weekly"]')).toHaveCount(1, { timeout: 15_000 });
-  expect(await where()).toMatch(/^1 .*10(:00)?\s?PM/);      // Monday Oct 26, 10 PM PDT
+  expect(await where()).toBe(1);                                   // Monday Oct 26
+  expect(await shown('2026-10-25T07:00:00Z', '2026-11-01T07:00:00Z')).toEqual(['1 22:00 2026-10-27T05:00:00.000Z']);   // 10 PM PDT
   // The card shows it in Tokyo: Tuesday 2:00 PM.
   await openFull(page, 'weekly');
   await expect(page.getByTestId('card-start-time')).toHaveText(/^0?2:00 PM$/);

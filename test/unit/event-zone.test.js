@@ -186,13 +186,6 @@ test('a weekly 2 PM Tokyo meeting, seen from Los Angeles: Monday 10 PM, then Mon
     });
 });
 
-test('a zone change on a series moves its repeat days to the zone\'s (Monday 5 PM in LA is Tuesday 9 AM in Tokyo)', () => inZone('America/Los_Angeles', () => {
-    const start = new Date('2026-10-27T00:00:00Z');   // Mon Oct 26, 5 PM PDT
-    const inTokyo = EventZone.toWallDate(start, 'Asia/Tokyo');
-    assert.deepEqual([inTokyo.getDay(), inTokyo.getHours()], [2, 9]);
-    assert.equal(CalendarView.edits.shiftRule('FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;', start, inTokyo), 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;');
-}));
-
 // ---- the calendar feed -------------------------------------------------------------------------------------------
 test('ICS: a zoned event is written in its zone with TZID; EXDATE and RECURRENCE-ID too; others unchanged', async () => {
     const { ICSService } = await import('../../cloudflare/src/ICSService.js');

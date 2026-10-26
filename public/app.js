@@ -2156,14 +2156,10 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c) return;
             if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
-            const before = this.nativeCardClone(c.value);
-            let after = { ...before, ...patch };
-            // Another time zone: the same instants, shown (and edited from now on) in it. A repeat's days are the
-            // zone's days, so they move with the date it lands on there (Monday 5 PM in LA is Tuesday 9 AM in Tokyo).
-            if ('tz' in patch && (patch.tz || '') !== (before.tz || '')) {
-                after = this.nativeCardRezone({ ...before, ...patch, tz: before.tz }, patch.tz);
-                if (after.rule && !after.isAllDay) after.rule = nativeShiftRule(after.rule, before.start, after.start);
-            }
+            // Another time zone keeps the date and clock time shown and means them in that zone (as Google Calendar
+            // does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo. The card's start and end are wall-clock Dates,
+            // so that is just the new tz beside them (nativeCardTimes turns them into instants in it).
+            const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
             // Whether people categorize events at all (classic sends it too).
             if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
             if (c.isNew || !message) { c.value = after; return; }
@@ -2292,7 +2288,12 @@ const CalendarVueApp = {
                 let moved = this.nativeRecord(series);
                 moved.RecurrenceID = moved.Id;
                 ScheduleAdapter.noteStart(moved);
-                if (timed) {
+                if (timed && 'Tz' in fields && !!before.isAllDay === !!after.isAllDay) {
+                    // Another zone: the series' own dates and clock times, meant in the new zone (its repeat days too).
+                    const oz = this.nativeCardZone(before), nz = this.nativeCardZone(after);
+                    const re = (d) => { const w = oz ? EventZone.toWallDate(d, oz) : new Date(d); return nz ? EventZone.fromWallDate(w, nz) : w; };
+                    moved = { ...moved, StartTime: re(moved.StartTime), EndTime: re(moved.EndTime) };
+                } else if (timed) {
                     moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
                         { IsAllDay: !!after.isAllDay });
                 }
