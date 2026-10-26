@@ -21,6 +21,8 @@ const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
 const DONE = 'You’re on the list. We’ll email you when your trial is ready.';
 const run = Date.now().toString(36);
+// In order in one worker, as written (it is run against one server per mode, with its fake services).
+test.describe.configure({ mode: 'default' });
 
 let shared;
 async function seed(request) {

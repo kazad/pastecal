@@ -17,9 +17,11 @@ const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
 const NOTES = 'Home field: Riverside Park, Field 3\nRainouts decided by 7am on game day.';
 
+// One calendar per worker for the tests that only read it; a test that writes asks for its own (fresh),
+// since tests of a file run in any order across workers.
 let shared;
-async function seed(request) {
-  if (shared) return shared;
+async function seed(request, fresh = false) {
+  if (shared && !fresh) return shared;
   const id = `test-side-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   const at = (day, h) => { const d = new Date(); d.setDate(day); d.setHours(h, 0, 0, 0); return d.toISOString(); };
   const events = [
@@ -29,7 +31,9 @@ async function seed(request) {
   expect((await request.post(`/cal/${id}`, { data: { title: 'Side panel test', options: { notes: NOTES }, events } })).status()).toBe(201);
   const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
   expect(view.ok).toBe(true);
-  return (shared = { id, viewId: view.publicViewId });
+  const made = { id, viewId: view.publicViewId };
+  if (!fresh) shared = made;
+  return made;
 }
 
 async function open(browser, path, viewport = { width: 1440, height: 900 }) {
@@ -103,7 +107,7 @@ test('editor: every header button and every tab opens the panel beside the calen
 });
 
 test('a setting changed in the panel still applies at once', async ({ browser, request }) => {
-  const { id } = await seed(request);
+  const { id } = await seed(request, true);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
   // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
@@ -289,9 +293,9 @@ test('notes: read, Edit, type, Done, and it is saved for everyone', async ({ bro
   await ctx.close();
 });
 
-// Last: it changes the shared calendar.
+// It changes the calendar, so it has its own.
 test('Changes in the panel still undoes an edit', async ({ browser, request }) => {
-  const { id } = await seed(request);
+  const { id } = await seed(request, true);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const dialog = page.locator('.e-dialog.e-schedule-dialog');
   await page.locator('.e-appointment:has-text("Game vs Hawks")').first().dblclick();

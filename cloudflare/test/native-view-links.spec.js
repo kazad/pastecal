@@ -44,15 +44,18 @@ function plan() {
   return { y, m, events, tuesdays, skipped: ymd(skipped), campDays: [16, 17, 18].map((d) => ymd(new Date(y, m, d))) };
 }
 
-// One calendar for the whole file (creating calendars is rate limited: 10 a minute).
+// One calendar per worker for the tests that only read it (creating calendars is rate limited: 10 a minute);
+// a test that writes asks for its own (fresh), since tests of a file run in any order across workers.
 let shared;
-async function seed(request, events, title = 'Native view test') {
-  if (shared) return shared;
+async function seed(request, events, title = 'Native view test', fresh = false) {
+  if (shared && !fresh) return shared;
   const id = `test-native-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   expect((await request.post(`/cal/${id}`, { data: { title, options: {}, events } })).status()).toBe(201);
   const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
   expect(view.ok).toBe(true);
-  return (shared = { id, viewId: view.publicViewId });
+  const made = { id, viewId: view.publicViewId };
+  if (!fresh) shared = made;
+  return made;
 }
 
 async function context(browser, { viewport = { width: 1280, height: 900 }, timezoneId = 'America/Los_Angeles', colorScheme = 'light' } = {}) {
@@ -158,7 +161,7 @@ test('native view link: no Syncfusion, events on the right days, views, navigati
 
 test('native view link: an edit on the edit link shows up without a reload', async ({ browser, request }) => {
   const p = plan();
-  const { id, viewId } = await seed(request, p.events);
+  const { id, viewId } = await seed(request, p.events, undefined, true);
   const ctx = await context(browser);
   const { page } = await openNative(ctx, viewId);
   const editor = await ctx.newPage();

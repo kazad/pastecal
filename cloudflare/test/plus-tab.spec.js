@@ -22,6 +22,8 @@ const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
 const run = Date.now().toString(36);
 let fake, ipN = 0;
+// One worker for the file: it runs one fake Stripe on FAKE_PORT.
+test.describe.configure({ mode: 'default' });
 
 test.beforeAll(async () => {
   const { startFakeStripe } = await import('./fake-stripe.mjs');

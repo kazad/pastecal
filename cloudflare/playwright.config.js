@@ -7,6 +7,9 @@ module.exports = defineConfig({
   testMatch: /.*\.spec\.js/,
   // Each test makes its own calendars, so files run side by side (start wrangler dev with --var LOCAL_NO_LIMITS:1).
   workers: Number(process.env.PW_WORKERS || 6),
+  // ...and so do the tests inside a file: none depends on another's order (a test that changes a calendar
+  // other tests read makes its own).
+  fullyParallel: true,
   // One retry: a test that passes on its second try is reported as flaky, not hidden.
   retries: Number(process.env.PW_RETRIES ?? 1),
   reporter: 'list',
