@@ -310,6 +310,12 @@ export const ICSService = {
         return eventLines.map(line => this.foldLine(line)).join('\r\n');
     },
 
+    // What a feed's ETag hashes (index.js serveFeed): the whole feed but its DTSTAMP lines (a calendar never edited
+    // since lastEditedAt was kept has none, and is stamped "now").
+    etagSource(ics) {
+        return String(ics).split('\r\n').filter((line) => !line.startsWith('DTSTAMP:')).join('\r\n');
+    },
+
     // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock).
     generateICS(calendarData, id, opts = {}) {
         const raw = calendarData?.events;

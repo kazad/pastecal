@@ -157,8 +157,11 @@ async function serveFeed(request, env, targetId, actualSlug, fileName = actualSl
     const at = new URL(request.url);   // https on every real host (a dev server may hand the Worker http)
     const origin = /^(localhost|127\.0\.0\.1)$/.test(at.hostname) ? at.origin : `https://${at.host}`;
     const viewUrl = viewId ? `${origin}/view/${viewId}` : '';
-    // "v2": the feed's format changed (event links), so every calendar app refetches once.
-    const etag = '"' + await sha1Hex('v2' + viewUrl + JSON.stringify(cal.events ?? null)) + '"';
+    // The ETag is a hash of everything the feed says (ICSService.etagSource: all of it but DTSTAMP), so any change a
+    // calendar app would show -- a renamed calendar, its zone, an event -- is sent again. (It hashed the view link and the
+    // events only: after a rename, "changed?" was answered 304 and apps kept the old name, stress A11.)
+    const icsText = ICSService.generateICS(cal, actualSlug, { viewUrl });
+    const etag = '"' + await sha1Hex('v3' + ICSService.etagSource(icsText)) + '"';
     if (request.headers.get('if-none-match') === etag) {
         return new Response(null, {
             status: 304,
@@ -166,7 +169,6 @@ async function serveFeed(request, env, targetId, actualSlug, fileName = actualSl
         });
     }
 
-    const icsText = ICSService.generateICS(cal, actualSlug, { viewUrl });
     return new Response(icsText, {
         status: 200,
         headers: {
