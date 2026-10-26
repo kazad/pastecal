@@ -236,17 +236,22 @@ test('S06 [card] (CJK): the Enter that confirms an IME conversion and the Escape
   await ctx.close();
 });
 
-test('S07 [grid] ugly: on a 390px phone a crowded hour shows one 20px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
-  finding('layoutDayColumns cap is at least 2 even when a column fits one 40px event');
+test('S07 [grid]: on a 390px phone a crowded hour is one "+20" across the day, never a 20px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
   const evs = [];
   for (let i = 0; i < 20; i++) evs.push(timed(`ov${i}`, `Standup ${i}`, '2026-10-21T10:00:00-07:00', '2026-10-21T11:00:00-07:00', { type: (i % 8) + 1 }));
   const id = await seed(evs);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { device: 'phone' });
-  await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
+  await page.getByTestId('more-timed').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await shot(page, 'S07-phone-sliver-beside-plus19');
   const widths = await page.evaluate(() => [...document.querySelectorAll('.nc .nc-timed[data-testid^="event-ov"]')].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().width)));
+  const more = await page.evaluate(() => [...document.querySelectorAll('.nc [data-testid="more-timed"]')].filter((e) => e.getClientRects().length).map((e) => ({ n: e.textContent.trim(), w: Math.round(e.getBoundingClientRect().width) })));
   expect(Math.min(...widths), `shown: ${widths.join(', ')}px`).toBeGreaterThanOrEqual(40);
+  // Every one of the 20 is accounted for: drawn, or counted in a "+N" at least 40px wide.
+  expect({ all: widths.length + more.reduce((t, m) => t + Number(m.n.replace('+', '')), 0), narrowMore: more.filter((m) => m.w < 40) }).toEqual({ all: 20, narrowMore: [] });
+  // A tap on it opens the day, wide enough to draw them side by side (then "+N" for the rest).
+  await page.getByTestId('more-timed').first().tap();
+  await expect(page.locator('.nc .nc-timed[data-testid^="event-ov"]:visible').first()).toBeVisible();
   await ctx.close();
 });
 
@@ -280,8 +285,7 @@ test('S09 [tz] broken: classic and native show a Tokyo-zoned weekly series on di
   await C.ctx.close();
 });
 
-test('S10 [card] nit: on a 360x640 phone, "More details" on an event with long linked details scrolls the event\'s own title out of the sheet', async ({ browser }) => {
-  finding('expand() reveals the details box and the first field; the sheet stops 113px below the top and scrolls its title away');
+test('S10 [card]: on a 360x640 phone, "More details" on an event with long linked details keeps the event\'s own title in the sheet (it scrolled it away)', async ({ browser }) => {
   const links = FIXTURE.events.find((e) => e.id === 'links');
   const id = await seed([timed('p', 'Practice at Lincoln Field', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: links.description })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { device: 'p360' });
@@ -292,8 +296,7 @@ test('S10 [card] nit: on a 360x640 phone, "More details" on an event with long l
   await ctx.close();
 });
 
-test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliver of its fourth line under the third', async ({ browser }) => {
-  finding('growTitle caps the box at three lines plus padding; a scrolling textarea draws content into its bottom padding (and nothing says the title goes on)');
+test('S11 [card]: a title of more than three lines (emoji, CJK) shows exactly three, the third fading (it showed a sliver of the fourth)', async ({ browser }) => {
   const id = await seed([timed('p', '🎉 会議 チーム 打ち合わせ — اجتماع الفريق الأسبوعي — a very long planning session title that keeps going and going past three lines of the card 🎉 会議 チーム 打ち合わせ — and more', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'));
@@ -301,6 +304,9 @@ test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliv
   await page.locator('.nk-h').screenshot({ path: path.join(SHOTS, 'S11-title-fourth-line-sliver.png') });
   const lines = await page.getByTestId('card-title').evaluate((ta) => { const cs = getComputedStyle(ta); return (ta.clientHeight - parseFloat(cs.paddingTop)) / parseFloat(cs.lineHeight); });
   expect(Math.abs(lines - Math.round(lines)), `${lines.toFixed(2)} lines in view`).toBeLessThan(0.1);
+  expect(Math.round(lines), 'three lines').toBe(3);
+  // A sign that it goes on: the third line fades (and the whole title scrolls into view once focused).
+  expect(await page.getByTestId('card-title').evaluate((ta) => { const cs = getComputedStyle(ta); return (cs.maskImage || cs.webkitMaskImage || 'none') !== 'none'; })).toBe(true);
   await ctx.close();
 });
 
@@ -525,7 +531,8 @@ for (const [device, scheme, loc] of [['ipad', 'light', 'us'], ['ipad', 'dark', '
     const { width: W, height: H } = DEVICES[device].viewport;
     const tag = `probe-${device}-${scheme}-${loc}`;
     if (await page.getByTestId('early-hours').isVisible().catch(() => false)) await page.getByTestId('early-hours').click();
-    await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
+    // The crowded hour: its first event, or on a phone's week (too narrow for two side by side) its "+9".
+    await page.locator('.nc [data-testid="event-ov0"], .nc [data-testid="more-timed"]').first().scrollIntoViewIfNeeded();
     await shot(page, `${tag}-grid`);
     for (const k of ['long', 'board', 'jp']) {
       await ev(page, k).first().scrollIntoViewIfNeeded();

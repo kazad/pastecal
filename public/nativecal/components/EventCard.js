@@ -317,8 +317,10 @@ const EventCard = (() => {
                     else if (focus && this.$refs[focus]) this.$refs[focus].focus();
                     // "More details" pressed (it is gone now): focus goes on to the first field, not to the page.
                     else if (c && !c.contains(document.activeElement)) { const f = c.querySelector('[data-testid="card-start-date"]'); if (f) f.focus({ preventScroll: true }); }
-                    // A short window: the details in view too, above the footer (the focused field stays in view).
-                    this.$nextTick(() => this.reveal(this.detBox(), document.activeElement));
+                    // A short window: the details in view too, above the footer -- but never at the cost of the event's
+                    // own title, which stays in the sheet (a 360x640 phone scrolled it away, S10); the focused field,
+                    // under the title, stays in view with it. The rest is a scroll away.
+                    this.$nextTick(() => this.reveal(this.detBox(), this.$refs.title || document.activeElement));
                 });
             },
             measureClamp() {
@@ -438,15 +440,23 @@ const EventCard = (() => {
                 if (over > 0) this.pos = { ...this.pos, left: `${left - over + window.scrollX}px` };
                 this.$nextTick(() => this.fit());
             },
-            /** The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). */
+            /**
+             * The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). Past
+             * three: exactly three lines in view -- no bottom padding, where a scrolling textarea draws a sliver of the
+             * fourth (S11) -- and the third fades out (.nk-title-clip), the sign that it goes on.
+             */
             growTitle() {
                 const ta = this.$refs.title;
                 if (!ta) return;
-                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 28, pad = ta.offsetHeight - ta.clientHeight + parseFloat(getComputedStyle(ta).paddingTop) + parseFloat(getComputedStyle(ta).paddingBottom);
+                ta.classList.remove('nk-title-clip');
                 ta.style.height = 'auto';
-                const want = ta.scrollHeight + (ta.offsetHeight - ta.clientHeight), cap = Math.round(lh * 3 + pad);
-                ta.style.height = `${Math.min(want, cap)}px`;
-                ta.style.overflowY = want > cap + 1 ? 'auto' : 'hidden';
+                const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 28, border = ta.offsetHeight - ta.clientHeight;
+                const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+                const want = ta.scrollHeight + border;
+                if (want <= lh * 3 + pt + pb + border + 1) { ta.style.height = `${want}px`; ta.style.overflowY = 'hidden'; return; }
+                ta.classList.add('nk-title-clip');
+                ta.style.height = `${lh * 3 + pt + border}px`;
+                ta.style.overflowY = 'auto';
             },
             // The box fits its text, up to 40% of the screen's height (60% once wide), then scrolls inside with the
             // caret in view. Growing never resets the height first, so the browser keeps the caret where it was.
