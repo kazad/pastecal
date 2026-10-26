@@ -35,7 +35,7 @@ async function newPage(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());   // never a live Firebase socket
   return { ctx, page: await ctx.newPage() };
 }
 // The fake Stripe page a checkout opens: paying there is the subscription Stripe would make, and its webhook.
@@ -83,7 +83,7 @@ test('signed out: sign in by email link, land on /account (Free)', async ({ brow
 test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it', async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());   // never a live Firebase socket
   await ctx.route('https://checkout.stripe.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<h1>Test checkout</h1>' }));
   const page = await ctx.newPage();
   await page.goto('/pricing');
@@ -172,7 +172,7 @@ test('a visitor opens pastecal.com/@name/soccer: view-only, and the edit id is n
 
 test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());   // never a live Firebase socket
   const page = await ctx.newPage();
   await page.goto(`/@${handle}`);
   await expect(page.getByTestId('handle-empty')).toBeVisible();
@@ -204,7 +204,7 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
 
 test('a short link moves to another calendar only on Save (Change, pick, Save; Cancel leaves it)', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());
   const page = await ctx.newPage();
   await page.goto('/account');
   const made = await page.request.post('/api/names/calendar', { data: JSON.stringify({ name: 'hockey', title: 'Hockey' }), headers: { 'Content-Type': 'application/json', Origin: BASE } });
@@ -261,7 +261,7 @@ test('a deleted account\'s short link opens "This link has ended", never a calen
   const state = await api.storageState();
   await api.dispose();
   const own = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: state });
-  await own.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  await own.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());
   const op = await own.newPage();
   await op.goto('/account');
   await op.getByTestId('delete-open').click();

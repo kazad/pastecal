@@ -206,7 +206,7 @@ async function openBrowser(browser, timezoneId = 'America/Los_Angeles') {
   const ctx = await browser.newContext({ timezoneId, locale: 'en-US', viewport: { width: 1280, height: 800 }, baseURL: BASE });
   await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
-  await ctx.routeWebSocket((u) => !/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(u.href), (ws) => ws.close());
+  await ctx.routeWebSocket(/^(?!wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/)/, (ws) => ws.close());
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(NOW) });
   return { ctx, page };

@@ -15,7 +15,7 @@ async function open(browser, viewport = { width: 1440, height: 900 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 600 });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
   await ctx.route(/firebaseio|googletagmanager|google-analytics|clarity|hotjar/, (r) => r.abort());
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
