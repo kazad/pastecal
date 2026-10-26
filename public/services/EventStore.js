@@ -31,8 +31,20 @@
 (function (root) {
     'use strict';
 
-    const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-        'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
+    /**
+     * THE list of an event's fields, and each one's name in a Syncfusion record (ScheduleAdapter, models/Event.js).
+     * Every path that creates, copies, compares or merges events iterates this table rather than naming fields
+     * itself: when a field was added by hand (the time zone, Oct 2026), eight lists had to be found, and the ones
+     * that were missed dropped it (an Option-drag copy lost its zone, stress S03). test/unit/event-fields.test.js
+     * fails for a field added here that some path does not carry.
+     */
+    const RECORD = {
+        title: 'Subject', description: 'Description', start: 'StartTime', end: 'EndTime', type: 'Type', isAllDay: 'IsAllDay',
+        repeat: 'Recurrence', recurrencerule: 'RecurrenceRule', recurrenceID: 'RecurrenceID', recurrenceException: 'RecurrenceException', tz: 'Tz',
+    };
+    const FIELDS = Object.keys(RECORD);
+    // A copy is a new event (Duplicate, an Option-drag): its own id, and one event, not a series or a series' occurrence.
+    const COPY_RESETS = { recurrencerule: '', recurrenceID: null, recurrenceException: null, repeat: '' };
 
     const blank = (v) => v === undefined || v === null || v === '';
     const uuid = () => (root.Utils && root.Utils.uuidv4) ? root.Utils.uuidv4()
@@ -61,6 +73,18 @@
         return `${blank(e.id) ? '' : String(e.id)}|${blank(e.recurrenceID) ? '' : String(e.recurrenceID)}`;
     }
 
+    // How each field is read (normalize); a field not named here is text.
+    const COERCE = {
+        text: (v) => String(v ?? ''),
+        title: (v) => String(v ?? '').trim(),
+        start: (v) => iso(v),
+        end: (v) => iso(v),
+        type: (v) => { const n = parseInt(v, 10); return n >= 1 ? n : 1; },
+        isAllDay: (v) => !!v,
+        recurrenceID: (v) => (blank(v) ? null : v),
+        recurrenceException: (v) => (blank(v) ? null : String(v)),
+    };
+
     /**
      * The one schema. Accepts every shape that has ever been stored (title/Subject,
      * id/Id, ...) and returns the canonical one. The id keeps its stored value and kind --
@@ -68,24 +92,15 @@
      */
     function normalize(raw) {
         const r = raw || {};
-        const pick = (a, b) => (!blank(r[a]) ? r[a] : r[b]);
-        const typeN = parseInt(pick('type', 'Type'), 10);
-        const out = {
-            id: !blank(r.id) ? r.id : (!blank(r.Id) ? r.Id : null),
-            title: String(pick('title', 'Subject') ?? '').trim(),
-            description: String(pick('description', 'Description') ?? ''),
-            start: iso(pick('start', 'StartTime')),
-            end: iso(pick('end', 'EndTime')),
-            type: typeN >= 1 ? typeN : 1,
-            isAllDay: !!(r.isAllDay ?? r.IsAllDay),
-            repeat: String(pick('repeat', 'Recurrence') ?? ''),
-            recurrencerule: String(pick('recurrencerule', 'RecurrenceRule') ?? ''),
-            recurrenceID: blank(pick('recurrenceID', 'RecurrenceID')) ? null : pick('recurrenceID', 'RecurrenceID'),
-            recurrenceException: blank(pick('recurrenceException', 'RecurrenceException')) ? null : String(pick('recurrenceException', 'RecurrenceException')),
-        };
-        // The event's own zone: kept when it names one; a key present but blank or not a zone is null (a change
-        // that takes the zone away), and a row that never had one gets no key (it stays as it always was).
-        if ('tz' in r || 'Tz' in r) out.tz = validZone(pick('tz', 'Tz'));
+        const out = { id: !blank(r.id) ? r.id : (!blank(r.Id) ? r.Id : null) };
+        for (const f of FIELDS) {
+            const has = f in r || RECORD[f] in r;
+            const v = !blank(r[f]) ? r[f] : r[RECORD[f]];
+            // The event's own zone: kept when it names one; a key present but blank or not a zone is null (a change
+            // that takes the zone away), and a row that never had one gets no key (it stays as it always was).
+            if (f === 'tz') { if (has) out.tz = validZone(v); continue; }
+            out[f] = (COERCE[f] || COERCE.text)(v);
+        }
         return out;
     }
 
@@ -136,6 +151,25 @@
         if (f === 'start' || f === 'end') return iso(a) === iso(b);
         if (f === 'tz') return (validZone(a) || null) === (validZone(b) || null);
         return (blank(a) ? null : String(a)) === (blank(b) ? null : String(b));
+    }
+
+    /** Same event, field by field, on meaning (FIELDS; the id is identity, not a field). */
+    function same(a, b) {
+        if (!a || !b) return a === b;
+        return FIELDS.every((f) => sameField(f, a[f], b[f]));
+    }
+
+    /**
+     * A new event with every field of `e` (normalized) but those a copy resets (COPY_RESETS), then `overrides`.
+     * No id: the store gives it one.
+     */
+    function copy(e, overrides = {}) {
+        const n = normalize(e), out = { id: null };
+        for (const f of FIELDS) {
+            if (f in COPY_RESETS) out[f] = COPY_RESETS[f];
+            else if (f in n) out[f] = n[f];
+        }
+        return stored({ ...out, ...overrides });
     }
 
     /** The fields of `next` that differ from `prev` -- what a change actually changes. */
@@ -349,6 +383,9 @@
      * whole-list restore (Recent changes, undo of a bulk change) becomes an ordinary,
      * counted, undoable batch instead of a blind overwrite.
      */
+    // An update carries ONLY the fields that differ, never the whole row. A whole row is a copy of every field as
+    // this tab last saw it, and applied on top of a newer row (the server's, after someone else's save) it put
+    // their changes back the way they were (stress S15: an offline type change undid someone's rename).
     function changesBetween(current, target) {
         const cur = new Map((current || []).map((e) => [keyOf(e), e]));
         const tgt = new Map((target || []).map((e) => [keyOf(normalize(e)), normalize(e)]));
@@ -357,12 +394,27 @@
         for (const [k, e] of tgt) {
             if (!cur.has(k)) commands.push({ type: 'add', event: e, restoreId: true });
             else {
-                const d = diff(cur.get(k), e);
-                // (A zone the target no longer has goes out as tz: null; the row alone would keep the old one.)
-                if (Object.keys(d).length) commands.push({ type: 'update', key: k, changes: 'tz' in d ? { ...e, tz: d.tz } : e });
+                const d = diff(normalize(cur.get(k)), e);
+                if (Object.keys(d).length) commands.push({ type: 'update', key: k, changes: d });
             }
         }
         return commands;
+    }
+
+    /**
+     * One row merged three ways: `theirs` (the newest row) with the fields `mine` changed since `base` (what this tab
+     * started from). Untouched fields are theirs, whatever this tab's copy says. A field both changed: mine, unless
+     * yieldOnConflict (a replay hours old: theirs is the newer intent). Returns a row in `theirs`' shape.
+     */
+    function mergeRow(base, mine, theirs, { yieldOnConflict = false } = {}) {
+        const ours = diff(normalize(base), normalize(mine));
+        const out = { ...theirs };
+        for (const f of Object.keys(ours)) {
+            if (yieldOnConflict && !sameField(f, base[f], theirs[f])) continue;
+            if (f === 'tz' && !ours.tz) delete out.tz;
+            else out[f] = f in mine ? mine[f] : ours[f];
+        }
+        return out;
     }
 
     EventStore.apply = applyAny;
@@ -373,6 +425,11 @@
     EventStore.CommandError = CommandError;
     EventStore.report = report;
     EventStore.FIELDS = FIELDS;
+    EventStore.RECORD = RECORD;
+    EventStore.COPY_RESETS = COPY_RESETS;
+    EventStore.same = same;
+    EventStore.copy = copy;
+    EventStore.mergeRow = mergeRow;
     EventStore.unsafeRecurrence = unsafeRecurrence;
     EventStore.validZone = validZone;
 

@@ -13,9 +13,62 @@
     const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const pad = (n) => String(n).padStart(2, '0');
-    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes());
+
+    // ---- wall-clock values ----------------------------------------------------------------------
+    // The card's dates and times are WALL CLOCK values: a date and a time of day in the event's zone (its own, or the
+    // viewer's when it has none; all-day dates in the viewer's), held as a Date whose UTC fields read them
+    // (EventZone.floating). They were Dates whose LOCAL fields read them, which the viewer's zone bent: 2:30 AM on the
+    // day Los Angeles springs forward does not exist there, so a Tokyo event at 2:30 AM read 3:30 (stress S01), and the
+    // gap check asked the viewer's zone, not the event's (S02). UTC has no DST: every wall time exists in this frame,
+    // and whether one exists in the zone is asked of the zone (exists). Lengths and "an hour later" are measured on the
+    // instants (the card keeps them), never between wall values: in the hour a fall-back repeats, one wall clock is two
+    // instants. wallDate is the ONLY place a wall value is built from parts (test/unit/wall-clock.test.js checks the
+    // card's files for any other).
+    const Z = () => (typeof EventZone !== 'undefined' && EventZone) || root.EventZone
+        || (typeof require === 'function' ? require('../../services/EventZone.js') : null);
+    const wallDate = (y, m, d, h = 0, min = 0) => new Date(Date.UTC(y, m, d, h, min));
+    const startOfDay = (d) => wallDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const addDays = (d, n) => wallDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n, d.getUTCHours(), d.getUTCMinutes());
     const dayDiff = (a, b) => Math.round((startOfDay(b) - startOfDay(a)) / 864e5);
+    const sameDate = (a, b) => !!a && !!b && startOfDay(a).getTime() === startOfDay(b).getTime();
+    /** Minutes after midnight of `day`, as a wall value (1440: the next midnight). */
+    const at = (day, minutes) => wallDate(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, minutes);
+    const weekday = (d) => d.getUTCDay();
+    /** The zone a card value's times are in: its own (timed), else this browser's. */
+    const zoneOf = (v) => (v && !v.isAllDay && v.tz && Z().validZone(v.tz)) || Z().localZone();
+    /** An instant as a wall value in `zone`, and back. */
+    const wallOf = (instant, zone) => Z().floating(new Date(instant).getTime(), zone);
+    const instantOf = (w, zone) => Z().unfloating(w, zone);
+    /** Does this wall time happen in `zone`? (Not 2:30 AM on the day it springs forward.) */
+    const exists = (w, zone) => wallOf(instantOf(w, zone), zone).getTime() === w.getTime();
+    /** Today's midnight in `zone`. */
+    const today = (zone = Z().localZone()) => startOfDay(wallOf(Date.now(), zone));
+
+    // ---- the time pickers' rules (pure: test/unit/wall-clock.test.js runs them over DST days) ----------------------
+    /** The clock times (minutes, every `step`) that happen on `day` in `zone`: not 2:00-2:45 AM on its spring-forward day. */
+    function dayTimes(day, zone, step = 15) {
+        const out = [];
+        for (let m = 0; m < 1440; m += step) if (exists(at(day, m), zone)) out.push(m);
+        return out;
+    }
+    /** An end on its start's day: the same date, or the midnight that ends it (11 PM - 12 AM). */
+    const endsOnStartDay = (start, end) => sameDate(start, end) || (minutesOf(end) === 0 && dayDiff(start, end) === 1);
+    /** The day an end's clock time is on: the start's, for an end on the start's day; else the end's own date. */
+    const endDayOf = (start, end) => startOfDay(endsOnStartDay(start, end) ? start : end);
+    /**
+     * The end for clock time m (minutes; 1440: midnight) picked or typed for an event start..end in `zone`, read against
+     * the START, never the old end: for an end on the start's day, after the start that day, or before it the next day
+     * ("1a" for an 11 PM event); else on the end's own date. (11 PM - midnight with "11:30p" typed ended at 11:30 PM the
+     * NEXT day, the old end's date: stress S05.) null: refused -- the start's own time, a time that day does not have
+     * in the zone, or not after the start.
+     */
+    function endAt(start, end, m, zone) {
+        const own = endsOnStartDay(start, end), sm = minutesOf(start);
+        if (own && m === sm) return null;
+        const e = at(addDays(endDayOf(start, end), own && m < sm ? 1 : 0), m);
+        if (m < 1440 && !exists(e, zone)) return null;
+        return e > start ? e : null;
+    }
 
     // ---- words ------------------------------------------------------------------------------
     /** Minutes after midnight -> "5 PM" / "5:30 PM" (short) or "5:00 PM"; 24-hour: "17:00". 1440 is midnight. */
@@ -25,10 +78,10 @@
         const ap = h < 12 ? 'AM' : 'PM', h12 = ((h + 11) % 12) + 1;
         return short && !mm ? `${h12} ${ap}` : `${h12}:${pad(mm)} ${ap}`;
     }
-    const minutesOf = (d) => d.getHours() * 60 + d.getMinutes();
+    const minutesOf = (d) => d.getUTCHours() * 60 + d.getUTCMinutes();
     const fmtTime = (d, fmt, short) => fmtMinutes(minutesOf(d), fmt, short);
-    /** "Tue, Oct 13" (or other Intl options). */
-    const fmtDate = (d, o = { weekday: 'short', month: 'short', day: 'numeric' }) => d.toLocaleDateString('en-US', o);
+    /** "Tue, Oct 13" (or other Intl options), of a wall value. */
+    const fmtDate = (d, o = { weekday: 'short', month: 'short', day: 'numeric' }) => d.toLocaleDateString('en-US', { ...o, timeZone: 'UTC' });
     /** A length in minutes: "45m", "1h", "1h 30m", "2 days 3h". */
     function fmtLen(mins) {
         mins = Math.max(0, Math.round(mins));
@@ -79,12 +132,12 @@
     const MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
     /**
      * "today", "tomorrow", "fri" (the next Friday after today), "oct 20", "20 oct", "10/20", "10/20/2027",
-     * "2026-10-20", "20" (that day of `ref`'s month) -> a local midnight Date, or null.
+     * "2026-10-20", "20" (that day of `ref`'s month) -> that day's midnight (a wall value), or null.
      * A month and day without a year are the coming one ("jan 5" typed in October is next January), or one in the
      * last few weeks ("oct 20" typed on Oct 24): the first on or after a month before `today` (or before the month
      * shown, when that is later). A day-first "13/10" is read as day/month when it cannot be month/day.
      */
-    function parseDate(s, today = new Date(), ref = today) {
+    function parseDate(s, today = wallOf(Date.now(), Z().localZone()), ref = today) {
         const t = String(s || '').trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ');
         if (!t) return null;
         const T = startOfDay(today), R = startOfDay(ref);
@@ -92,12 +145,12 @@
         if (t === 'tomorrow' || t === 'tmrw') return addDays(T, 1);
         if (t === 'yesterday') return addDays(T, -1);
         const w = /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.exec(t);
-        if (w) { const want = WD[w[1]]; let d = addDays(T, 1); while (d.getDay() !== want) d = addDays(d, 1); return d; }
-        const ok = (y, mo, d) => { const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; };
+        if (w) { const want = WD[w[1]]; let d = addDays(T, 1); while (weekday(d) !== want) d = addDays(d, 1); return d; }
+        const ok = (y, mo, d) => { const x = wallDate(y, mo, d); return x.getUTCMonth() === mo && x.getUTCDate() === d ? x : null; };
         // No year: the first such date from a month back (from today, or from the month shown when that is later).
         const from = addDays(R > T ? R : T, -31);
         const near = (mo, d) => {
-            const y = from.getFullYear();
+            const y = from.getUTCFullYear();
             return [0, 1, 2, 3, 4].map((k) => ok(y + k, mo, d)).find((x) => x && x >= from) || null;   // (Feb 29: the next leap year)
         };
         const at = (y, mo, d) => (y ? ok(y, mo, d) : near(mo, d));
@@ -114,19 +167,22 @@
         m = /^(\d{1,2}) ([a-z]{3})[a-z]*(?: (\d{4}))?$/.exec(t);
         if (m && m[2] in MON) return at(m[3] ? +m[3] : 0, MON[m[2]], +m[1]);
         m = /^(\d{1,2})$/.exec(t);
-        if (m) return ok(R.getFullYear(), R.getMonth(), +m[1]);
+        if (m) return ok(R.getUTCFullYear(), R.getUTCMonth(), +m[1]);
         return null;
     }
 
     // ---- repeat rules (Syncfusion's form: "FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;") ---------------------
     const OWN = ['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'BYSETPOS', 'UNTIL', 'COUNT'];
     const MAP = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
-    const dateStr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const dateStr = (d) => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    // A repeat's UNTIL is classic's: the chosen date's midnight in the VIEWER's zone, as a UTC stamp (buildRule). Read
+    // back as the viewer's date of that instant -- a date, not a wall time of the event.
+    const untilDay = (instant) => { const d = new Date(instant); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
     /** A rule -> the fields of the Custom panel (the same reading as EventEditor.parseRule). */
     function parseRule(rule, start) {
-        const s = { freq: '', interval: 1, byDay: [start.getDay()], endMode: 'never', until: '', count: 10,
-            monthMode: 'day', monthDay: start.getDate(), posDay: start.getDay(), month: start.getMonth() + 1,
-            setPos: Math.ceil(start.getDate() / 7) > 4 ? -1 : Math.ceil(start.getDate() / 7), extra: [] };
+        const s = { freq: '', interval: 1, byDay: [weekday(start)], endMode: 'never', until: '', count: 10,
+            monthMode: 'day', monthDay: start.getUTCDate(), posDay: weekday(start), month: start.getUTCMonth() + 1,
+            setPos: Math.ceil(start.getUTCDate() / 7) > 4 ? -1 : Math.ceil(start.getUTCDate() / 7), extra: [] };
         if (!rule) return s;
         const list = String(rule).replace(/^RRULE:/i, '').split(';').filter((p) => p.includes('=')).map((p) => [p.slice(0, p.indexOf('=')).toUpperCase(), p.slice(p.indexOf('=') + 1)]);
         const parts = Object.fromEntries(list);
@@ -135,7 +191,7 @@
         s.interval = parseInt(parts.INTERVAL, 10) || 1;
         if (parts.BYDAY && (!parts.FREQ || parts.FREQ === 'WEEKLY' || parts.FREQ === 'DAILY')) {   // (a monthly or yearly BYDAY is "the Nth weekday", below)
             s.byDay = parts.BYDAY.split(',').map((d) => MAP[d.replace(/^[+-]?\d+/, '')]).filter((n) => n !== undefined);
-            if (!s.byDay.length) s.byDay = [start.getDay()];
+            if (!s.byDay.length) s.byDay = [weekday(start)];
         }
         if (s.freq === 'MONTHLY' || s.freq === 'YEARLY') {
             if (parts.BYMONTH) s.month = parseInt(parts.BYMONTH, 10) || s.month;
@@ -149,7 +205,7 @@
         if (parts.UNTIL) {
             const u = parts.UNTIL, t = /T(\d{2})(\d{2})(\d{2})/.exec(u) || [0, '00', '00', '00'];
             const at = new Date(Date.UTC(+u.slice(0, 4), +u.slice(4, 6) - 1, +u.slice(6, 8), +t[1], +t[2], +t[3]));
-            s.endMode = 'until'; s.until = /Z$/.test(u) ? dateStr(at) : `${u.slice(0, 4)}-${u.slice(4, 6)}-${u.slice(6, 8)}`;
+            s.endMode = 'until'; s.until = /Z$/.test(u) ? untilDay(at) : `${u.slice(0, 4)}-${u.slice(4, 6)}-${u.slice(6, 8)}`;
         } else if (parts.COUNT) { s.endMode = 'count'; s.count = parseInt(parts.COUNT, 10) || 1; }
         return s;
     }
@@ -179,14 +235,14 @@
     }
     /** The one-tap choices for an event starting on `d`: [{ id, rule }]. */
     function presets(d) {
-        const wd = DAYS[d.getDay()];
+        const wd = DAYS[weekday(d)];
         return [
             { id: 'none', rule: '' },
             { id: 'day', rule: 'FREQ=DAILY;INTERVAL=1;' },
             { id: 'week', rule: `FREQ=WEEKLY;BYDAY=${wd};INTERVAL=1;` },
             { id: 'two', rule: `FREQ=WEEKLY;BYDAY=${wd};INTERVAL=2;` },
-            { id: 'month', rule: `FREQ=MONTHLY;BYMONTHDAY=${d.getDate()};INTERVAL=1;` },
-            { id: 'year', rule: `FREQ=YEARLY;BYMONTHDAY=${d.getDate()};BYMONTH=${d.getMonth() + 1};INTERVAL=1;` },
+            { id: 'month', rule: `FREQ=MONTHLY;BYMONTHDAY=${d.getUTCDate()};INTERVAL=1;` },
+            { id: 'year', rule: `FREQ=YEARLY;BYMONTHDAY=${d.getUTCDate()};BYMONTH=${d.getUTCMonth() + 1};INTERVAL=1;` },
             { id: 'weekday', rule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;' },
         ];
     }
@@ -220,7 +276,7 @@
             if (s.freq === 'MONTHLY') t = n === 1 ? `Monthly on ${on}` : `${every('month')} on ${on}`;
             else t = `${n === 1 ? 'Yearly' : every('year')} on ${s.monthMode === 'weekday' ? `${on} of ${MONTH_NAMES[s.month - 1]}` : `${MONTH_NAMES[s.month - 1]} ${s.monthDay}`}`;
         } else t = 'Repeats';
-        if (s.endMode === 'until' && s.until) { const [y, m, dd] = s.until.split('-').map(Number); t += `, until ${fmtDate(new Date(y, m - 1, dd), { month: 'short', day: 'numeric' })}`; }
+        if (s.endMode === 'until' && s.until) { const [y, m, dd] = s.until.split('-').map(Number); t += `, until ${fmtDate(wallDate(y, m - 1, dd), { month: 'short', day: 'numeric' })}`; }
         if (s.endMode === 'count') t += `, ${s.count} time${s.count === 1 ? '' : 's'}`;
         return t;
     }
@@ -237,14 +293,15 @@
     // ---- the date picker's month --------------------------------------------------------------------
     /** The days to draw for a month: leading blanks (null), then each date. */
     function monthCells(year, month, firstDay = 0) {
-        const first = new Date(year, month, 1), lead = (first.getDay() - firstDay + 7) % 7;
-        const n = new Date(year, month + 1, 0).getDate();
-        return [...Array(lead).fill(null), ...Array.from({ length: n }, (_, i) => new Date(year, month, i + 1))];
+        const first = wallDate(year, month, 1), lead = (weekday(first) - firstDay + 7) % 7;
+        const n = wallDate(year, month + 1, 0).getUTCDate();
+        return [...Array(lead).fill(null), ...Array.from({ length: n }, (_, i) => wallDate(year, month, i + 1))];
     }
 
     const cardKit = { DAYS, DAY_NAMES, MONTH_NAMES, fmtMinutes, fmtTime, fmtDate, fmtLen, fmtDays, ago, ordinal, minutesOf,
         parseTime, parseDate, parseRule, buildRule, presets, presetOf, describeRule, ruleProblem, monthCells,
-        startOfDay, addDays, dayDiff, dateStr };
+        startOfDay, addDays, dayDiff, dateStr, wallDate, sameDate, at, weekday, zoneOf, wallOf, instantOf, exists, today,
+        dayTimes, endsOnStartDay, endDayOf, endAt };
     if (typeof module !== 'undefined' && module.exports) module.exports = cardKit;
     else root.cardKit = cardKit;
 })(typeof window !== 'undefined' ? window : globalThis);

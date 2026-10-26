@@ -39,6 +39,8 @@ function loadApp(events) {
   vm.createContext(ctx);
   vm.runInContext('var Utils = { uuidv4: () => Math.random().toString(36).slice(2) };', ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') + ';this.Event = Event;', ctx);
+  // (app.js compares events through EventStore, a page global.)
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/EventStore.js'), 'utf8'), ctx);
   const names = ['planUndo', 'revertExdates', 'sameEvent', 'eventKey', 'deltaBetween',
     'sameDelta', 'isHandledHistory'];
   vm.runInContext(`this.app = {\n${names.map(method).join(',\n')}\n}`, ctx);
