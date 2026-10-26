@@ -2224,7 +2224,7 @@ const CalendarVueApp = {
                         if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Description: theirs }] }, { action: 'Save' })) this.showToast('Their details are back', 'success');
                     }
                 } });
-            } else this.showToast('Details saved', 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            }
         },
         /**
          * A details session's first undo entry takes on what each later save in it wrote: an undo takes back only what
@@ -2324,7 +2324,8 @@ const CalendarVueApp = {
             c.value = this.nativeCardClone(after);
             c.edited = 'Edited just now';
             this._nativeGlow = `event-${c.target.id}`;
-            if (!this._nativeDetailsQuiet) this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            // No toast: the change is on screen and the event glows once; ⌘Z undoes. Toasts are for what you can't see
+            // happen (a delete, someone else's edit, an error).
         },
         /** The event (or its whole series) went away under the card (deleted in another browser): close it. */
         nativeCardGone(series = false) {
@@ -2379,7 +2380,7 @@ const CalendarVueApp = {
                     const base = this.nativeCardInstants({ ...v, start: smart.base.start, end: smart.base.end });
                     if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: base.start, EndTime: base.end }] }, { action: 'Save' })) this.showToast('Undone', 'success');
                 } });
-            } else this.showToast(`Added ${name || '(No title)'}`, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            }
         },
         /** "5 – 6 PM", "11 AM – 1 PM", "17:00 – 18:00". */
         nativeRange(a, b) {
@@ -2402,7 +2403,6 @@ const CalendarVueApp = {
                 undid++;
             }
             this.closeNativeCard();
-            if (undid) this.showToast('Changes undone', 'info');
         },
         closeNativeCard() {
             const c = this.nativeCard;
@@ -2485,7 +2485,6 @@ const CalendarVueApp = {
             this._nativeMoveToast = null;
             if (this.store().undoStack.length <= p.len) return;
             this._nativeGlow = `event-${p.id}`;
-            this.showToast(p.msg, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
             this.$nextTick(() => {
                 const els = document.querySelectorAll(`.nc [data-testid="event-${p.id}"]`);
                 if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) els.forEach((el) => { el.classList.remove('nc-settle'); void el.offsetWidth; el.classList.add('nc-settle'); });
@@ -6771,7 +6770,7 @@ const CalendarVueApp = {
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             // The native edit link's card follows the event back (EventCard), and says only "Undone" (no button).
             if (this.nativeEdit) this.nativeAfterUndo();
-            if (!quiet) this.showToast(this.nativeEdit ? 'Undone' : `Undid: ${undone}`, 'success');
+            if (!quiet && !this.nativeEdit) this.showToast(`Undid: ${undone}`, 'success');
             return undone;
         },
 
