@@ -227,9 +227,13 @@
 .ne-field input:focus, .ne-field select:focus, .ne-field textarea:focus, .ne-radio select:focus, .ne-radio input:focus, .ne-month-pick select:focus {
     outline: none; border-color: var(--pc-primary); box-shadow: var(--pc-focus-ring); }
 .ne-title-row .ne-field input { height: var(--pc-h-lg); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold); }
+/* Start and End each on their own row: a date and a whole "05:30 PM" side by side. */
+.ne-app .ne-when { flex-direction: column; gap: 0; align-items: stretch; }
+.ne-app .ne-when .ne-field { margin-bottom: 0; }
+.ne-app .ne-when + .ne-check { margin-top: var(--pc-space-3); }
 .ne-dt { display: flex; gap: var(--pc-space-2); }
-.ne-dt input[type=date] { flex: 1.3; min-width: 0; }
-.ne-dt input[type=time] { flex: 1; min-width: 0; }
+.ne-dt input[type=date] { flex: 1; min-width: 0; }
+.ne-dt input[type=time] { flex: 0 0 150px; min-width: 0; }
 .ne-check { display: inline-flex; align-items: center; gap: var(--pc-space-2); margin: var(--pc-space-1) 0; cursor: pointer; }
 .ne-check input, .ne-radio input[type=radio] { width: 18px; height: 18px; accent-color: var(--pc-primary); margin: 0; flex: none; }
 .ne-select { position: relative; display: block; }
@@ -269,7 +273,7 @@
 .ne-error { margin: var(--pc-space-2) 0 0; color: var(--pc-danger); font-size: var(--pc-fs-sm); }
 .ne-foot { display: flex; align-items: center; gap: var(--pc-space-2); padding: var(--pc-space-3) var(--pc-space-6) var(--pc-space-5); border-top: 1px solid var(--pc-line); }
 .ne-spacer { flex: 1; }
-.ne-delete { color: var(--pc-danger); }
+.ne-foot .ne-delete { color: var(--pc-danger); }
 
 /* ---- "This event / All events" and classic's other questions ------------------------------ */
 .pc-native-ask { position: fixed; inset: 0; z-index: var(--pc-z-snackbar); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
@@ -292,7 +296,7 @@
     .ne-app .ne-head { padding: var(--pc-space-3) var(--pc-space-2) 0 var(--pc-space-4); }
     .ne-app .ne-body { padding: 0 var(--pc-space-4) var(--pc-space-2); }
     .ne-app .ne-foot { padding: var(--pc-space-3) var(--pc-space-4) calc(var(--pc-space-3) + env(safe-area-inset-bottom)); }
-    .ne-app .ne-when { flex-direction: column; gap: 0; align-items: stretch; }
+    .ne-dt input[type=time] { flex-basis: 140px; }
     .ne-app .ne-field input, .ne-app .ne-field select, .ne-app .ne-field textarea { font-size: var(--pc-fs-lg); }   /* no iOS zoom on focus */
 }
 

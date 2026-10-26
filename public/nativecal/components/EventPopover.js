@@ -31,7 +31,7 @@ const EventPopover = {
             const fmtD = (d) => `${M[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
             const pad = (n) => String(n).padStart(2, '0');
             const fmtT = (d) => this.timeFormat === '24' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
-                : `${this.v2 ? (d.getHours() % 12 || 12) : pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+                : `${this.v2 || this.textOn ? (d.getHours() % 12 || 12) : pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;   // the main app (textOn): "5:30 PM"
             if (e.isAllDay) {
                 const day = (v) => { const r = new Date(new Date(v).getTime() + 43200000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
                 s = this.occurrence ? new Date(this.occurrence.start) : day(e.start);

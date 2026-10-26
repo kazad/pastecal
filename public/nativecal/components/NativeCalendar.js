@@ -476,7 +476,10 @@ const NativeCalendar = (() => {
             weekdayName(i, short) { const n = WEEKDAYS[i]; return short ? n.slice(0, 3) : n; },
             // v2 drops the leading zero ("9:00 AM", and "5 AM" on the hour gutter).
             time(d) { const t = fmtTime(d, this.timeFormat); return (this.v2 || this.appLook) && this.timeFormat !== '24' ? t.replace(/^0/, '') : t; },
+            nowLabel() { const t = this.time(this.now); return this.appLook && this.isPhone && this.timeFormat !== '24' ? t.replace(/ ([AP])M$/, (m, x) => x.toLowerCase()) : t; },
             hourLabel(h) {
+                // The main app on a phone: compact labels ("5a", "12p", or "17"), as its classic grid draws them there.
+                if (this.appLook && this.isPhone) return this.timeFormat === '24' ? String(h) : `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`;
                 if (this.v2 && this.timeFormat !== '24') return `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
                 if (this.appLook && this.timeFormat !== '24') return fmtTime(new Date(2000, 0, 1, h), this.timeFormat).replace(/^0/, '');
                 return fmtTime(new Date(2000, 0, 1, h), this.timeFormat);
@@ -812,7 +815,7 @@ const NativeCalendar = (() => {
       <div class="nc-grid-body" :style="{ height: hours.length * 48 + 'px' }">
         <div class="nc-gutter">
           <div v-for="h in hours" :key="h" class="nc-hour-label">{{ hourLabel(h) }}</div>
-          <div v-if="gridDays.some(isToday) && nowTop >= 0" class="nc-now-label" :style="{ top: nowTop + 'px' }">{{ time(now) }}</div>
+          <div v-if="gridDays.some(isToday) && nowTop >= 0" class="nc-now-label" :style="{ top: nowTop + 'px' }">{{ nowLabel() }}</div>
         </div>
         <div class="nc-grid-cols">
           <div v-for="(d, i) in gridDays" :key="d.getTime()" class="nc-col" :data-day="d.getTime()"
