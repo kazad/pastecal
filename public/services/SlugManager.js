@@ -163,12 +163,12 @@ class SlugManager {
 
     static getReadOnlyURL(calendar) {
         const slug = this.getReadOnlySlug(calendar);
-        return slug ? `${window.location.origin}/view/${slug}` : null;
+        return slug ? window.location.origin + CalendarPath.view(slug) : null;
     }
 
     static getReadOnlyICSURL(calendar) {
         const slug = this.getReadOnlySlug(calendar);
-        return slug ? `${window.location.origin}/view/${slug}.ics` : null;
+        return slug ? window.location.origin + CalendarPath.feed(CalendarPath.view(slug)) : null;
     }
 
     // Viewer-context-aware URL construction.
@@ -188,9 +188,9 @@ class SlugManager {
             // Refuse to fall back to /${calendar.id} in read-only mode — that would leak
             // the editable id. Caller treats null as "no shareable base path"; UI should
             // fall back to window.location.href (which the viewer already sees).
-            return slug ? `/view/${slug}` : null;
+            return slug ? CalendarPath.view(slug) : null;
         }
-        return `/${calendar.id}`;
+        return CalendarPath.of(calendar.id);   // encoded: "50% off", "a?b", "trail " (A03)
     }
 
     static getViewerBaseURL(calendar, isReadOnly) {
@@ -202,6 +202,7 @@ class SlugManager {
     // doesn't carry one yet (race window between createPublicLink and syncPublicView).
     static _slugFromLocation() {
         const match = window.location.pathname.match(/\/view\/([^/?#]+)/);
-        return match ? match[1] : null;
+        if (!match) return null;
+        try { return decodeURIComponent(match[1]); } catch { return match[1]; }   // (CalendarPath.view encodes it again)
     }
 }

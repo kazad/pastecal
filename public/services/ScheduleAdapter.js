@@ -81,16 +81,16 @@
         repeat: (v) => v || '',
         tz: (v) => v || null,
     };
-    // A series in its own zone (event.tz) as the occurrences the grid draws, when this browser is in another zone, or
-    // null (no zone, the same zone, or no rrule.js: the grid repeats the rule itself). Expanded from a year back to three
-    // years ahead (at most EventZone's 2000).
+    // A series in its zone (its own, event.tz, else the calendar's: EventZone.seriesZone) as the occurrences the grid
+    // draws, when this browser is in another zone, or null (no zone, the same zone, or no rrule.js: the grid repeats the
+    // rule itself). Expanded from a year back to three years ahead (at most EventZone's 2000).
     const ZONED_YEARS_BACK = 1, ZONED_YEARS_AHEAD = 3;
-    const zonedOccurrences = (e) => {
+    const zonedOccurrences = (e, calZone) => {
         const EZ = root.EventZone, RR = root.rrule && root.rrule.RRule;
-        const zone = EZ && RR && EZ.validZone(e.tz);
+        const zone = EZ && RR && EZ.seriesZone(e, calZone);
         if (!zone || zone === EZ.localZone()) return null;
         const now = Date.now(), year = 365 * 864e5;
-        return EZ.occurrences(e, new Date(now - ZONED_YEARS_BACK * year), new Date(now + ZONED_YEARS_AHEAD * year), RR);
+        return EZ.occurrences(e, new Date(now - ZONED_YEARS_BACK * year), new Date(now + ZONED_YEARS_AHEAD * year), RR, 2000, calZone);
     };
     // The id of a new row for "this event" of a zoned series (never a stored id: toCommand adds it).
     const ZONED_OCCURRENCE_ID = '__zoned_occurrence__';
@@ -220,7 +220,7 @@
          * way. Each record also carries the stored values it was built from (_stored*), so
          * fromRecord can keep a value verbatim when its meaning is unchanged.
          */
-        toView(events, { grid = false } = {}) {
+        toView(events, { grid = false, zone = null } = {}) {
             const list = events || [];
             const allDayAware = typeof Event === 'function' && typeof Event.allDayToLocal === 'function';
             const byId = new Map(list.filter((e) => e && e.recurrencerule).map((e) => [String(e.id), e]));
@@ -249,8 +249,10 @@
                 // on other days and, across either zone's DST change, at other hours than native (stress S09). So the
                 // grid (`grid`: Calendar.getSyncFusionEvents) is given its occurrences, expanded in the event's zone
                 // (EventZone.occurrences, the native calendar's own), each one event standing for "this event" of the
-                // series (toCommand). Any other caller gets the series' own record.
-                const zoned = grid && !e.isAllDay && rule && blank(e.recurrenceID) ? zonedOccurrences({ ...e, recurrencerule: rule }) : null;
+                // series (toCommand). Any other caller gets the series' own record. A series without its own zone repeats
+                // in the calendar's (`zone`, EventZone.calendarZone), as the feed writes it (stress A02): seen from
+                // elsewhere it is expanded the same way.
+                const zoned = grid && !e.isAllDay && rule && blank(e.recurrenceID) ? zonedOccurrences({ ...e, recurrencerule: rule }, zone) : null;
                 if (zoned) {
                     const one = { Id: null };
                     for (const [f, R] of Object.entries(Store().RECORD)) if (f !== 'tz' || e.tz) one[R] = e[f];

@@ -37,6 +37,7 @@ function loadApp(rows, events) {
   const ctx = { console, JSON, Date, Map, Set, Math, Object, Array, String };
   vm.createContext(ctx);
   ctx.CalendarDataService = { loadUndoEntries: async () => JSON.parse(JSON.stringify(rows)) };
+  ctx.EventStore = require('../../public/services/EventStore.js');   // describeEventDiff's words (EventStore.describeChange)
   const names = ['loadUndoEntries', 'describeChange', 'isEmptyChange', 'describeEventDiff', 'describeEventTime',
     'describeWhen', 'describeAgo', 'describeExact', 'collapseSessions', 'describeSession',
     'serverNow', 'eventKey', 'eventName', 'refreshRelativeTimes'];

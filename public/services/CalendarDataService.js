@@ -307,7 +307,7 @@ class CalendarDataService {
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL
-                    window.location.href = `/view/${result.data.actualSlug}`;
+                    window.location.href = CalendarPath.view(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case
@@ -356,6 +356,10 @@ class CalendarDataService {
     // arrived, silently reverting the other person's work.
     static _previousSeen = {};
 
+    // The same two baselines for the calendar's own fields: { title, options }.
+    static _lastSeenMeta = {};
+    static _previousSeenMeta = {};
+
     // Remember what the server just told us. Called from every subscription callback.
     static _rememberSnapshot(calendar) {
         if (!calendar || !calendar.id) return;
@@ -363,6 +367,40 @@ class CalendarDataService {
             this._previousSeen[calendar.id] = this._lastSeen[calendar.id];
         }
         this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(this._eventList(calendar.events)));
+        // (A snapshot of the events alone leaves the title/options baseline as it was.)
+        if ('title' in calendar || 'options' in calendar) {
+            if (Object.prototype.hasOwnProperty.call(this._lastSeenMeta, calendar.id)) this._previousSeenMeta[calendar.id] = this._lastSeenMeta[calendar.id];
+            this._lastSeenMeta[calendar.id] = JSON.parse(JSON.stringify({ title: calendar.title ?? '', options: calendar.options || {} }));
+        }
+    }
+
+    /**
+     * The calendar's own fields merged three ways, like its events (_mergeEvents): `theirs` (the snapshot just received)
+     * with every field `mine` (this tab) changed since `base` (the snapshot before it). Per field: the title, and each
+     * option on its own (notes, typeLabels, tz, ...); a list (typeLabels, colors) entry by entry. A field this tab
+     * changed and has not yet saved -- the notes being typed -- is never replaced by a snapshot. (import() replaced the
+     * options whole: another person's added event brought back the server's notes over keystrokes still inside the
+     * 500 ms save debounce, stress A01.) A field both changed: this tab's, the newest intent, which it is about to send.
+     * edited(field): whether the person here changed it ('title', or an option's key). A value this tab only filled in
+     * (an option's default, on load) differs from the base too, but never outranks someone's saved one.
+     */
+    static mergeMeta(base, mine, theirs, edited = () => true) {
+        const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const pick = (b, m, t, field) => {
+            if (same(m, b) || !edited(field)) return t;
+            if (Array.isArray(b) && Array.isArray(m) && Array.isArray(t)) {
+                return Array.from({ length: Math.max(m.length, t.length) }, (_, i) => (same(m[i], b[i]) ? t[i] : m[i]));
+            }
+            return m;
+        };
+        const B = base || {}, M = mine || {}, T = theirs || {};
+        const bo = B.options || {}, mo = M.options || {}, to = T.options || {};
+        const options = {};
+        for (const k of new Set([...Object.keys(to), ...Object.keys(mo), ...Object.keys(bo)])) {
+            const v = pick(bo[k], mo[k], to[k], k);
+            if (v !== undefined) options[k] = v;
+        }
+        return { title: pick(B.title, M.title, T.title, 'title'), options };
     }
 
     // Firebase returns an array with holes as an object keyed by index ({"0":A,"2":B}),

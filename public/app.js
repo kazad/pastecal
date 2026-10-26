@@ -432,6 +432,11 @@ const CalendarVueApp = {
             // The events array as the last remote snapshot left it, so the watcher can tell
             // an untouched echo from an echo plus a real local edit.
             remoteAppliedSignature: null,
+            // The calendar's own fields as the last snapshot left them (with the defaults this tab fills in on load), and
+            // which of them the person here has changed since ('title', 'notes', 'typeLabels'...): only those are kept
+            // over a snapshot (CalendarDataService.mergeMeta). A filled-in default is not a change.
+            appliedMeta: null,
+            metaDirty: {},
             // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
             // and its type dropdown are reused across opens, so handlers built on the first
             // open read this rather than their own stale closure.
@@ -483,6 +488,8 @@ const CalendarVueApp = {
         // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
         // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        // Where a repeating event without its own zone repeats (EventZone.calendarZone), as the calendar feed writes it.
+        calendarZone() { return typeof EventZone !== 'undefined' && EventZone.calendarZone ? EventZone.calendarZone(this.calendar) : null; },
         // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
         // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
         nativeDraft() {
@@ -973,6 +980,7 @@ const CalendarVueApp = {
                             this.updateCustomViewInSchedule();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
+                            this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                             // Add to recents when calendar loads, but mark as read-only
                             // The tab says which calendar this is (a short link's page is static: the server can't).
                             if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
@@ -1019,6 +1027,7 @@ const CalendarVueApp = {
                     this.updateCustomViewInSchedule();
                     // Re-initialize local settings to load custom colors and labels
                     this.initializeLocalSettings();
+                    this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                     // Add to recents when calendar loads.
                     //
                     // This callback is a live subscription: it re-fires on every
@@ -1526,10 +1535,11 @@ const CalendarVueApp = {
                 // edit is real and must be published -- suppressing it would trade the
                 // echo bug for a silent lost edit.
                 if (this.isApplyingRemote
-                    && JSON.stringify(this.calendar.events || []) === this.remoteAppliedSignature) {
+                    && this.calendarSignature() === this.remoteAppliedSignature) {
                     this.updateCalendarView();
                     return;
                 }
+                this.noteMetaEdits();
 
                 if (!this.isExisting) {
                     this.saveLocalStorage();
@@ -4123,7 +4133,9 @@ const CalendarVueApp = {
                 this.calendar.id = slug;
             }
 
-            // normalize
+            // normalize. A name typed here is trimmed (once, now: from then on the name is exact everywhere); one that
+            // came from the address ("/royal%20city%20", a draft saved where it was opened) is kept as it is.
+            if (this.userHasEditedSlug && slug.trim()) slug = slug.trim();
             slug = SlugManager.normalizeSlug(slug);
             this.calendar.id = slug;
             this.slugTaken = null;
@@ -4195,7 +4207,7 @@ const CalendarVueApp = {
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar saved', 'success');
                     try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
-                    window.location.href = "/" + slug;
+                    window.location.href = CalendarPath.of(slug);   // encoded: "a?b" is not "/a" + a query (A04)
                 }, { onError: failed });
             }, () => { this.slugProblem = 'Couldn’t reach pastecal to check that name. Check your connection and try again.'; });
         },
@@ -4386,6 +4398,31 @@ const CalendarVueApp = {
         // would let the echo through anyway.
         // `replace` skips the merge: used when local is known to be wrong (a refused
         // write's recovery), where merging would keep exactly the damage being undone.
+        // What the calendar watcher compares to tell a remote apply from a local edit in the same batch: the events AND the
+        // calendar's own fields (a keystroke in the notes landing with a snapshot is an edit too).
+        calendarSignature() {
+            return JSON.stringify([this.calendar.events || [], this.calendar.title ?? '', this.calendar.options || {}]);
+        },
+        // The calendar as a snapshot left it: called after applyRemoteCalendar AND again once the subscription callback
+        // has filled in this tab's defaults (ensureCalendarOptionsDefaults, initializeLocalSettings), so neither the
+        // watcher (an idle tab writes nothing) nor the merge (a default never outranks someone's saved value) takes
+        // those defaults for the person's edits.
+        noteRemoteApplied() {
+            this.remoteAppliedSignature = this.calendarSignature();
+            this.appliedMeta = JSON.parse(JSON.stringify({ title: this.calendar.title ?? '', options: this.calendar.options || {} }));
+        },
+        // A local change to the calendar: which of its own fields the person changed (metaDirty), for the next merge.
+        noteMetaEdits() {
+            const was = this.appliedMeta;
+            if (!was) return;
+            const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+            const now = { title: this.calendar.title ?? '', options: this.calendar.options || {} };
+            if (!same(now.title, was.title)) this.metaDirty.title = true;
+            for (const k of new Set([...Object.keys(now.options), ...Object.keys(was.options || {})])) {
+                if (!same(now.options[k], (was.options || {})[k])) this.metaDirty[k] = true;
+            }
+            this.appliedMeta = JSON.parse(JSON.stringify(now));
+        },
         applyRemoteCalendar(c, { replace = false } = {}) {
             this.isApplyingRemote = true;
             try {
@@ -4409,6 +4446,21 @@ const CalendarVueApp = {
                     c = { ...c, events: CalendarDataService._mergeEvents(
                         base, this.calendar.events, incoming) };
                 }
+                // The title and every option the same way, field by field: the notes being typed (unsaved, inside the
+                // save debounce) are never replaced by another person's snapshot (stress A01).
+                const baseMeta = CalendarDataService._previousSeenMeta && CalendarDataService._previousSeenMeta[this.calendar.id];
+                if (!replace && baseMeta && typeof CalendarDataService.mergeMeta === 'function') {
+                    const dirty = this.metaDirty || {};
+                    const merged = CalendarDataService.mergeMeta(baseMeta, { title: this.calendar.title, options: this.calendar.options },
+                        { title: c.title, options: c.options }, (field) => !!dirty[field]);
+                    // A field the server now holds as this tab has it is saved: no longer this tab's to keep.
+                    const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+                    if (same(merged.title, c.title)) delete dirty.title;
+                    for (const k of Object.keys(dirty)) if (k !== 'title' && same((merged.options || {})[k], (c.options || {})[k])) delete dirty[k];
+                    c = { ...c, title: merged.title, options: merged.options };
+                } else if (replace) {
+                    this.metaDirty = {};
+                }
                 this.calendar.import(c);
             } finally {
                 // Record what the calendar looks like immediately after the import. The
@@ -4416,7 +4468,7 @@ const CalendarVueApp = {
                 // local edit landing in the same batch as a remote snapshot would
                 // otherwise be skipped along with it and never reach the server -- a new
                 // data-loss bug in the fix for the old one.
-                this.remoteAppliedSignature = JSON.stringify(this.calendar.events || []);
+                this.noteRemoteApplied();
                 this.$nextTick(() => { this.isApplyingRemote = false; });
             }
         },
@@ -4462,7 +4514,7 @@ const CalendarVueApp = {
         updateCurrentViewURL() {
             if (!this.calView) return;
             const currentView = this.calView.currentView();
-            const currentDate = this.calView.selectedDate().toISOString().slice(0, 10);
+            const currentDate = Utils.localDay(this.calView.selectedDate());   // the day on screen, not its UTC date (A06)
 
             // Map display name to URL parameter
             let viewParam;
@@ -4496,12 +4548,12 @@ const CalendarVueApp = {
         // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}`;
+            return window.location.origin + CalendarPath.of(this.calendar.id);
         },
 
         getEditableICSURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}.ics`;
+            return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
         getReadOnlyICSURL() {
@@ -4524,8 +4576,9 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
-            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
-            return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
+            const name = (p) => { try { return decodeURIComponent(p); } catch (e) { return p; } };
+            if (atViewSlug() && parts.length === 2) return window.location.origin + CalendarPath.feed(CalendarPath.at(name(parts[0]).replace(/^@/, ''), name(parts[1])));
+            return parts[0] === 'view' && parts[1] ? window.location.origin + CalendarPath.feed(CalendarPath.view(name(parts[1]))) : null;
         },
 
         /**
@@ -4652,16 +4705,16 @@ const CalendarVueApp = {
          *  All three open the view-only calendar. */
         shareViewURL() {
             const n = this.shareNames, origin = window.location.origin;
-            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
-            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            if (n && n.handle && n.atName) return origin + CalendarPath.at(n.handle, n.atName);
+            if (n && n.shortNames.length) return origin + CalendarPath.of(n.shortNames[0]);
             return this.getReadOnlyURL();
         },
         /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
         otherViewLinks() {
             const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
             const all = [];
-            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
-            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            if (n && n.handle && n.atName) all.push(origin + CalendarPath.at(n.handle, n.atName));
+            if (n) for (const s of n.shortNames) all.push(origin + CalendarPath.of(s));
             const view = this.getReadOnlyURL();
             if (view) all.push(view);
             return all.filter((u) => u !== main);
@@ -5944,19 +5997,8 @@ const CalendarVueApp = {
          * meaningful differs. Firebase drops empty values, so compare normalized.
          */
         describeEventDiff(from, to) {
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const parts = [];
-            if (norm(from.title) !== norm(to.title)) {
-                parts.push(to.title && to.title.trim() ? `renamed to "${to.title}"` : 'title cleared');
-            }
-            if (norm(from.start) !== norm(to.start) || norm(from.end) !== norm(to.end)) {
-                parts.push(`moved to ${this.describeEventTime(to)}`);
-            }
-            if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
-            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('color changed');
-            if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
-            if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
-            return parts.length ? parts.join(', ') : null;
+            // Every field of the one list (EventStore.RECORD) has its words there (EventStore.CHANGE_WORDS).
+            return EventStore.describeChange(from, to, (e) => this.describeEventTime(e));
         },
 
         /**
@@ -6707,7 +6749,7 @@ const CalendarVueApp = {
                 return;
             }
             ProInsightIntent.set(id, 'stats');
-            window.location.href = '/' + encodeURIComponent(id);
+            window.location.href = CalendarPath.of(id);
         },
         /** Has this calendar had its one free trial? Only so the Go Pro card doesn't offer one it can't have. */
         async refreshProTrial() {

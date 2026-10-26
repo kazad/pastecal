@@ -32,6 +32,7 @@
  * Lookups for the public pages are cached for 60 seconds (caches.default) and purged on change; the
  * purge reaches only the data center that made the change, so others may be up to 60 seconds behind.
  */
+import CalendarPath from '../../public/services/CalendarPath.js';
 import { sessionUserId, sameSite, UNLIMITED_TOP_LEVEL, lockForOwner } from './Accounts.js';
 import { LockClient } from './LockClient.js';
 import { SlugService, nameProblem } from './SlugService.js';
@@ -218,7 +219,7 @@ const NAME_OPS = {
         await g.acc.noteNameEvent(userId, 'calendar', name);
         console.log('[names] calendar created under handle');
         await purgeNames(g.handle.handle, [name]);
-        return json({ ok: true, calendarId: id, path: `/@${g.handle.handle}/${name}` });
+        return json({ ok: true, calendarId: id, path: CalendarPath.at(g.handle.handle, name) });
     },
 
     async '/api/names/link'(request, env, userId, body) {
@@ -254,7 +255,7 @@ const NAME_OPS = {
         await g.acc.noteNameEvent(userId, existing ? 'rename' : 'link', name);
         console.log(`[names] link ${existing ? 'renamed' : 'added'}`);
         await purgeNames(g.handle.handle, [name, ...(set.previous ? [set.previous.name] : [])]);
-        return json({ ok: true, path: `/@${g.handle.handle}/${name}` });
+        return json({ ok: true, path: CalendarPath.at(g.handle.handle, name) });
     },
 
     async '/api/names/unlink'(request, env, userId, body) {
@@ -377,7 +378,7 @@ export async function serveAt(request, env, url, { serveFeed }) {
     const page = await env.ASSETS.fetch(new Request(new URL('/', url), { headers: { Accept: 'text/html' } }));
     const meta = `<meta name="pc-view" content="${esc(hit.alias)}"><meta name="pc-at" content="${esc('@' + handle + '/' + name)}">${nativeViewLinks(env) ? NATIVE_CAL_META : ''}`;
     const title = hit.title || `@${handle}/${name}`;
-    const at = `${siteUrl(env)}/@${handle}/${name}`;
+    const at = siteUrl(env) + CalendarPath.at(handle, name);
     const fallback = metaBlock({ title, docTitle: `${title} · pastecal`, url: at, image: `${siteUrl(env)}${STATIC_CARD}`, imageAlt: title,
         description: `${title}: a shared calendar on pastecal, view only. Open it to see the schedule, or add it to your calendar app.` });
     const previewed = await previewPage(request, env, page, { kind: 'view', id: hit.alias }, Date.now(), { url: at, fallback });
@@ -407,7 +408,7 @@ function handlePageResponse(env, url, page) {
     const h = esc(page.handle);
     const list = page.links.length
         ? `<ul class="h-list" data-testid="handle-list">${page.links.map((l) =>
-            `<li><a href="/@${h}/${esc(l.name)}" data-testid="handle-link"><span class="h-title">${esc(l.title)}</span><span class="h-path">pastecal.com/@${h}/${esc(l.name)}</span></a></li>`).join('')}</ul>`
+            `<li><a href="${esc(CalendarPath.at(page.handle, l.name))}" data-testid="handle-link"><span class="h-title">${esc(l.title)}</span><span class="h-path">pastecal.com/@${h}/${esc(l.name)}</span></a></li>`).join('')}</ul>`
         : `<p class="h-muted" data-testid="handle-empty">Calendars shared here will show up on this page.</p>`;
     return sitePage(env, url, `<h1 data-testid="handle-name">@${h}</h1><p class="h-sub">on pastecal</p>${list}`, 200, `@${page.handle} · pastecal`);
 }

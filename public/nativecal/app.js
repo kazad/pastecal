@@ -45,7 +45,7 @@ const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL
 /** A calendar's page INSIDE this app (/beta/<id> or /nativecal/<id>), so creating or renaming
  *  a calendar keeps beta testers in beta. Share links stay pastecal.com/<id>, the page
  *  everyone else uses. */
-const calPath = (id) => (CAL_BASE === '/' ? '' : CAL_BASE.replace(/\/$/, '')) + '/' + (id || '');
+const calPath = (id) => (CAL_BASE === '/' ? '' : CAL_BASE.replace(/\/$/, '')) + (id ? CalendarPath.of(id) : '/');
 const stripBase = (path) => {
     const base = CAL_BASE.endsWith('/') ? CAL_BASE.slice(0, -1) : CAL_BASE;
     if (base && base !== '/' && path.startsWith(base)) {
@@ -451,7 +451,7 @@ const CalendarVueApp = {
                 CloudCalendarService.onLockState = (s) => {
                     if (!s || !s.locked) return;
                     const hash = /^#k=/.test(location.hash) ? location.hash : '';
-                    location.replace('/' + encodeURIComponent(s.id || this.urlslug) + hash);
+                    location.replace(CalendarPath.of(s.id || this.urlslug) + hash);
                 };
             }
             // default: pastecal.com/ID
@@ -1419,12 +1419,12 @@ const CalendarVueApp = {
         // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}`;
+            return window.location.origin + CalendarPath.of(this.calendar.id);
         },
 
         getEditableICSURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}.ics`;
+            return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
         getReadOnlyICSURL() {

@@ -110,7 +110,8 @@ const NativeCalendar = (() => {
 
     const MAX_OCCURRENCES = 2000;
     const warnedRules = new Set();
-    function occurrencesBetween(events, rangeStart, rangeEnd) {
+    // calZone: the calendar's zone (EventZone.calendarZone), where a series without its own zone repeats.
+    function occurrencesBetween(events, rangeStart, rangeEnd, calZone = null) {
         const out = [];
         const RR = window.rrule || {};
         for (const ev of events || []) {
@@ -132,13 +133,16 @@ const NativeCalendar = (() => {
                 ? EventStore.unsafeRecurrence(ev.recurrencerule) : null;
             if (unsafe && !warnedRules.has(ev.id)) { warnedRules.add(ev.id); console.warn(`[pastecal] event ${ev.id}: ${unsafe}; shown once, not repeated`); }
             // An event with its own zone (services/EventZone.js) repeats in THAT zone's wall clock: a weekly 2 PM Tokyo
-            // meeting stays 2 PM Tokyo across DST and lands on Tokyo's weekday, wherever it is viewed. Without one,
-            // in this browser's own zone, as always.
+            // meeting stays 2 PM Tokyo across DST and lands on Tokyo's weekday, wherever it is viewed. Without one, in
+            // the calendar's zone (calZone), as the feed writes it: seen from this browser's own zone (the calendar's
+            // own people), the local expansion below is the same thing.
             const EZ = window.EventZone;
-            const zone = !allDay && EZ && ev.tz ? EZ.validZone(ev.tz) : null;
+            const own = !allDay && EZ && ev.tz ? EZ.validZone(ev.tz) : null;
+            const inCal = !own && !allDay && EZ && EZ.seriesZone ? EZ.seriesZone(ev, calZone) : null;
+            const zone = own || (inCal && inCal !== EZ.localZone() ? inCal : null);
             if (zone && ev.recurrencerule && !ev.recurrenceID && RR.RRule && !unsafe) {
                 // (EventZone.occurrences: the same expansion classic's grid draws, ScheduleAdapter.toView.)
-                const occs = EZ.occurrences(ev, rangeStart, rangeEnd, RR.RRule, MAX_OCCURRENCES);
+                const occs = EZ.occurrences(ev, rangeStart, rangeEnd, RR.RRule, MAX_OCCURRENCES, calZone);
                 if (occs) {
                     for (const o of occs) out.push({ ...base, start: o.start, end: o.end, recurring: true, key: `${ev.id}@${o.start.getTime()}` });
                     continue;
@@ -249,6 +253,8 @@ const NativeCalendar = (() => {
             // The event being added while the quick box is open, { start, end, isAllDay, title } (display shape, as
             // 'event-create' sends it): drawn on the grid as a "New event" block whose label follows the title.
             draft: { type: Object, default: null },
+            // The calendar's zone (EventZone.calendarZone): where a repeating event without its own zone repeats.
+            calendarZone: { type: String, default: null },
         },
         // 'range-change' { view, date, start, end }: whenever the dates on screen change (view or navigation).
         // 'drag-start' { event, occurrence }: a drag or resize of an event began (appEdits).
@@ -331,7 +337,7 @@ const NativeCalendar = (() => {
                 const weeks = [];
                 for (let ws = startOfWeek(m0, this.first); ws < mEnd; ws = addDays(ws, 7)) {
                     const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
-                    const occs = occurrencesBetween(this.shownEvents, ws, addDays(ws, 7));
+                    const occs = occurrencesBetween(this.shownEvents, ws, addDays(ws, 7), this.calendarZone);
                     const bars = layoutWeekBars(occs, ws, 7);
                     const maxLanes = Math.floor((Math.max(MONTH_ROW_PX, this.monthRowHeight) - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
                     const hidden = [0, 0, 0, 0, 0, 0, 0];
@@ -352,7 +358,7 @@ const NativeCalendar = (() => {
             gridLayout() {
                 const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], more: [], allDayHidden: [], allDayLanes: 0, allDayFolds: false };
                 const s = days[0], e = addDays(days[days.length - 1], 1);
-                const occs = occurrencesBetween(this.shownEvents, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e, this.calendarZone);
                 const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
                 // Overlapping events never narrower than 40px: the columns that fit, then "+N". A day too narrow for
                 // two (a phone's week: 49px) shows overlapping events as one "+N" across it, never a sliver beside it.
@@ -390,7 +396,7 @@ const NativeCalendar = (() => {
             yearMonths() {
                 if (this.view !== 'Year') return [];
                 const y = this.date.getFullYear();
-                const occs = occurrencesBetween(this.shownEvents, new Date(y, 0, 1), new Date(y + 1, 0, 8));
+                const occs = occurrencesBetween(this.shownEvents, new Date(y, 0, 1), new Date(y + 1, 0, 8), this.calendarZone);
                 const marks = new Map();
                 for (const o of occs) {
                     const last = o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1);
@@ -406,7 +412,7 @@ const NativeCalendar = (() => {
             agendaDays() {
                 if (this.view !== 'Agenda') return [];
                 const s = this.date, e = addDays(s, 7);
-                const occs = occurrencesBetween(this.shownEvents, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e, this.calendarZone);
                 const days = [];
                 for (let d = s; d < e; d = addDays(d, 1)) {
                     const next = addDays(d, 1);

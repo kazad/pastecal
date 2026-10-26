@@ -102,7 +102,8 @@ const TrialUsage = {
             localStorage.setItem(TRIAL_USAGE_KEY, JSON.stringify(Object.fromEntries(keep)));
         } catch (e) { /* storage blocked: may count again */ }
     },
-    today() { return new Date().toISOString().slice(0, 10); },
+    // This browser's own day (not the UTC one, which turns at 5 PM in Los Angeles).
+    today() { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; },
     once(id, feature) {
         const all = this._all(), k = String(id).toLowerCase() + '|' + feature, d = this.today();
         if (all[k] === d) return false;
@@ -209,7 +210,7 @@ const ProBetaJoin = {
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email)) { this.error = 'Enter an email address, like you@example.com.'; this.$refs.email && this.$refs.email.focus(); return; }
             this.busy = true;
             try {
-                const page = this.calendarId ? '/' + this.calendarId : location.pathname;
+                const page = this.calendarId ? CalendarPath.of(this.calendarId) : location.pathname;
                 const r = await proApi('POST', '/api/waitlist', { email: this.email, plan: 'pro', use: 'Pro beta', page, website: this.website });
                 if (r.status === 200 && r.data.ok) {
                     this.done = r.data.returning ? 'You’re still on the list. We’ll email you when your trial is ready.' : PRO_BETA_DONE;
@@ -399,8 +400,8 @@ const ProPanel = {
                 <div v-if="status.plan === 'unlimited' || status.atName || (status.shortNames || []).length" class="pc-pro-sub" data-testid="pro-short-links">
                     <h5>Your links</h5>
                     <p class="pc-pro-muted">They open the view-only calendar. Share to view copies the first one.</p>
-                    <p v-if="status.atName" class="pc-pro-linkline"><a :href="'/@' + status.handle + '/' + status.atName" target="_blank" rel="noopener" data-testid="pro-at-link">{{ host }}/@{{ status.handle }}/{{ status.atName }}</a></p>
-                    <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a>
+                    <p v-if="status.atName" class="pc-pro-linkline"><a :href="pathAt(status.handle, status.atName)" target="_blank" rel="noopener" data-testid="pro-at-link">{{ host }}/@{{ status.handle }}/{{ status.atName }}</a></p>
+                    <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="pathOf(n)" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a>
                         <button type="button" class="pc-link pc-pro-release" @click="nameChange('/api/names/short/release', { name: n })" :disabled="busy" data-testid="pro-short-release">Release</button></p>
                     <template v-if="status.plan === 'unlimited'">
                         <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-at-form">
@@ -578,6 +579,8 @@ const ProPanel = {
     },
     beforeUnmount() { window.removeEventListener('focus', this._onFocus); },
     methods: {
+        pathAt: (handle, name) => CalendarPath.at(handle, name),
+        pathOf: (name) => CalendarPath.of(name),
         async refresh() {
             if (!this.calendarId) return;
             const [st, me, billing] = await Promise.all([

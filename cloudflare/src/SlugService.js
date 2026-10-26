@@ -69,8 +69,12 @@ export function nameProblem(raw, kind) {
 }
 
 export const SlugService = {
+    // The directory's key for a name: its lowercase, and nothing else. A calendar's name is exact -- "royal city " (a
+    // trailing space) is its own calendar -- so it is never trimmed here: trimmed, its lookups answered "royal city",
+    // and the app re-opened that, a blank draft (stress A19). Typed input (a short name, a custom view name) is trimmed
+    // where it is read, before it becomes a name.
     normalizeSlug(slug) {
-        return String(slug ?? '').trim().toLowerCase();
+        return String(slug ?? '').toLowerCase();
     },
 
     isReserved(slug) {
