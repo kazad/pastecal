@@ -84,7 +84,9 @@ test('dark mode: the quick popup and editor use the app surface and hairline, no
   const quick = page.locator('.e-quick-popup-wrapper.e-popup-open');
   await expect(quick).toBeVisible();
   expect(await quick.evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).borderTopColor])).toEqual([surface, line]);
-  await quick.locator('.e-close').click();
+  // Close it (under load Syncfusion sometimes closed it first, and a click on its X then waited forever).
+  await quick.locator('.e-close').click({ timeout: 5000 }).catch(() => {});
+  await expect(quick).toHaveCount(0);
 
   await page.locator('.e-month-view .e-appointment', { hasText: 'Orange thing' }).dblclick();
   const dialog = page.locator('.e-schedule-dialog.e-popup-open');
