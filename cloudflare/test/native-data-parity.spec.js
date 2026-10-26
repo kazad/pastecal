@@ -334,26 +334,31 @@ for (const r of [classic, native]) {
 // local midnight (UTC+9) for the dates, the skipped date's stamp at Tokyo midnight (Event.allDayStampFromLocal).
 const tokyoWeekly = () => [{ ...timed('tw-1', 'Tokyo weekly', '2026-10-05T15:00:00Z', '2026-10-06T15:00:00Z'), isAllDay: true,
   recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=4', recurrenceException: '20261012T150000Z' }];   // Tue Oct 6, (13), 20, 27
+// FINDING D2 (docs/native-gaps.md): native draws a skipped date of an all-day repeating event again
+// when the viewer's zone differs from the zone it was skipped in (LA and London see Oct 13; Tokyo sees
+// the Oct 20 an LA classic user skipped). It compares the stored stamps raw (NativeCalendar.js
+// expandEvents, the `excluded` set) and app.js displayEvents maps the rule but not
+// recurrenceException; classic maps them (ScheduleAdapter.toView -> Event.allDayExceptionsToLocal).
+// What native WRITES is right, so the write checks are ordinary tests; only native's drawing is test.fail.
+for (const r of [classic, native]) {
+  test(`b3. ${r.name}: an all-day weekly series from Tokyo with a skipped date skips it in every zone`, async ({ browser }) => {
+    test.fail(r === native, 'D2: native shows skipped all-day occurrences again in other time zones');
+    const id = `dp-b3-show-${r.name}`;
+    await reset(id, tokyoWeekly());
+    for (const z of ZONES) {
+      const b = await openBrowser(browser, z);
+      await r.open(b.page, id, '?view=month&date=2026-10-15');
+      expect.soft((await daysCovered(r, b.page, 'Tokyo weekly')).days, `${r.name} in ${z}`).toEqual(['2026-10-06', '2026-10-20', '2026-10-27']);
+      await b.ctx.close();
+    }
+  });
+}
 for (const deleter of [classic, native]) {
-  test(`b3. all-day weekly series from Tokyo with a skipped date: both renderers skip it in every zone; ${deleter.name} in Los Angeles skips another, ${other(deleter).name} in Tokyo agrees`, async ({ browser }) => {
-    // FINDING D2 (docs/native-gaps.md): native draws a skipped date of an all-day repeating event again
-    // when the viewer's zone differs from the zone it was skipped in (LA and London see Oct 13; Tokyo sees
-    // the Oct 20 an LA classic user skipped). It compares the stored stamps raw (NativeCalendar.js
-    // expandEvents, the `excluded` set) and app.js displayEvents maps the rule but not
-    // recurrenceException; classic maps them (ScheduleAdapter.toView -> Event.allDayExceptionsToLocal).
-    // What native WRITES is right: the stamps it adds read correctly in classic.
-    test.fail(true, 'D2: native shows skipped all-day occurrences again in other time zones');
+  const reader = other(deleter);
+  test(`b3. ${deleter.name} in Los Angeles skips another date of the Tokyo series: stamps stored as classic writes them; ${reader.name} in Tokyo agrees`, async ({ browser }) => {
+    test.fail(reader === native, 'D2: native in Tokyo draws the date skipped from Los Angeles');
     const id = `dp-b3-${deleter.name}`;
     await reset(id, tokyoWeekly());
-    for (const r of [classic, native]) {
-      for (const z of ZONES) {
-        const b = await openBrowser(browser, z);
-        await r.open(b.page, id, '?view=month&date=2026-10-15');
-        expect.soft((await daysCovered(r, b.page, 'Tokyo weekly')).days, `${r.name} in ${z}`).toEqual(['2026-10-06', '2026-10-20', '2026-10-27']);
-        await b.ctx.close();
-      }
-    }
-    // Skip Oct 20 too, from Los Angeles
     const la = await openBrowser(browser, 'America/Los_Angeles');
     await deleter.open(la.page, id, '?view=day&date=2026-10-20');
     await deleter.ui.openPopover(la.page, 'Tokyo weekly');
@@ -366,9 +371,8 @@ for (const deleter of [classic, native]) {
     expect(row.recurrencerule).toBe(tokyoWeekly()[0].recurrencerule);
     await la.ctx.close();
     const tk = await openBrowser(browser, 'Asia/Tokyo');
-    const reader = other(deleter);
     await reader.open(tk.page, id, '?view=month&date=2026-10-15');
-    expect.soft((await daysCovered(reader, tk.page, 'Tokyo weekly')).days, `${reader.name} in Tokyo`).toEqual(['2026-10-06', '2026-10-27']);
+    expect((await daysCovered(reader, tk.page, 'Tokyo weekly')).days, `${reader.name} in Tokyo`).toEqual(['2026-10-06', '2026-10-27']);
     await tk.ctx.close();
   });
 }

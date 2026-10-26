@@ -10,8 +10,8 @@ The plan is in [native-switch.md](native-switch.md). Measured Oct 25 2026 on bra
 | Suite | Before | After the test fixes |
 |---|---|---|
 | Audit, `test/native-audit` (213 tests: 71 journeys x desktop-en, desktop-de, phone-en) | 137 passed, 22 failed, 54 skipped | **153 passed, 6 failed, 54 skipped** |
-| Data parity, `cloudflare/test/native-data-parity.spec.js` (new, 15) | | **12 pass, 3 expected failures (findings D1, D2)** |
-| Unit, `node --test $(node test/unit-files.js)` | | 524 tests, 0 failed |
+| Data parity, `cloudflare/test/native-data-parity.spec.js` (new, 17) | | **14 pass, 3 expected failures (findings D1, D2)** |
+| Unit, `node --test $(node test/unit-files.js)` | | 524 tests, 0 failed (a worktree needs the main checkout's `node_modules` and `functions/node_modules`) |
 
 The 22 failures sort into:
 
@@ -40,8 +40,9 @@ Data loss first, then common actions. Only items a test (or a failing journey) c
    (`public/nativecal/components/NativeCalendar.js:93` and `:110`), and `app.js:210` (`displayEvents`) maps
    an all-day series' rule to the viewer's dates but not its `recurrenceException`. Classic does both
    (`ScheduleAdapter.toView`, `public/services/ScheduleAdapter.js:164`, `Event.allDayExceptionsToLocal`).
-   What native writes is right (classic reads its stamps correctly). People see a cancelled day as on, and
-   editing that ghost occurrence makes a second exception row. Journey b3.
+   What native writes is right (classic reads its stamps correctly). People see a cancelled day as on.
+   (Untested, from reading the code: editing or deleting that ghost occurrence would add a second stamp for
+   the same date in the viewer's form.) Journey b3.
 3. **Dragging one occurrence of a repeating event does nothing.** `NativeCalendar.js:466`
    (`startDrag` returns on `occ.recurring`, which is also true for an edited occurrence's own row, `:117`).
    Classic asks "this event or the series?" and stamps the exception. Audit: "drag a repeating occurrence"
@@ -75,13 +76,16 @@ opens `/beta/<id>?backend=cf` today; `NATIVE_URL=main` switches it to `/<id>?bac
 | a. The reverse (made in native, edited in classic, native reloads) | pass |
 | b. All-day: one-day and three-day events across the EU DST week (Oct 24-26) and the US one (Oct 31-Nov 2), made in each renderer in LA, Tokyo and London (6 runs); the other renderer draws the same dates in all three zones; opening and closing its editor stores nothing | pass (all 6) |
 | b2. A no-op Save of all-day events made in Tokyo, from LA, in each renderer | pass: stored start/end unchanged, dates drawn as Tokyo meant |
-| b3. All-day weekly series from Tokyo with a skipped date, in every zone; then a date skipped from LA, read in Tokyo | **expected failure, D2** (classic passes everywhere) |
+| b3. All-day weekly series from Tokyo with a skipped date, drawn in LA, Tokyo and London | classic pass; native **expected failure, D2** (LA and London show the skipped Oct 13) |
+| b3. Native in LA skips another date; stored stamps; classic in Tokyo reads it | pass: existing stamp kept verbatim, new one in stamp form, dates and rule unchanged, classic hides it |
+| b3. Classic in LA skips another date; native in Tokyo reads it | **expected failure, D2** (native in Tokyo shows Oct 20) |
 | c. Classic renames while native moves the time, both editors open; classic saves first | **expected failure, D1**: the title goes back to the old one |
 | c. Native renames while classic moves the time; native saves first | pass (classic's save keeps native's title) |
 | d. Drag an event an hour later in native week view | pass: stored start/end are ISO strings, 90-minute duration kept, other fields unchanged, classic draws it at 12:00 PM |
 
-Not covered yet: two saves on the same event landing within one sync (the server merges whole rows, so the
-later save wins in both renderers); "this and following" across renderers; moving an all-day event by drag.
+Not covered yet: two saves on the same event landing within one sync (untested; from reading
+`CalendarDataService._mergeEvents`, which merges whole rows, the later save would win in either renderer);
+"this and following" across renderers; moving an all-day event by drag.
 
 ## Every audit failure (baseline: 22)
 
