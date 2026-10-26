@@ -210,8 +210,8 @@
             + '<script src="/nativecal/components/NativeCalendar.js?v=1792797113"><\/script>'
             + '<script src="/nativecal/components/EventPopover.js?v=1792797113"><\/script>'
             // Edit links: the editor and the quick box (a view link never edits, so never downloads them).
-            + (window.pcNativeEdit ? '<script src="/nativecal/components/EventEditor.js?v=1792797113"><\/script>'
-                + '<script src="/nativecal/components/QuickCreatePopover.js?v=1792797113"><\/script>' : ''));
+            + (window.pcNativeEdit ? '<script src="/nativecal/components/cardKit.js?v=1792797113"><\/script>'
+                + '<script src="/nativecal/components/EventCard.js?v=1792797113"><\/script>' : ''));
         else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>');
     </script>
     <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
@@ -770,24 +770,21 @@
                     :time-format="globalSettings.timeFormat" :first-day-of-week="globalSettings.firstDayOfWeek" :start-hour="nativeStartHour"
                     :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
                     :month-row-height="nativeRowHeight" open-day-on-click app-look :app-edits="nativeEdit" :draft="nativeDraft"
-                    @event-click="openNativePopover" @range-change="onNativeRange" @event-create="onNativeCreate"
-                    @drag-start="onNativeDragStart" @event-move="onNativeMove" @event-open="onNativeOpen"></native-calendar>
+                    @event-click="onNativeEventClick" @range-change="onNativeRange" @event-create="onNativeCreate"
+                    @drag-start="onNativeDragStart" @event-move="onNativeMoveSaved" @event-open="onNativeOpen"></native-calendar>
                 <div v-else id="Schedule" data-testid="schedule-container"></div>
                 <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
                     :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"
                     :colors="COLORS" :read-only="isReadOnly || !nativeEdit" :text-on="eventTextOn" @close="nativePopover = null"
                     @edit="onNativePopoverEdit" @delete="onNativePopoverDelete"></event-popover>
                 <template v-if="nativeEdit">
-                    <quick-create-popover :visible="!!nativeQuick" :start="nativeQuick && nativeQuick.start" :end="nativeQuick && nativeQuick.end"
-                        :is-all-day="!!(nativeQuick && nativeQuick.isAllDay)" :top="nativeQuick ? nativeQuick.top : 0" :left="nativeQuick ? nativeQuick.left : 0"
-                        :time-format="globalSettings.timeFormat" app-look @title="(t) => { if (nativeQuick) nativeQuick.title = t; }"
-                        @save="saveNativeQuick" @more-details="moreNativeQuick" @close="nativeQuick = null"></quick-create-popover>
-                    <event-editor :visible="!!nativeEditor" :event="nativeEditor && nativeEditor.event" :colors="COLORS" :labels="displayTypeLabels"
-                        :time-format="globalSettings.timeFormat" app-look @save="saveNativeEditor" @delete="onNativeEditorDelete"
-                        @color="onNativeColor" @update:visible="(v) => { if (!v) closeNativeEditor(); }"></event-editor>
+                    <!-- The event card: quick view, grows into every field; saves as you go (app.js nativeCardChange). -->
+                    <event-card v-if="nativeCard" :card="nativeCard" :colors="COLORS" :labels="displayTypeLabels" :time-format="globalSettings.timeFormat"
+                        :first-day-of-week="globalSettings.firstDayOfWeek" :blocked="!!nativeAsk" @change="nativeCardChange" @done="nativeCardDone"
+                        @cancel="nativeCardCancel" @delete="nativeCardDelete" @duplicate="nativeCardDuplicate" @labels="nativeCardLabels"></event-card>
                     <!-- "This event / All events" for a repeating event, and classic's other questions (Yes / No). -->
                     <div v-if="nativeAsk" class="pc-native-ask" @mousedown.self="nativeAnswer(null)">
-                        <div class="pc-native-ask-panel" role="dialog" aria-modal="true" :aria-label="nativeAsk.title" data-testid="confirm-dialog">
+                        <div class="pc-native-ask-panel" role="dialog" aria-modal="true" :aria-label="nativeAsk.title" data-testid="confirm-dialog" @keydown="nativeAskTrap">
                             <h2 class="pc-native-ask-title">{{ nativeAsk.title }}</h2>
                             <p v-if="nativeAsk.message" class="pc-native-ask-text">{{ nativeAsk.message }}</p>
                             <div v-if="nativeAsk.options" class="pc-native-ask-options" role="radiogroup">
