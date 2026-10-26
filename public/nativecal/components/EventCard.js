@@ -908,7 +908,7 @@ const EventCard = (() => {
     </div>
   </template>
   <template v-else-if="picker.kind === 'tz'">
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Search time zones" placeholder="Search: Tokyo, London, Eastern" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Search time zones" placeholder="Search: Tokyo, London, Eastern" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="zoneEnter" @keydown.down.prevent="$refs.zlist && ($refs.zlist.querySelector('.cur') || $refs.zlist.querySelector('button')) && ($refs.zlist.querySelector('.cur') || $refs.zlist.querySelector('button')).focus()">
     <div ref="zlist" class="nk-plist" role="listbox" aria-label="Time zones" @keydown="listKey">
       <button v-for="z in zoneOptions" :key="z.id" type="button" role="option" :class="{ cur: z.cur }" :aria-selected="String(z.cur)" :data-tz="z.id" @click="pickZone(z.id)">{{ z.label }}<small v-if="z.sub">{{ z.sub }}</small></button>
