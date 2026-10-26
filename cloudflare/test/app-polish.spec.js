@@ -13,6 +13,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787). Seeds one calendar.
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./helpers');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 const PHONE = { width: 390, height: 844 };
@@ -29,12 +30,12 @@ async function open(browser, { viewport = DESKTOP, path = '/?backend=cf', platfo
     }, platform);
   }
   await ctx.route(/firebaseio|googletagmanager|google-analytics|clarity|hotjar/, (r) => r.abort());
-  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  await ctx.routeWebSocket(/^(?!.*(localhost|127\.0\.0\.1))/, (ws) => ws.close());
   const page = await ctx.newPage();
   if (path !== '/?backend=cf') await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 
@@ -344,7 +345,9 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.keyboard.type('soccer-fall');
     await expect(input).toHaveValue('soccer-fall');
     // Clicking the name itself does the same (the mouse up must not undo the selection).
-    await page.locator('body').click({ position: { x: 5, y: 600 } });
+    // Click off it at the top corner: (5, 600) landed on a calendar day, whose quick popup opened a moment
+    // later and took the focus mid-typing.
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
     await input.click();
     await page.keyboard.type('soccer-spring');
     await expect(input).toHaveValue('soccer-spring');
@@ -410,6 +413,25 @@ test('search results: upcoming soonest first, then Past, most recent first', asy
   const titles = page.getByTestId('search-results').locator('.pc-search-result-head > span:first-child');
   await expect(titles).toHaveText(['Practice 2', 'Practice 9', 'Practice -7', 'Practice -14']);
   await expect(page.getByTestId('search-past')).toHaveText(/past/i);
+  await ctx.close();
+});
+
+// ---- Search matches an event's details as well as its title, ignoring case ----
+test('search finds words in an event\'s details, not only its title', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  await page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    const d = new Date();
+    const mk = (id, title, description, dd) => { const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + dd, 17); return { id, title, description, start: s.toISOString(), end: new Date(+s + 3600e3).toISOString(), type: 1 }; };
+    vm.calendar.events = [mk('a', 'Practice', 'Bring cleats. Field 3', 1), mk('b', 'Game', 'Away at Lincoln', 2), mk('c', 'Lincoln picnic', '', 3)];
+  });
+  await page.getByTestId('search-button-desktop').click();
+  const box = page.getByRole('searchbox', { name: 'Search events' });
+  const titles = page.getByTestId('search-results').locator('.pc-search-result-head > span:first-child');
+  await box.fill('FIELD 3');
+  await expect(titles).toHaveText(['Practice']);
+  await box.fill('lincoln');
+  await expect(titles).toHaveText(['Game', 'Lincoln picnic']);
   await ctx.close();
 });
 

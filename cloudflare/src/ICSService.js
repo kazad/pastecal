@@ -2,6 +2,8 @@
  * ICSService -- RFC 5545 iCalendar generation for calendar subscriptions.
  * Ported from functions/index.js to run in Cloudflare Workers and Node.js.
  */
+import EventStore from '../../public/services/EventStore.js';
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -218,7 +220,10 @@ export const ICSService = {
             occurrence = slot ? { slot, allDay: shape.allDay } : null;
         }
         const isOccurrence = !!event.recurrenceID && !!occurrence;
-        const rule = event.recurrencerule && !event.recurrenceID ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), !!event.isAllDay)) : null;
+        // A rule too big to expand (a stored legacy one: the server refuses new ones) is published once, unrepeated, as
+        // the calendar shows it (EventStore.unsafeRecurrence): a subscriber's app would freeze on it too.
+        const rule = event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)
+            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), !!event.isAllDay)) : null;
 
         const allDay = !!event.isAllDay;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);

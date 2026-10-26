@@ -11,6 +11,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787); seeds its own calendars.
  */
 const { test, expect } = require('@playwright/test');
+const { settled } = require('./helpers');
 
 const PHONE = { width: 390, height: 844 };
 
@@ -32,7 +33,7 @@ async function open(browser, path) {
   await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 

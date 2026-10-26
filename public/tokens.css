@@ -24,6 +24,7 @@
     --pc-weekend: #fafafb;       /* weekend columns in the grid */
     --pc-line: #e5e7eb;          /* hairlines and card borders */
     --pc-field: #c9ccd2;         /* borders of fields and secondary buttons (the label names the field) */
+    --pc-field-strong: #8a8f98;  /* a field's border that must be seen to be found (the event card's times): 3.2:1 on bg */
     --pc-disabled: #eaeaea;      /* a disabled control's fill */
     /* A page of cards (pricing, sign-in): a soft canvas with white cards in light; in dark the cards
        are the raised step instead, so they never sit darker than the page. */
@@ -129,6 +130,7 @@
     --pc-weekend: #222224;
     --pc-line: #37373a;
     --pc-field: #55575e;
+    --pc-field-strong: #7c7f87;  /* 3.8:1 on surface */
     --pc-disabled: #333336;
     --pc-canvas: var(--pc-bg);
     --pc-raised: var(--pc-surface);

@@ -275,7 +275,9 @@ for (const r of RENDERERS) {
       await r.view(page, 'Week');
       await shot(page, `settings-applied-week-${r.name}`, info);
       const body = await page.locator(r === nat ? '.nc' : '.e-schedule').innerText();
-      expect(body).toMatch(/14:00|18:00|12:00/);
+      // Classic on a phone labels 24-hour rows with the bare hour ("13", "14"), not "13:00".
+      if (r === sf && isPhone(page)) expect(await page.locator('.e-time-cells-wrap').first().innerText()).toMatch(/(^|\n)\s*1[3-9]\s*(\n|$)/);
+      else expect(body).toMatch(/14:00|18:00|12:00/);
       expect(body).not.toMatch(/\bPM\b/);
       const firstHead = r === nat ? await page.locator('.nc-dayhead-name').first().innerText() : await page.locator('.e-header-cells .e-header-day').first().innerText();
       expect(firstHead).toMatch(/Mon|Mo/i);
@@ -294,7 +296,8 @@ for (const r of RENDERERS) {
       await shot(page, `viewonly-${r.name}`, info);
       await r.event(page, 'Lunch with Sam').first().click({ force: true });   // Syncfusion marks read-only events aria-disabled
       await page.waitForTimeout(500);
-      await expect(page.locator('[data-testid="popover-edit"], button.e-edit').locator('visible=true')).toHaveCount(0);
+      // Syncfusion draws its edit/delete icons DISABLED on a read-only calendar; what counts is that none works.
+      await expect(page.locator('[data-testid="popover-edit"], button.e-edit:not([disabled])').locator('visible=true')).toHaveCount(0);
       const before = (await serverEvents(id)).length;
       await page.keyboard.press('ControlOrMeta+e');
       await page.waitForTimeout(500);
@@ -316,7 +319,7 @@ for (const r of RENDERERS) {
       const vid = j.viewId || j.publicViewId || j.id || j.slug;
       const src = r === nat ? `/beta/view/${vid}` : `/view/${vid}`;
       await page.goto('/robots.txt');
-      await page.setContent(`<html><body style="margin:0"><iframe src="http://127.0.0.1:8900${src}" style="width:100%;height:600px;border:0"></iframe></body></html>`);
+      await page.setContent(`<html><body style="margin:0"><iframe src="${f.BASE}${src}" style="width:100%;height:600px;border:0"></iframe></body></html>`);
       const frame = page.frameLocator('iframe');
       await expect(frame.locator('.nc-bar, .e-appointment', { hasText: 'Lunch with Sam' }).first()).toBeVisible({ timeout: 15_000 });
       await shot(page, `embed-${r.name}`, info);
@@ -409,7 +412,7 @@ for (const r of RENDERERS) {
       await shot(page, `dst-week-${r.name}`, info);
       // Compare the event's top with the 10:00 row of the time gutter.
       const evTop = (await ev.boundingBox()).y;
-      const label = r === nat ? page.locator('.nc-hour-label', { hasText: /^(10 AM|10:00|10)$/ }).first() : page.locator('.e-time-cells-wrap .e-time-slots', { hasText: /^(10 AM|10:00)$/ }).first();
+      const label = r === nat ? page.locator('.nc-hour-label', { hasText: /^(10 AM|10:00|10)$/ }).first() : page.locator('.e-time-cells-wrap .e-time-slots', { hasText: /^(10 AM|10:00 AM|10:00)$/ }).first();
       const lb = await label.boundingBox();
       const rowTop = lb.y; // native: the label box is the whole 48px hour row (its text sits at the top)
       info.annotations.push({ type: 'dst-offset-px', description: String(Math.round(evTop - rowTop)) });
@@ -544,6 +547,11 @@ for (const r of RENDERERS) {
     await tap(page, dots.nth(1));
     await page.waitForTimeout(800);
     await shot(page, `filter-off-color2-${r.name}`, info);
-    await expect(r.event(page, 'Team standup')).toHaveCount(0);
+    if (r === sf) {
+      // The main app's chips now SOLO a type (app.js soloColorFilter: "show only this type"); native's
+      // dots still switch one type off (a divergence, docs/native-gaps.md).
+      await expect(r.event(page, 'Team standup').first()).toBeVisible();
+      await expect(r.event(page, 'Lunch with Sam')).toHaveCount(0);
+    } else await expect(r.event(page, 'Team standup')).toHaveCount(0);
   });
 }

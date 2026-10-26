@@ -16,6 +16,9 @@ for (const [name, params, detail] of [['trial_feature_used', { feature: 'stats_p
 // the launch funnel's other two (scripts/ux.sh trials): contact type, nudge action; test traffic never lands
 assert.equal(toDataPoints({ events: [ev('contact_submitted', { type: 'report' })] })[0].blobs[5], 'report');
 assert.equal(toDataPoints({ events: [ev('subscribe_nudge', { action: 'shown' })] })[0].blobs[5], 'shown');
+// the new calendar opt-in keeps both values: what was done and where
+assert.equal(toDataPoints({ events: [ev('new_ui', { action: 'opt_in', source: 'footer' })] })[0].blobs[5], 'opt_in_footer');
+assert.equal(toDataPoints({ events: [ev('new_ui', { action: 'feedback_sent', source: 'pill' })] })[0].blobs[5], 'feedback_sent_pill');
 assert.equal(toDataPoints({ events: [ev('trial_reminder_clicked', {})] })[0].blobs[0], 'trial_reminder_clicked');
 assert.equal(toDataPoints({ events: [ev('trial_started', { trial_surface: 'lock', surface: 'test' })] }).length, 0, 'surface=test is dropped');
 // pro_beta_joined keeps where it was joined (beta_surface) in detail; an earlier detail key still wins

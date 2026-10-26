@@ -25,9 +25,13 @@ export const MAX_FILL_MS = 24 * 3600 * 1000;
 // calendar path ("<id>" or "view/<id>"), or null for anything else.
 export function calendarPath(link) {
     const s = String(link || '').trim().replace(/[?#].*$/, '').replace(/\/+$/, '');
-    const m = s.match(/^(?:https?:\/\/)?(?:www\.)?pastecal\.com\/(view\/)?([A-Za-z0-9_-]{1,100})$/i);
+    const m = s.match(/^(?:https?:\/\/)?(?:www\.)?pastecal\.com\/(view\/)?([^\/\s]{1,600})$/i);
     if (!m) return null;
-    if (!m[1] && RESERVED_CALENDAR_NAMES.has(m[2].toLowerCase())) return null;
+    // Any name a calendar can have ("sign-up!x", "TEAM%20NU%C3%91EZ"), as typed or percent-encoded.
+    let name;
+    try { name = decodeURIComponent(m[2]); } catch { return null; }
+    if (name.length > 200 || /[.#$\[\]\/\u0000-\u001f\u007f]/.test(name)) return null;
+    if (!m[1] && RESERVED_CALENDAR_NAMES.has(name.toLowerCase())) return null;
     return (m[1] ? 'view/' : '') + m[2];
 }
 

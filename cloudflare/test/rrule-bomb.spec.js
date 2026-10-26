@@ -134,3 +134,34 @@ test('native: a stored FREQ=SECONDLY event loads within 3 s, shows once, and can
   await expect.poll(async () => (await stored(request, id)).map((e) => e.id).sort(), { timeout: 10_000 }).toEqual(['c', 'd']);
   await ctx.close();
 });
+
+test('native edit link: a stored FREQ=SECONDLY event shows once, and the event card deletes it as one event', async ({ browser, request }) => {
+  const id = await seedLegacy(request, 'FREQ=SECONDLY');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
+  const page = await ctx.newPage();
+  await page.goto(`/${id}?backend=cf&cal=native&view=month`);
+  const bomb = page.locator('.nc-bar, .nc-timed').filter({ hasText: 'Bomb' });
+  await expect(bomb).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator('.nc-bar, .nc-timed').filter({ hasText: 'Choir' })).toHaveCount(4);
+  // No "this event / all events": it is drawn once, so a change is a change to the one event. A rename is refused by
+  // the server (it checks every row a save touches; a legacy bomb is kept only until it is changed), so it stays.
+  await bomb.click();
+  await expect(page.getByTestId('event-card')).toBeVisible();
+  await page.waitForTimeout(250);
+  await page.getByTestId('card-title').fill('Bomb renamed');
+  await page.getByTestId('card-title').press('Enter');
+  await expect(page.getByTestId('scope-all')).toHaveCount(0);
+  await page.waitForTimeout(1500);
+  expect((await stored(request, id)).find((e) => e.id === 'bomb')).toMatchObject({ title: 'Bomb', recurrencerule: 'FREQ=SECONDLY' });
+  // Deleted as the one event.
+  if (await page.getByTestId('event-card').count() === 0) {
+    await page.locator('.nc-bar, .nc-timed').filter({ hasText: 'Bomb' }).click();
+    await expect(page.getByTestId('event-card')).toBeVisible();
+    await page.waitForTimeout(250);
+  }
+  await page.getByTestId('card-delete').click();
+  await expect(page.getByTestId('scope-all')).toHaveCount(0);
+  await expect.poll(async () => (await stored(request, id)).map((e) => e.id).sort(), { timeout: 10_000 }).toEqual(['c', 'd']);
+  await ctx.close();
+});

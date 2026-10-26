@@ -14,9 +14,22 @@ const EventPopover = {
         timeFormat: { type: String, default: '12' },
         colors: { type: Array, default: () => [] },
         readOnly: { type: Boolean, default: false },
+        // The main app: the header's text dark or white by contrast with the event color (app.js eventTextOn).
+        textOn: { type: Function, default: null },
     },
-    emits: ['close', 'edit', 'delete'],
-    data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2() }; },
+    // 'resize': its height changed (Show all), so the app can keep it on screen.
+    emits: ['close', 'edit', 'delete', 'resize'],
+    data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2(), showAll: false, clamped: false }; },
+    watch: {
+        // Each event opens with its details clamped to four lines (the event card's quick view reads the same way).
+        event() { this.showAll = false; this.$nextTick(() => this.measure()); },
+        visible(v) { if (v) { this.showAll = false; this.$nextTick(() => this.measure()); } },
+    },
+    mounted() { this.$nextTick(() => this.measure()); },
+    methods: {
+        measure() { const d = this.$refs.desc; this.clamped = !!d && !this.showAll && d.scrollHeight > d.clientHeight + 2; },
+        toggleAll() { this.showAll = !this.showAll; this.$nextTick(() => { this.measure(); this.$emit('resize'); }); },
+    },
     computed: {
         headerColor() {
             const p = this.colors.length ? this.colors : ['#3f51b5'];
@@ -29,11 +42,12 @@ const EventPopover = {
             const fmtD = (d) => `${M[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
             const pad = (n) => String(n).padStart(2, '0');
             const fmtT = (d) => this.timeFormat === '24' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
-                : `${this.v2 ? (d.getHours() % 12 || 12) : pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+                : `${this.v2 || this.textOn ? (d.getHours() % 12 || 12) : pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;   // the main app (textOn): "5:30 PM"
             if (e.isAllDay) {
                 const day = (v) => { const r = new Date(new Date(v).getTime() + 43200000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
                 s = this.occurrence ? new Date(this.occurrence.start) : day(e.start);
-                const last = new Date((this.occurrence ? new Date(this.occurrence.end) : day(e.end)).getTime() - 86400000);
+                // The day before the exclusive end, by the calendar (a spring-forward Sunday is 23 hours long).
+                const last = new Date(this.occurrence ? new Date(this.occurrence.end) : day(e.end)); last.setDate(last.getDate() - 1);
                 return last > s ? `${fmtD(s)} - ${fmtD(last)} (All day)` : `${fmtD(s)} (All day)`;
             }
             const sameDay = s.toDateString() === en.toDateString();
@@ -67,7 +81,7 @@ const EventPopover = {
     <div class="np2-titlerow"><span class="np2-swatch" data-testid="popover-swatch" :style="{ background: headerColor }"></span>
       <div class="np2-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div></div>
   </template>
-  <div v-else class="np-head" :style="{ background: headerColor }" data-testid="popover-header">
+  <div v-else class="np-head" :style="{ background: headerColor, color: textOn ? textOn(headerColor) : null }" data-testid="popover-header">
     <div class="np-icons">
       <button v-if="!readOnly" class="np-icon" title="Edit" aria-label="Edit" data-testid="popover-edit" @click="$emit('edit', event)">
         <nc-icon name="pencil" :size="16"></nc-icon></button>
@@ -79,9 +93,11 @@ const EventPopover = {
     <div class="np-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div>
   </div>
   <div class="np-body">
-    <div class="np-line"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
+    <!-- The date line opens the editor, as the pencil does (people click it to change the time; classic does the same). -->
+    <div class="np-line" :class="{ 'np-when-edit': !readOnly }" data-testid="popover-when" :title="readOnly ? null : 'Change date or time'" @click="!readOnly && $emit('edit', event)"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
     <div v-if="event.description" class="np-line"><nc-icon class="np-glyph" name="text-align-start"></nc-icon>
-      <span class="np-desc" data-testid="popover-description" v-html="linkified"></span></div>
+      <span class="np-descwrap"><span ref="desc" class="np-desc" :class="{ all: showAll, fade: clamped }" data-testid="popover-description" v-html="linkified"></span>
+        <button v-if="clamped || showAll" type="button" class="np-showall" data-testid="popover-show-all" @click="toggleAll">{{ showAll ? 'Show less' : 'Show all' }}</button></span></div>
   </div>
 </div>`,
 };

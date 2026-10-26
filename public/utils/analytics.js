@@ -222,7 +222,8 @@ const Analytics = {
         const base = { surface: window.__TEST__ ? 'test' : 'web' };
         // The native renderer (/beta, /nativecal) is on trial against Syncfusion: tag every
         // event so its error rate and usage can be segmented.
-        if (/^\/(beta|nativecal)(\/|$)/.test(window.location.pathname)) base.renderer = 'native';
+        // A view link drawn by it inside the main app (index.html window.pcNativeCal) counts as native too.
+        if (/^\/(beta|nativecal)(\/|$)/.test(window.location.pathname) || window.pcNativeCal) base.renderer = 'native';
         if (this._hv) base.hv = this._hv;
         return base;
     },
@@ -510,6 +511,21 @@ const Analytics = {
     trialConverted(interval) { this.track('trial_converted', { interval: interval === 'month' ? 'month' : 'year' }); },
     trialLapsed(mode) { this.track('trial_lapsed', { mode: mode === 'open' ? 'open' : 'readonly' }); },
     trialReminderClicked() { this.track('trial_reminder_clicked', {}); },
+
+    // "Try the new calendar (beta)": opting in or out, opening and sending feedback (app.js setCalPref,
+    // sendCalFeedback). `now` before a reload: straight to the sinks and out by beacon, since track()
+    // defers to an idle callback the reload would cancel.
+    newUi(action, source, now) {
+        if (!['opt_in', 'opt_out', 'feedback_open', 'feedback_sent'].includes(action)) return;
+        const params = { action, source: source === 'pill' ? 'pill' : 'footer' };
+        if (!now) return this.track('new_ui', params);
+        try {
+            if (!this.enabled) return;
+            const enriched = Object.assign({}, this.baseParams(), params);
+            for (const key of this.active) { try { this.SINKS[key]('new_ui', enriched); } catch (e) { /* sinks must not throw */ } }
+            this.flush(true);
+        } catch (e) { /* never block the switch */ }
+    },
 
     featureUsed(feature, detail) {
         this.track('feature_used', {

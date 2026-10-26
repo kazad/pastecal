@@ -82,7 +82,7 @@ test('fix2: event_added (grid, quick_add) and editor_abandoned fire from native,
   await tap(page, page.locator('button[type=submit]:has-text("Create")'));
   await soon(async () => !!(await byTitle(id, 'Brunch'))).toBe(true);
   const t = await tracked(page);
-  const names = t.filter((x) => ['event_added', 'editor_abandoned'].includes(x.name)).map((x) => `${x.name}${x.source ? ':' + x.source : ''}`);
+  const names = t.filter((x) => ['event_added', 'editor_abandoned'].includes(x.name)).map((x) => `${x.name}${(x.add_via || x.source) ? ':' + (x.add_via || x.source) : ''}`);   // add_via since f601004 (GA4 reads 'source' as traffic source)
   expect(names).toEqual(['event_added:grid', 'editor_abandoned', 'event_added:grid', 'event_added:quick_add']);
   expect(t.every((x) => x.renderer === 'native')).toBe(true);
 });

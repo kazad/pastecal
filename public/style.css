@@ -777,6 +777,26 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-hosted-note { margin: 12px 4px 4px; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); text-align: center }
 .pc-hosted-note a { color: var(--pc-text-muted); text-decoration: underline }
 .pc-hosted-note a:hover { color: var(--pc-link) }
+/* "Try the new calendar (beta)" (app.js CalSwitch): one more quiet item in whichever footer line is showing.
+   On the new calendar it is a small pill, inside the line too, so it never covers events or a toast. */
+.pc-edit-footer:has(.pc-cal-pill) { align-items: center }
+.pc-cal-try.pc-link { color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font); white-space: nowrap }
+.pc-view-footer .pc-cal-try, .pc-hosted-note .pc-cal-try, .pc-view-footer .pc-cal-pill, .pc-hosted-note .pc-cal-pill { margin-left: var(--pc-space-3) }
+.pc-hosted-note .pc-cal-try.pc-link { font-size: inherit; text-decoration: underline }
+.pc-cal-try.pc-link:hover { color: var(--pc-text) }
+.pc-cal-pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 2px 1px 10px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill);
+    background: var(--pc-soft); color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-xs)/1.6 var(--pc-font); white-space: nowrap; vertical-align: 1px }
+.pc-cal-pill-name { color: var(--pc-text-2); font-weight: var(--pc-fw-semibold) }
+.pc-cal-pill .pc-link { font-size: inherit }
+.pc-cal-pill .pc-cal-pill-x { width: 22px; height: 22px; min-height: 0; border-radius: 50%; color: var(--pc-text-muted); font-size: var(--pc-fs-md); line-height: 1 }
+.pc-cal-feedback { display: flex; flex-direction: column; gap: var(--pc-space-2) }
+.pc-cal-feedback .pc-section-title { margin-bottom: var(--pc-space-2) }
+.pc-cal-feedback-label { margin-top: var(--pc-space-2); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); color: var(--pc-text) }
+.pc-cal-feedback textarea { resize: vertical; min-height: 6rem }
+.pc-cal-feedback-note { margin: var(--pc-space-1) 0 0; font-size: var(--pc-fs-xs); line-height: var(--pc-lh-body); color: var(--pc-text-muted) }
+.pc-cal-feedback-error { margin: 0; font-size: var(--pc-fs-sm); color: var(--pc-danger) }
+.pc-cal-feedback-actions { display: flex; justify-content: flex-end; gap: var(--pc-space-2); margin-top: var(--pc-space-3) }
+.pc-cal-feedback-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0 }
 .pc-embed-credit { position: fixed; right: 6px; bottom: 4px; z-index: 5; padding: 1px 6px; border-radius: var(--pc-radius-xs);
   background: color-mix(in srgb, var(--pc-bg) 85%, transparent); font-size: var(--pc-fs-2xs); color: var(--pc-text-muted) }
 .pc-embed-credit:hover { color: var(--pc-link) }

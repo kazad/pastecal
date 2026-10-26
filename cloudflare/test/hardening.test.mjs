@@ -231,5 +231,22 @@ function tab(id) {
     step('a view link cannot create, change or reveal the calendar behind it (POST/PUT/PATCH/DELETE refused, even on an empty room)');
 }
 
+// Issue #51 (Oct 26 2026): a calendar named with any character a name may hold ("sign-up!x", a space, "&", Korean)
+// gets a read-only link, and the link shows its events. The directory used to accept only [A-Za-z0-9_-].
+{
+    const ip = '10.71.0.51', h = { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip };
+    for (const name of [`board-sign-up${Date.now()}!x`, `team nuñez ${Date.now()}`, `d&d ${Date.now()}`, `강아지봉사${Date.now()}`]) {
+        assert.equal((await fetch(url(name), { method: 'POST', headers: h, body: JSON.stringify({ title: 'T', events: [ev('e1', 'Bake sale')] }) })).status, 201, name);
+        const r = await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: h, body: JSON.stringify({ sourceCalendarId: name }) });
+        const out = await r.json();
+        assert.equal(r.status, 200, `${name}: ${JSON.stringify(out)}`);
+        assert.equal((await get(name)).options.publicViewId, out.publicViewId, `${name}: the calendar records its view id`);
+        const view = await (await fetch(`${BASE}/cal/view/${encodeURIComponent(out.publicViewId)}`)).json();
+        assert.ok(JSON.stringify(view).includes('Bake sale'), `${name}: the view link shows the events`);
+        assert.ok(!JSON.stringify(view).includes(name), `${name}: and never the edit name`);
+    }
+    step('a calendar named with !, a space, & or Korean gets a read-only link that shows its events');
+}
+
 console.log('hardening tests passed');
 process.exit(0);

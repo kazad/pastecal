@@ -16,11 +16,14 @@
  * The waitlist rows are read back through the admin export (Bearer IMPORT_SECRET, default dev-secret).
  */
 const { test, expect } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
 const DONE = 'You’re on the list. We’ll email you when your trial is ready.';
 const run = Date.now().toString(36);
+// In order in one worker, as written (it is run against one server per mode, with its fake services).
+test.describe.configure({ mode: 'default' });
 
 let shared;
 async function seed(request) {
@@ -47,7 +50,7 @@ async function open(browser, path) {
     };
     document.addEventListener('DOMContentLoaded', hook);
   });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   if (path.startsWith('/pricing')) { await page.goto(path); return { ctx, page }; }
   await page.goto('/?backend=cf');

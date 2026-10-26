@@ -11,15 +11,18 @@
  * one view link (the Worker allows 10 creates a minute per IP, so the tests share them).
  */
 const { test, expect } = require('@playwright/test');
+const { settled, NOT_LOCAL } = require('./helpers');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 // Nothing leaves this machine but fonts and the pinned script CDNs.
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
 const NOTES = 'Home field: Riverside Park, Field 3\nRainouts decided by 7am on game day.';
 
+// One calendar per worker for the tests that only read it; a test that writes asks for its own (fresh),
+// since tests of a file run in any order across workers.
 let shared;
-async function seed(request) {
-  if (shared) return shared;
+async function seed(request, fresh = false) {
+  if (shared && !fresh) return shared;
   const id = `test-side-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   const at = (day, h) => { const d = new Date(); d.setDate(day); d.setHours(h, 0, 0, 0); return d.toISOString(); };
   const events = [
@@ -29,18 +32,20 @@ async function seed(request) {
   expect((await request.post(`/cal/${id}`, { data: { title: 'Side panel test', options: { notes: NOTES }, events } })).status()).toBe(201);
   const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
   expect(view.ok).toBe(true);
-  return (shared = { id, viewId: view.publicViewId });
+  const made = { id, viewId: view.publicViewId };
+  if (!fresh) shared = made;
+  return made;
 }
 
 async function open(browser, path, viewport = { width: 1440, height: 900 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 600 });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.goto(path);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   return { ctx, page };
 }
 
@@ -103,7 +108,7 @@ test('editor: every header button and every tab opens the panel beside the calen
 });
 
 test('a setting changed in the panel still applies at once', async ({ browser, request }) => {
-  const { id } = await seed(request);
+  const { id } = await seed(request, true);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
   // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
@@ -166,7 +171,7 @@ test('view link: notes are pinned beside the calendar, and hiding them sticks', 
   await expect(panel(page)).toHaveCount(0);
   await page.reload();
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  await page.waitForTimeout(800);
+  await settled(page);
   await expect(panel(page)).toHaveCount(0);
   await page.locator('.pc-hdr-actions').getByRole('button', { name: 'Toggle notes' }).click();
   await expect(page.getByTestId('side-title')).toHaveText('About this calendar');
@@ -253,11 +258,11 @@ test('Stats when the calendar is not counted yet: no number tiles, no "0", one m
 test('draft: Share, Activity and Stats say what they will hold, with one Save & share button', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
-  await page.waitForTimeout(600);
+  await settled(page);
   await page.getByTestId('settings-button-desktop').click();
   expect(await tabIds(page)).toEqual(TABS);
   for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Numbers start once you share'], ['plus', 'plus-draft', 'Save it first']]) {
@@ -289,9 +294,9 @@ test('notes: read, Edit, type, Done, and it is saved for everyone', async ({ bro
   await ctx.close();
 });
 
-// Last: it changes the shared calendar.
+// It changes the calendar, so it has its own.
 test('Changes in the panel still undoes an edit', async ({ browser, request }) => {
-  const { id } = await seed(request);
+  const { id } = await seed(request, true);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const dialog = page.locator('.e-dialog.e-schedule-dialog');
   await page.locator('.e-appointment:has-text("Game vs Hawks")').first().dblclick();

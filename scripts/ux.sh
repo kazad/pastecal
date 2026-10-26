@@ -123,6 +123,12 @@ run "Trust: refused saves and errors by UI and detail" \
 "SELECT blob1 AS event, blob2 AS ui, blob6 AS detail, SUM(_sample_interval) AS n
 FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
 
+# "Try the new calendar (beta)" (app.js setCalPref / sendCalFeedback): detail is <action>_<source>,
+# e.g. opt_in_footer, opt_out_pill, feedback_open_pill, feedback_sent_pill (Collector.js).
+run "New calendar (beta): opt-ins, opt-outs and feedback, by action and where" \
+"SELECT blob6 AS action_source, SUM(_sample_interval) AS n
+FROM $DS WHERE blob1 = 'new_ui' AND $D GROUP BY action_source ORDER BY n DESC"
+
 run "Volume: all events by UI" \
 "SELECT blob1 AS event, blob2 AS ui, SUM(_sample_interval) AS n
 FROM $DS WHERE $D GROUP BY event, ui ORDER BY n DESC LIMIT 30"

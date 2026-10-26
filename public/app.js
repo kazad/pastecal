@@ -138,6 +138,28 @@ const AddToCalendar = {
 };
 
 // ============================================================
+// "Try the new calendar (beta)": a quiet item in the line under the calendar (edit links and view links, never
+// embeds or the homepage). On the classic calendar it opts this browser in; on the new one it is a small pill
+// with Send feedback and Back to classic, hidden for the rest of the session by its x. It lives inside the
+// footer line, not floating over the page, so it can never cover events, the filter banner or a toast, and the
+// month grid's fit-to-window math (fitMonthRows) already counts its height. The app does the switching.
+// ============================================================
+const CalSwitch = {
+    props: { native: Boolean },
+    emits: ['switch', 'feedback', 'hide'],
+    template: `
+        <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Try the new calendar (beta)</button>
+        <span v-else class="pc-cal-pill" role="group" aria-label="New calendar (beta)" data-testid="new-cal-pill">
+            <span class="pc-cal-pill-name">New calendar (beta)</span>
+            <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
+            <button type="button" class="pc-link" data-testid="new-cal-feedback" @click="$emit('feedback')">Send feedback</button>
+            <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
+            <button type="button" class="pc-link" data-testid="back-to-classic" @click="$emit('switch', 'classic')">Back to classic</button>
+            <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-cal-pill-x" aria-label="Hide until next visit" title="Hide until next visit" data-testid="new-cal-pill-hide" @click="$emit('hide')">&times;</button>
+        </span>`,
+};
+
+// ============================================================
 // COMPONENT REGISTRY
 // ============================================================
 // IMPORTANT: All components used in templates must be registered here!
@@ -163,11 +185,47 @@ const COMPONENT_REGISTRY = {
     'close-icon': CloseIcon,                   // Close icon SVG
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
+    'cal-switch': CalSwitch,                   // Footer: "Try the new calendar (beta)" / the beta pill
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
     'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
-    'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
+    'pro-history': ProHistory,                 // Pro owner: saved versions, preview, restore
+    // pastecal's own calendar and its event popup: loaded only on a native page (index.html, window.pcNativeCal);
+    // its editor and quick box only on a native edit link (window.pcNativeEdit).
+    ...(typeof NativeCalendar !== 'undefined' ? { 'native-calendar': NativeCalendar, 'event-popover': EventPopover } : {}),
+    ...(typeof EventCard !== 'undefined' ? { 'event-card': EventCard } : {}),
 };
+
+// A native view link's ?view= / ?date= (the classic calendar reads the same ones in mountSyncfusion):
+// { view: 'Day' | 'Week' | 'Month' | 'Custom' | 'Year' | 'Agenda' | null, date: Date | null, dur, unit }.
+function nativeLinkView() {
+    const out = { view: null, date: null, dur: null, unit: null };
+    try {
+        const q = new URL(Utils.sanitizeUrl(window.location.href.toLowerCase())).searchParams;
+        out.date = Utils.parseDate(q.get('d') || q.get('date'));
+        const v = (q.get('v') || q.get('view') || '').toLowerCase();
+        const views = { d: 'Day', day: 'Day', w: 'Week', week: 'Week', m: 'Month', month: 'Month', y: 'Year', year: 'Year', a: 'Agenda', agenda: 'Agenda' };
+        if (views[v]) out.view = views[v];
+        else if (v === '12w' || v === '12weeks') Object.assign(out, { view: 'Custom', dur: 12, unit: 'Weeks' });
+        else if (v === 'q' || v === 'quarter') Object.assign(out, { view: 'Custom', dur: 3, unit: 'Months' });
+        else if (v === 'c' || v === 'custom') {
+            out.view = 'Custom';
+            const dur = parseInt(q.get('dur') || q.get('duration'), 10), unit = /^week/.test(q.get('unit') || '') ? 'Weeks' : /^month/.test(q.get('unit') || '') ? 'Months' : null;
+            if (dur >= 1 && unit && dur <= (unit === 'Weeks' ? 52 : 24)) Object.assign(out, { dur, unit });
+        }
+    } catch (e) { /* a bad link opens the default view */ }
+    return out;
+}
+
+// ---- Helpers for editing on the native calendar (app.nativeAction and friends) ----------------------------------
+// The temporary Id of "this event" on a repeating series: classic's EditOccurrence record, which the store turns
+// into a new row (ScheduleAdapter.toCommand adds it only when no row has this Id).
+const NATIVE_OCCURRENCE_ID = '__native_occurrence__';
+const isBlankId = (v) => v === undefined || v === null || v === '';
+// Classic's question (Syncfusion's seriesChangeAlert) before a change to a whole series with skipped or edited dates.
+const NATIVE_SERIES_CHANGE = 'Do you want to cancel the changes made to specific instances of this series and match it to the whole series again?';
+// Dates of an edit on the native calendar, in the shapes classic's records carry (services/CalendarView.js).
+const { endOf: nativeEnd, shiftBy: nativeShift, shiftRule: nativeShiftRule } = CalendarView.edits;
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
 const stripBase = (path) => {
@@ -236,6 +294,11 @@ const CalendarVueApp = {
             lock: { locked: false, pro: false, paused: false, canEdit: true, proSettings: null },
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
+            // "Try the new calendar (beta)" (CalSwitch): which calendar draws this page (index.html decided), the
+            // pill hidden for this session, and the feedback dialog ({ text, email, ... } while open).
+            nativeCal: !!window.pcNativeCal,
+            calPillHidden: (() => { try { return sessionStorage.getItem('pc_cal_pill_hidden') === '1'; } catch (e) { return false; } })(),
+            calFeedback: null,
             proTrialUsed: false,
             proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
             proUnlimitedBusy: false,
@@ -251,6 +314,18 @@ const CalendarVueApp = {
             lockedOut: false,
             lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
             viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
+            // pastecal's own calendar draws this page instead of Syncfusion's (a view link with the flag on: index.html).
+            nativeCal: !!window.pcNativeCal,
+            nativeLink: window.pcNativeCal ? nativeLinkView() : null,
+            nativePopover: null,      // the event popup on the native calendar: { event, occurrence, top, left }
+            nativeRowHeight: 100,     // its month rows, taller on a wide window (fitNativeMonthRows)
+            // A native edit link (index.html, window.pcNativeEdit): the quick box, the editor and the "this event /
+            // all events" question. Each is null when closed.
+            nativeEdit: !!window.pcNativeEdit,
+            nativeQuick: null,        // { start, end, isAllDay, title, top, left }: the new event in the quick box
+            nativeEditor: null,       // { event (what the form shows, frozen at open), mode, series, occurrence }
+            nativeAsk: null,          // { title, message, options: [{ label, testid, action }], choice, ok, buttons }
+            nativeCard: null,         // the event card (nativecal/components/EventCard.js): see openNativeCard
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -394,6 +469,23 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
+        // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
+        nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
+        // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
+        nativeDraft() {
+            const c = this.nativeCard;
+            if (!c || !c.isNew) return null;
+            const v = c.value, end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : v.end;
+            return { start: new Date(v.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
+        },
+        nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
+        nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
+        nativeCustomUnit() { return this.nativeLink.unit || this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months'; },
+        nativeStartHour() { return this.calendar?.options?.extended ? '00:00' : (this.globalSettings.startHour || '05:00'); },
+        // The color filter, as the color slots it hides (the same isEventVisible rule: filterSlotFor).
+        hiddenColorSlots() { return this.COLORS.map((_, i) => i).filter(i => this.colorFilters[i] === false); },
         // "Week of Oct 18": what Share's "This view" link opens, read back from its own URL.
         viewLinkTag() {
             try {
@@ -737,6 +829,13 @@ const CalendarVueApp = {
             if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
             return this.isExisting ? 'editor' : '';
         },
+        // The footer's "Try the new calendar (beta)" link or, on the new calendar, its pill (CalSwitch). Edit links
+        // and view links (locked and Pro ones too); never an embed, the homepage (classic only for now) or a pill
+        // hidden for this session.
+        showCalSwitch() {
+            if (this.embedded || this.isHomepageCalendar || this.lock.pro || !['viewer', 'editor'].includes(this.pageFooter)) return false;   // never on Pro calendars (owner's call)
+            return !(this.nativeCal && this.calPillHidden);
+        },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
         // reports its view code and never reveals the edit name behind it.
         reportUrl() {
@@ -1000,781 +1099,10 @@ const CalendarVueApp = {
             track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
-        // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
-        // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
-        ej.base.L10n.load({
-            'en-US': {
-                schedule: {
-                    newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
-                    deleteTitle: 'Delete event', editTitle: 'Edit event',
-                    deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
-                    editSeries: 'Entire series', deleteSeries: 'Entire series',
-                    editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
-                    editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
-                    endTimezone: 'End timezone', searchTimezone: 'Search timezone',
-                    beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
-                },
-                recurrenceeditor: { on: 'Repeat on' },
-            },
-        });
-        const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
-        const scheduleInitTimestamp = performance.now();
-        console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
-        scheduleObj.on('actionComplete', (args) => {
-            if (args?.requestType === 'toolBarRendered') {
-                console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-            }
-        });
-        scheduleObj.addEventListener('dataBound', () => {
-            console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-        scheduleObj.on('eventsLoaded', () => {
-            console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-
-        // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
-        // first render and won't reactively update if set later. (See applyGlobalSettings
-        // for the post-render path used when settings change at runtime.)
-        scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
-        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
-        scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
-        // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
-        // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
-        // the format live, so a settings change applies on the next render.
-        if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
-            const vm = this;
-            window.pcHourLabel = (date) => {
-                const h = date.getHours();
-                if (vm.globalSettings.timeFormat === '24') return String(h);
-                return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
-            };
-            scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
-        }
-
-        // Build custom view configuration dynamically
-        const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
-        const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
-        const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
-
-        scheduleObj.views = [
-            'Day',
-            'Week',
-            'Month',
-            customViewConfig,
-            'Year',
-            'Agenda'
-        ];
-        scheduleObj.enableAdaptiveUI = false;
-
-        scheduleObj.readonly = this.isReadOnly;
-
-
-        // Set up scheduler first, then apply settings after initialization
-        // set params from URL
-        let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
-        let url = new URL(sanitizedUrl);
-        let date_param = url.searchParams.get("d") || url.searchParams.get("date");
-        let view_param = url.searchParams.get("v") || url.searchParams.get("view");
-
-        let d;
-        if (d = Utils.parseDate(date_param)) {
-            scheduleObj.selectedDate = d;
-        }
-
-        if (view_param) {
-            switch (view_param.toLowerCase()) {
-                case "d":
-                case "day":
-                    scheduleObj.currentView = "Day"; break;
-                case "w":
-                case "week":
-                    scheduleObj.currentView = "Week"; break;
-                case "12w":
-                case "12weeks":
-                    // Map to custom 12 weeks view
-                    const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
-                    const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (twelveWeeksIndex !== -1) {
-                        scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
-                    }
-                    scheduleObj.currentView = twelveWeeksView.displayName;
-                    break;
-                case "m":
-                case "month":
-                    scheduleObj.currentView = "Month"; break;
-                case "c":
-                case "custom":
-                    // Check for URL parameter overrides for custom view
-                    const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
-                    const unitParam = url.searchParams.get("unit");
-
-                    let customViewToUse = customViewConfig;
-
-                    if (durParam && unitParam) {
-                        // Temporarily override custom view config from URL
-                        const duration = parseInt(durParam);
-                        const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
-
-                        if (this.validateCustomView(duration, unit)) {
-                            // Rebuild the custom view with URL parameters
-                            customViewToUse = this.buildCustomViewConfig(duration, unit);
-                            // Replace the custom view in the views array
-                            const customViewIndex = scheduleObj.views.findIndex(v =>
-                                typeof v === 'object' && (v === customViewConfig)
-                            );
-                            if (customViewIndex !== -1) {
-                                scheduleObj.views[customViewIndex] = customViewToUse;
-                            }
-                        }
-                    }
-
-                    // Set currentView to the display name
-                    scheduleObj.currentView = customViewToUse.displayName;
-                    break;
-                case "q":
-                case "quarter":
-                    // Map to custom 3 months view
-                    const quarterView = this.buildCustomViewConfig(3, 'Months');
-                    const quarterIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (quarterIndex !== -1) {
-                        scheduleObj.views[quarterIndex] = quarterView;
-                    }
-                    scheduleObj.currentView = quarterView.displayName;
-                    break;
-                case "y":
-                case "year":
-                    scheduleObj.currentView = "Year"; break;
-                case "a":
-                case "agenda":
-                    scheduleObj.currentView = "Agenda"; break;
-                default:
-                    break;
-            }
-        }
-
-        // disable drag and drop / resizing for touch devices
-        let touchDevice = ('ontouchstart' in document.documentElement);
-        scheduleObj.allowDragAndDrop = !touchDevice;
-        scheduleObj.allowResizing = !touchDevice;
-
-        // live binding to events
-        scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
-
-        // Syncfusion is a VIEW. When the user adds, changes or removes an event on the grid,
-        // Syncfusion's own change is cancelled here and the user's intent goes to the
-        // EventStore as a command; the grid is then redrawn from the store (the calendar
-        // watcher calls updateCalendarView). Syncfusion never edits our data itself, so its
-        // internal records -- their id kinds, escaped text, stale fields -- never become it.
-        scheduleObj.actionBegin = (args) => {
-            if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
-            args.cancel = true;
-            this.editorSaved = true;
-            this.applyScheduleAction(args);
-        };
-        // An editor that closes without a save is the "this was confusing or fiddly" signal.
-        scheduleObj.popupClose = (args) => {
-            this.hideDraftBlock();
-            if (args.type !== 'Editor') return;
-            if (!this.editorSaved) track(a => a.editorAbandoned());
-            this.editorSaved = false;
-        };
-        // The user's change is measured from the event as it was when they started (see
-        // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
-        scheduleObj.dragStart = (args) => ScheduleAdapter.noteStart(args.data);
-        scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
-
-        // color events based on type
-        // Month view day names ("Monday") get a short form ("Mon") that phones show instead
-        // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
-        scheduleObj.renderCell = (args) => {
-            // Week/Day: the corner above the time column toggles the hours before the
-            // start hour (calendar.options.extended; click handler below). It used to say
-            // "12-4 AM" whatever the start hour was, and the same when they were showing.
-            if (args.elementType === 'emptyCells' && args.element
-                && args.element.classList.contains('e-header-cells')) {
-                const label = this.earlyHoursLabel();
-                args.element.setAttribute('data-pc-label', label.text);
-                if (label.title) args.element.title = label.title;
-                return;
-            }
-            if (args.elementType !== 'monthDay' || !args.element) return;
-            const label = args.element.querySelector('span') || args.element;
-            const full = (label.textContent || '').trim();
-            if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
-        };
-
-        scheduleObj.eventRendered = (args) => {
-            // change color as needed
-            categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
-            if (scheduleObj.currentView === 'Agenda') {
-                args.element.firstChild.style.borderLeftColor = categoryColor;
-            } else {
-                args.element.style.backgroundColor = categoryColor;
-                // Its text: dark on light colors, white on dark (style.css reads the variable).
-                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
-            }
-            ScheduleAdapter.showTitle(args.element, args.data);
-        }
-
-        // custom display for types
-        scheduleObj.popupOpen = (args) => {
-            // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
-            // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
-            // series, several selected) runs unchanged. The "this event or the series?" choice stays.
-            if (args.type === 'DeleteAlert') {
-                document.body.classList.add('pc-skip-confirm');
-                requestAnimationFrame(() => {
-                    const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
-                    if (del) del.click();
-                    setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
-                });
-                return;
-            }
-            if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
-            // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
-            // label follows the title being typed (as Google Calendar does), so you see where it will land.
-            if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
-            // The popup header takes the event's color; its title and icons take the matching text color.
-            if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
-                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
-            }
-            // The date line opens the editor (click handler by appendTo below); say so on hover.
-            if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
-                const when = args.element.querySelector('.e-event-popup .e-date-time');
-                if (when) when.title = 'Change date or time';
-            }
-
-
-            // One popup at a time. A double-click on a day fires Syncfusion's quick
-            // popup twice and THEN the editor, and Syncfusion never closes that quick
-            // popup: it stays open behind the editor, and when its open animation
-            // finishes it focuses its own title box. Whatever the user was typing in
-            // the editor -- usually the description -- carries on into that invisible
-            // box, and the editor then saves with no title ("Add title"). That is the
-            // second half of #32: "no way to save once you've written a description".
-            //
-            // So a quick popup may not open over an editor, and opening the editor
-            // closes any quick popup already up.
-            if (args.type === 'QuickInfo' && document.querySelector('.e-schedule-dialog.e-popup-open')) {
-                args.cancel = true;
-                return;
-            }
-            if (args.type === 'Editor' && typeof scheduleObj.closeQuickInfoPopup === 'function') {
-                scheduleObj.closeQuickInfoPopup();
-            }
-
-            if (args.type === 'Editor' && this.lockedOut) {
-                args.cancel = true;
-                this.showToast(this.lockedOutMessage, 'info');
-                return;
-            }
-            if (args.type === 'Editor') {
-                this.editorSaved = false;
-                ScheduleAdapter.noteStart(args.data);
-
-                // Configure datetime pickers with strictMode and the user's chosen date format.
-                // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
-                // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
-                // pattern from globalSettings.dateFormat, falling back to navigator.language.
-                const startElement = args.element.querySelector('[name="StartTime"]');
-                const endElement = args.element.querySelector('[name="EndTime"]');
-                const dateFmt = this.resolveDateFormat();
-                const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-                const dateTimeFmt = `${dateFmt} ${timeFmt}`;
-
-                if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
-                    const startPicker = startElement.ej2_instances[0];
-                    startPicker.strictMode = true;
-                    startPicker.format = dateTimeFmt;
-                }
-
-                if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
-                    const endPicker = endElement.ej2_instances[0];
-                    endPicker.strictMode = true;
-                    endPicker.format = dateTimeFmt;
-                }
-
-                function setColor(id) {
-                    if (!window.btnObj) {
-                        return;
-                    }
-
-                    window.btnObj.element.style.background = app.COLORS[id - 1];
-                    // The color is a form field (name="Type", class e-field): Syncfusion reads
-                    // it into the record it hands actionBegin, and the store saves that. Nothing
-                    // writes into Syncfusion's own event objects.
-                    window.inputEle.setAttribute('value', id);
-                    window.inputEle.value = id;
-                    // Whether people categorise events at all decides if type
-                    // labels/colors are worth building on (see pro.md).
-                    track(a => a.featureUsed('event_type', 'popup'));
-                    // console.log("Color set to:", id, "for event:", args.data);
-                }
-
-                // Initial setup
-                if (!args.element.querySelector('.custom-field-row-color')) {
-
-                    // console.log("Initial args", args);
-
-                    // button dropdown
-                    // TODO: allow live edit (vs reload for types)
-                    let items = app.getTypes();
-
-                    window.btnObj = new ej.splitbuttons.DropDownButton({
-                        items: items,
-                        iconCss: 'e-type',
-                        select: (button_args) => {
-                            // console.log("select type args", button_args);
-                            let type = button_args.item.value;
-                            // Only the form field changes; the record Syncfusion builds from
-                            // the form on Save carries it (see setColor).
-                            setColor(type);
-                        },
-                        open: () => {
-                            app.dropdownOpen = true;
-                            updateTooltipVisibility();
-                        },
-                        close: () => {
-                            app.dropdownOpen = false;
-                            // Take the hint out of the popup on every close. Syncfusion drops
-                            // its item list on close and, on the next open, renders the items
-                            // into the popup's FIRST CHILD -- which, with the list gone, was
-                            // this hint. On phones the hint is hidden, so the colors rendered
-                            // inside a hidden div: a 0x0 menu, and no way to change an event's
-                            // color after the first time per visit (#32: "impossible de
-                            // changer les couleurs"). open re-appends it after the list.
-                            if (window.typeTooltip && window.typeTooltip.parentElement) window.typeTooltip.remove();
-                            updateTooltipVisibility();
-                        }
-                    });
-
-                    var createElement = ej.base.createElement;
-                    let row = createElement('div', { className: 'custom-field-row-color group' });
-                    let formElement = args.element.querySelector('.e-schedule-form');
-                    formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
-                    let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
-
-                    window.inputEle = createElement('input', {
-                        className: 'e-type e-field', attrs: { name: 'Type' }
-                    });
-                    container.appendChild(window.inputEle);
-                    row.appendChild(container);
-
-                    btnObj.appendTo(container);
-                    window.inputEle.setAttribute('name', 'Type');
-                    window.inputEle.style.display = "none";
-                    window.inputEle.setAttribute('value', args.data.Type);
-
-                    // Add tooltip for customizing labels (shown in dropdown when opened)
-                    let tooltip = createElement('div', {
-                        id: 'type-label-hint',
-                        className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Name these colors in Settings`
-                    });
-                    tooltip.style.background = 'var(--panel-bg)';
-                    tooltip.style.color = 'var(--text-color-1)';
-                    tooltip.style.borderTop = '1px solid var(--border-color)';
-                    // Will be appended to dropdown after it's rendered
-                    window.typeTooltip = tooltip;
-                }
-
-                // Function to update tooltip visibility based on dropdown state
-                window.updateTooltipVisibility = () => {
-                    const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i + 1}`);
-                    const shouldShow = app.dropdownOpen && isDefaultLabels && window.innerWidth >= 768;
-
-                    if (window.typeTooltip) {
-                        // Append tooltip to dropdown popup if not already there
-                        if (app.dropdownOpen && !window.typeTooltip.parentElement) {
-                            const dropdownPopup = document.querySelector('.e-dropdown-popup.e-popup-open ul');
-                            if (dropdownPopup) {
-                                dropdownPopup.parentElement.appendChild(window.typeTooltip);
-                            }
-                        }
-
-                        window.typeTooltip.classList.toggle('hidden', !shouldShow);
-                    }
-                };
-
-                // Initialize dropdown state
-                app.dropdownOpen = false;
-                updateTooltipVisibility();
-
-                // Initialize with existing type or default to Type 1
-                const initialType = args.data.Type || 1;
-                setColor(initialType);
-
-                // Make sure the event has a Type property even if not selected
-                if (!args.data.Type) {
-                    args.data.Type = 1; // Default to first type if not set
-                }
-
-                //setColor(args.data.Type);
-            }
-
-            // Syncfusion positions the popup (top/left) based on its natural,
-            // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
-            // shrinks a long-description popup without updating that position, so a
-            // popup meant to be vertically centered near the click target can end up
-            // with its top or bottom pushed outside the viewport, with no way to scroll
-            // back to the clipped part.
-            //
-            // A JS fix that rewrites style.top after the fact was tried and reverted: it
-            // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
-            // close rendered blank) even though DOM and computed styles were identical to
-            // the working case -- a genuine paint bug from mutating position mid-transition,
-            // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
-            // position: fixed + vertical centering via pure CSS, which sidesteps that
-            // entirely since it participates in Syncfusion's own layout/paint pass instead
-            // of fighting it after the fact.
-            //
-            // The class must only apply when the popup actually overflows -- applying it
-            // unconditionally force-centers every popup regardless of size, dragging a
-            // short popup (e.g. a one-line description) away from the event it belongs to
-            // even when it would have fit fine at Syncfusion's own position.
-            const wrapper = args.element.closest('.e-quick-popup-wrapper');
-            if (wrapper) {
-                // Widen the popup for long descriptions -- narrow-column wrapping makes a
-                // multi-paragraph description feel cramped. 480px was chosen (not something
-                // wider, like 700px) specifically to keep collision risk low: on a month view
-                // packed with events, a much wider popup routinely covers a neighboring day's
-                // event, and clicking what looks like that event actually lands on the
-                // popup's own content -- Syncfusion doesn't see it as an event click at all,
-                // so the popup silently keeps showing the wrong title/content at the wrong
-                // position. Rather than chase that with active collision-avoidance (tried:
-                // pushing the popup down until clear doesn't converge on a busy grid, and
-                // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
-                // to stay narrow enough that overlap is rare in the first place -- matching
-                // how other calendar apps (e.g. Google Calendar) handle this same tension.
-                // Must run before the overflow clamp below, since widening changes how the
-                // text wraps and therefore how tall (and whether it overflows) the popup ends up.
-                const LONG_DESCRIPTION_THRESHOLD = 140;
-                wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
-
-                const applyClampIfOverflowing = () => {
-                    const margin = 10;
-
-                    // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
-                    // 1000px+ off on a wide viewport, worse right after a different popup was
-                    // open and closed (its clamped/offset state seems to leak into the next
-                    // centering calculation), but present even on a cold click. Rather than
-                    // chase Syncfusion's internal math, anchor to args.target -- the actual
-                    // clicked .e-appointment element -- which is ground truth for where the
-                    // popup should visually appear, regardless of what Syncfusion computed.
-                    if (args.target) {
-                        const targetRect = args.target.getBoundingClientRect();
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        const offsetParentRect = wrapper.offsetParent
-                            ? wrapper.offsetParent.getBoundingClientRect()
-                            : { left: 0, top: 0 };
-
-                        let desiredLeft = targetRect.left - offsetParentRect.left;
-                        let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
-
-                        // Keep it on-screen: clamp horizontally, and flip above the target if
-                        // there's no room below.
-                        const viewportLeft = desiredLeft + offsetParentRect.left;
-                        if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
-                            desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
-                        }
-                        if (desiredLeft + offsetParentRect.left < margin) {
-                            desiredLeft = margin - offsetParentRect.left;
-                        }
-                        const viewportTop = desiredTop + offsetParentRect.top;
-                        if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
-                            desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
-                        }
-
-                        wrapper.style.left = `${desiredLeft}px`;
-                        wrapper.style.top = `${desiredTop}px`;
-                    }
-
-                    const rect = wrapper.getBoundingClientRect();
-                    const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
-                    wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
-                };
-
-                // popupOpen fires while the wrapper still carries its closed-state class
-                // (e-popup-close) and pre-open position -- Syncfusion applies its final
-                // position asynchronously as part of the open transition. Wait for the
-                // class to flip to e-popup-open before measuring for overflow.
-                if (wrapper.classList.contains('e-popup-open')) {
-                    applyClampIfOverflowing();
-                } else {
-                    const classObserver = new MutationObserver(() => {
-                        if (wrapper.classList.contains('e-popup-open')) {
-                            classObserver.disconnect();
-                            requestAnimationFrame(applyClampIfOverflowing);
-                        }
-                    });
-                    classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
-                }
-            }
-        }
-
-        // Belt to the braces above. Syncfusion can leave a quick popup alive behind the
-        // editor (a double-click opens two of them before the editor), and that popup
-        // pulls focus into its own title box when the user clicks into the editor's
-        // Description -- measured at 3ms after the click. Closing it through the API is
-        // not reliable against its own timers, so enforce the rule at the only place
-        // that matters: while an editor is open, focus may not enter a quick popup. It
-        // goes straight back to the field the user was in, so no keystroke is lost.
-        document.addEventListener('focusin', (e) => {
-            const target = e.target;
-            if (!target || !target.closest || !target.closest('.e-quick-popup-wrapper')) return;
-            if (!document.querySelector('.e-schedule-dialog.e-popup-open')) return;
-            const back = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.e-schedule-dialog')
-                ? e.relatedTarget
-                : document.querySelector('.e-schedule-dialog.e-popup-open input[name="Subject"]');
-            if (back) back.focus();
-            if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
-        }, true);
-
-        // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
-        // editor, as the pencil does. People clicked it expecting to change the time, and the
-        // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
-        // links and locked calendars have none, so their date line stays plain text.
-        document.addEventListener('click', (e) => {
-            const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
-            if (!when) return;
-            const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
-            if (edit && !edit.disabled && edit.offsetParent) edit.click();
-        });
-
-        scheduleObj.appendTo('#Schedule');
-
-        // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
-        // Say why, instead of leaving people clicking at a calendar that ignores them.
-        try {
-            const el = document.getElementById('Schedule');
-            if (el) el.addEventListener('dblclick', (e) => {
-                if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
-                    this.showToast(this.lockedOutMessage, 'info');
-                }
-            });
-        } catch (e) { /* no grid: nothing to explain */ }
-
-        // View links: a click on a day opens that day, as a click on its date number already
-        // does. Syncfusion's own day click opens the new-event box, which read-only mode
-        // turns off, so on a view link the click did nothing: a third of the day clicks there
-        // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
-        // A click made while an event popup or "+N more" list is open only closes it (as on an
-        // edit link); the popup is already gone by the click, so look at the press.
-        let popupAtPress = false;
-        scheduleObj.element.addEventListener('pointerdown', () => {
-            popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
-        }, true);
-        scheduleObj.element.addEventListener('click', (e) => {
-            if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
-            if (popupAtPress) {
-                // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
-                const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
-                if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
-                return;
-            }
-            const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
-            if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
-            const day = scheduleObj.getCellDetails(cell);
-            if (!day || !day.startTime) return;
-            scheduleObj.selectedDate = day.startTime;
-            scheduleObj.currentView = 'Day';
-        });
-
-        // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
-        // while it renders. On first load the grid is still being built (and fonts/styles may
-        // still be landing) when events are laid out, so chips can come out ~30px wide until
-        // something forces a layout (an edit did). Re-lay-out once after the first events
-        // render has settled, and whenever the container's width changes.
-        let settleTimer;
-        const relayout = () => {
-            clearTimeout(settleTimer);
-            settleTimer = setTimeout(() => scheduleObj.refreshLayout(), 50);
-        };
-        // A month-view chip is never narrower than one cell, so a narrower one is stale.
-        // Checked after every render (not on a timer, which was a guess about when the grid
-        // is done); capped so a view that can't satisfy it can't loop.
-        let staleRetries = 0;
-        scheduleObj.addEventListener('dataBound', () => {
-            requestAnimationFrame(() => {
-                const cell = document.querySelector('.e-schedule .e-month-view .e-work-cells');
-                const chip = document.querySelector('.e-schedule .e-month-view .e-appointment');
-                if (!cell || !chip) { staleRetries = 0; return; }
-                if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
-                if (staleRetries++ < 3) relayout();
-            });
-        });
-        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
-        // with empty page below, and the side panel (same grid row) follows. Rows grow, never
-        // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
-        const fitMonthRows = () => {
-            const sched = document.getElementById('Schedule');
-            const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
-            if (!rows.length) return false;
-            let h = 100;
-            if (window.innerWidth >= 1100) {
-                const rect = sched.getBoundingClientRect();
-                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
-                // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
-                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
-                const cs = foot && getComputedStyle(foot);
-                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
-                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
-                // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
-                if (document.getElementById('how')) h = Math.min(h, 116);
-            }
-            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
-            if (Math.abs(now - h) < 2) return false;
-            sched.style.setProperty('--month-cell-h', h + 'px');
-            return true;
-        };
-        scheduleObj.addEventListener('dataBound', () => {
-            requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
-        });
-        this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
-        let fitTimer = null;
-        window.addEventListener('resize', () => {
-            clearTimeout(fitTimer);
-            fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
-        });
-        const calWrap = document.getElementById('cal2_wrap');
-        if (calWrap && window.ResizeObserver) {
-            let lastWidth = calWrap.offsetWidth;
-            new ResizeObserver(() => {
-                const w = calWrap.offsetWidth;
-                if (w && w !== lastWidth) { lastWidth = w; relayout(); }
-            }).observe(calWrap);
-        }
-
-        // Add event listener to mark month-start dates and colorize year view dots
-        scheduleObj.dataBound = function () {
-            // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
-            // is not a Vue dependency -- without this the count would go stale the moment
-            // the user changed week or switched view.
-            app.viewTick++;
-
-            // Find all date headers and mark ones with month names (contain space)
-            const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
-            dateHeaders.forEach(header => {
-                const text = header.textContent.trim();
-                // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
-                if (text.includes(' ')) {
-                    header.classList.add('month-start');
-                } else {
-                    header.classList.remove('month-start');
-                }
-            });
-
-            // Colorize year view dots based on event types
-            if (scheduleObj.currentView === 'Year') {
-                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
-                const allEvents = scheduleObj.eventsData || [];
-
-                // Helper to check if a recurring event occurs on a given date
-                const eventOccursOnDate = (event, targetDate) => {
-                    const eventStart = new Date(event.StartTime);
-                    const eventEnd = new Date(event.EndTime);
-                    const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-                    const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
-
-                    // Event must have started on or before target date
-                    const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
-                    if (eventStartDay > targetStart) return false;
-
-                    // For non-recurring events, check if date overlaps
-                    if (!event.RecurrenceRule) {
-                        return eventStart < targetEnd && eventEnd > targetStart;
-                    }
-
-                    // For recurring events, parse the RecurrenceRule
-                    const rule = event.RecurrenceRule;
-                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                    const targetDayName = dayNames[targetDate.getDay()];
-
-                    // Check BYDAY constraint
-                    const bydayMatch = rule.match(/BYDAY=([^;]+)/);
-                    if (bydayMatch) {
-                        const allowedDays = bydayMatch[1].split(',');
-                        if (!allowedDays.includes(targetDayName)) return false;
-                    }
-
-                    // Check FREQ and INTERVAL
-                    const freqMatch = rule.match(/FREQ=(\w+)/);
-                    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-                    const freq = freqMatch ? freqMatch[1] : 'DAILY';
-                    const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
-
-                    // Calculate if target date matches the recurrence pattern
-                    const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
-
-                    if (freq === 'DAILY') {
-                        return daysDiff % interval === 0;
-                    } else if (freq === 'WEEKLY') {
-                        // For weekly with BYDAY, just check if day is in BYDAY (already done above)
-                        // and target is at least interval weeks from a valid occurrence
-                        const weeksDiff = Math.floor(daysDiff / 7);
-                        return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
-                    } else if (freq === 'MONTHLY') {
-                        // Check if same day of month
-                        return eventStart.getDate() === targetDate.getDate();
-                    } else if (freq === 'YEARLY') {
-                        // Check if same month and day
-                        return eventStart.getMonth() === targetDate.getMonth() &&
-                               eventStart.getDate() === targetDate.getDate();
-                    }
-
-                    return true; // Default: assume it occurs
-                };
-
-                cells.forEach(cell => {
-                    const appointmentDiv = cell.querySelector('.e-appointment');
-                    if (!appointmentDiv) return;
-
-                    // Get the date for this cell
-                    const dateMs = parseInt(cell.getAttribute('data-date'));
-                    const cellDate = new Date(dateMs);
-
-                    // Find all events that occur on this date
-                    const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
-
-                    if (eventsOnDate.length > 0) {
-                        // Get unique event types for this day
-                        const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
-
-                        if (types.length === 1) {
-                            // Single type: color the dot with that type's color
-                            const color = app.COLORS[types[0] - 1] || app.COLORS[0];
-                            appointmentDiv.style.backgroundColor = color;
-                        } else {
-                            // Multiple types: show multiple dots
-                            appointmentDiv.style.display = 'none';
-
-                            // Remove any existing color dots
-                            cell.querySelectorAll('.color-dot').forEach(d => d.remove());
-
-                            // Create a container for multiple dots
-                            const dotsContainer = document.createElement('div');
-                            dotsContainer.className = 'color-dots-container';
-                            dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
-
-                            // Add a dot for each type (max 3 to avoid overflow)
-                            types.slice(0, 3).forEach(type => {
-                                const dot = document.createElement('div');
-                                dot.className = 'color-dot';
-                                const color = app.COLORS[type - 1] || app.COLORS[0];
-                                dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
-                                dotsContainer.appendChild(dot);
-                            });
-
-                            cell.appendChild(dotsContainer);
-                        }
-                    }
-                });
-            }
-        };
+        // The calendar on screen: pastecal's own on a native view link (index.html, window.pcNativeCal), else
+        // Syncfusion's. The rest of the app reaches it through this.calView (services/CalendarView.js).
+        this.calView = this.nativeCal ? CalendarView.native(this, () => this.$refs.nativeCal || null) : this.mountSyncfusion();
+        if (this.nativeCal) this.watchNativeCalendar();
 
         // Settings were already loaded at the top of mounted() and applied to scheduleObj
         // pre-appendTo. Call applyGlobalSettings again here as a safety net for settings that
@@ -1960,6 +1288,11 @@ const CalendarVueApp = {
         // in the order the user entered.
         this._escapeHandler = (e) => {
             if (e.key !== 'Escape') return;
+            // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
+            if (this.nativeAsk) { this.nativeAnswer(null); return; }
+            if (this.nativeEditor) { this.closeNativeEditor(); return; }
+            if (this.nativeQuick) { this.nativeQuick = null; return; }
+            if (this.nativeCard) { this.nativeCardCancel(); return; }   // (the card takes its own Escape first: EventCard onKey)
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
             if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
@@ -1986,6 +1319,8 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The event card follows changes made in other browsers (nativeCardRefresh).
+        'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
@@ -2075,7 +1410,23 @@ const CalendarVueApp = {
         // The grid re-lays out on any container resize (mounted); this is the explicit nudge
         // for the moment the panel docks or undocks.
         sideDocked() {
-            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+            this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
+        },
+        // A question on the native calendar: its main button takes the focus, so Enter answers and Escape cancels.
+        // A phone's sheet: the calendar behind it is out of reach until it closes (the scrim closes it).
+        nativeCard(c) {
+            const cal = document.querySelector('.pc-native-cal');
+            if (!cal) return;
+            const sheet = !!c && window.innerWidth <= 760;
+            if (sheet) cal.setAttribute('inert', ''); else cal.removeAttribute('inert');
+            document.documentElement.classList.toggle('nk-sheet-open', sheet);
+        },
+        nativeAsk(ask) {
+            if (ask) this.$nextTick(() => { const b = document.querySelector('.pc-native-ask .pc-btn--primary'); if (b) b.focus(); });
+        },
+        // The native month fills the window once the page around it (title, footer line) is in.
+        isLoading(loading) {
+            if (!loading && this.nativeCal) this.$nextTick(() => this.fitNativeMonthRows());
         },
         viewerNotesPinnable: {
             immediate: true,
@@ -2216,6 +1567,1725 @@ const CalendarVueApp = {
 
 
     methods: {
+        // ============================================================
+        // REGION: The calendar on screen (services/CalendarView.js)
+        // ============================================================
+
+        // The native calendar's event popup: beside the event that was clicked, kept on screen.
+        openNativePopover({ event, occurrence, jsEvent }) {
+            const el = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('[data-testid^="event-"]') : null;
+            const r = el ? el.getBoundingClientRect() : { left: 16, right: 16, top: 80, bottom: 80 };
+            const w = Math.min(360, window.innerWidth - 16), h = 200;
+            const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+            const top = r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
+            this.nativePopover = { event, occurrence, top, left };
+            this.$nextTick(() => this.fitNativePopover());
+        },
+        /** The popup kept inside the window, whatever its details' length (Show all can make it taller). */
+        fitNativePopover() {
+            const p = this.nativePopover, el = document.querySelector('.np');
+            if (!p || !el) return;
+            const h = el.offsetHeight;
+            if (p.top + h > window.innerHeight - 8) p.top = Math.max(8, window.innerHeight - 8 - h);
+        },
+        // The native calendar's page wiring. A press outside the open popup closes it and does nothing else (as on
+        // the classic calendar), unless it lands on another event; Escape closes it too. The month fills the window.
+        watchNativeCalendar() {
+            let closedAtPress = false;
+            document.addEventListener('pointerdown', (e) => {
+                const inside = (sel) => !!(e.target.closest && e.target.closest(sel));
+                // The event card: a press outside it (and its pickers, the question, the toast) closes it, keeping
+                // what was saved, and does nothing else: no new event, no drag (the press's mouse events never reach
+                // the calendar, and its click is swallowed below).
+                if (this.nativeCard && !inside('.nk-card, .nk-pick, .nk-menu, .pc-native-ask, .pc-toast-wrap')) {
+                    const cal = inside('.nc') || inside('.nk-scrim');
+                    this.nativeCardDone();
+                    if (cal) { closedAtPress = true; this._nativeCardClosedAt = true; e.preventDefault(); e.stopPropagation(); }
+                    return;
+                }
+                // The quick box closes the same way (its "New event" block goes with it), unless the press is in the
+                // question or the editor it may have opened.
+                const quick = !!this.nativeQuick && !inside('.nq, .ne-overlay, .pc-native-ask');
+                closedAtPress = (!!this.nativePopover && !inside('.np, .pc-native-ask, .ne-overlay')) || quick;
+                if (closedAtPress) this.nativePopover = null;
+                if (quick) this.nativeQuick = null;
+            }, true);
+            document.addEventListener('click', (e) => {
+                if (closedAtPress && e.target.closest && e.target.closest('.nc, .nk-scrim') && (this._nativeCardClosedAt === true || !e.target.closest('[data-testid^="event-"]'))) { e.stopPropagation(); e.preventDefault(); }
+                this._nativeCardClosedAt = false;
+                closedAtPress = false;
+            }, true);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            if (this.nativeEdit) document.addEventListener('keydown', (e) => this.onNativeKey(e));
+            // A locked calendar ignores a double-click on a day: say why (as classic does).
+            document.addEventListener('dblclick', (e) => {
+                if (this.lockedOut && e.target.closest && e.target.closest('.nc-cell, .nc-col, .nc-allday-cell')) this.showToast(this.lockedOutMessage, 'info');
+            });
+            let fitTimer = null;
+            window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => this.fitNativeMonthRows(), 150); });
+        },
+        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px with empty page
+        // below (the classic calendar's fitMonthRows). Rows grow, never shrink below 100px.
+        fitNativeMonthRows() {
+            const cal = document.querySelector('.pc-native-cal');
+            const rows = cal ? cal.querySelectorAll('.nc-week-row') : [];
+            if (!rows.length) return;
+            let h = 100;
+            if (window.innerWidth >= 1100) {
+                const rect = cal.getBoundingClientRect();
+                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                const cs = foot && getComputedStyle(foot);
+                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+            }
+            if (Math.abs(this.nativeRowHeight - h) >= 2) this.nativeRowHeight = h;
+        },
+        eventTextOn(color) { return ScheduleAdapter.onColor(color); },
+        // ---- "Try the new calendar (beta)" (CalSwitch in the footer) ----
+        // This browser's choice of calendar, then a reload into it. The head script in index.html reads
+        // localStorage pc_cal before anything loads (so no flash, and no Syncfusion download in native mode); the
+        // same value also goes in a cookie (a year, whole site) so the Worker could see the choice one day, e.g. to
+        // send the right first byte. Nothing on the server reads it today, and nothing may depend on it: storage
+        // is the source of truth. "Back to classic" stores 'classic' rather than clearing: with nothing stored, a
+        // view link falls back to the server's default (<meta name="pc-cal">, NATIVE_VIEW_LINKS), which may be native.
+        // A ?cal= in the address would win over the stored choice, so it is dropped before reloading.
+        setCalPref(pick, source) {
+            const value = pick === 'native' ? 'native' : 'classic';
+            try { localStorage.setItem('pc_cal', value); } catch (e) { /* storage blocked: the ?cal= below still switches this page */ }
+            try { document.cookie = `pc_cal=${value}; Max-Age=31536000; Path=/; SameSite=Lax` + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { }
+            track(a => a.newUi(value === 'native' ? 'opt_in' : 'opt_out', source, true));
+            const url = new URL(location.href);
+            url.searchParams.delete('cal');
+            // Storage blocked (some private modes): carry the choice in the address for this page at least.
+            let stored = null; try { stored = localStorage.getItem('pc_cal'); } catch (e) { }
+            if (stored !== value) url.searchParams.set('cal', value);
+            location.replace(url.toString());
+        },
+        hideCalPill() {
+            this.calPillHidden = true;
+            try { sessionStorage.setItem('pc_cal_pill_hidden', '1'); } catch (e) { }
+        },
+        openCalFeedback() {
+            this.calFeedback = { text: '', email: '', website: '', openedAt: Date.now(), sending: false, error: '', sent: false };
+            track(a => a.newUi('feedback_open', 'pill'));
+            this.$nextTick(() => { const t = document.querySelector('[data-testid="cal-feedback-text"]'); if (t) t.focus(); });
+        },
+        // Sent through the contact form's endpoint (/api/contact: same-site, honeypot, fill time, 5 an hour) as an
+        // 'idea', the message prefixed with where it came from. Never the calendar or its events: only the page
+        // kind, the browser and OS family, and the screen width.
+        async sendCalFeedback() {
+            const f = this.calFeedback;
+            if (!f || f.sending || !f.text.trim()) return;
+            const ua = navigator.userAgent;
+            const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\/|FxiOS/.test(ua) ? 'Firefox' : /Chrome\/|CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'other browser';
+            const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'ChromeOS'
+                : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'other OS';
+            const where = `[New calendar (beta) feedback: ${this.isReadOnly ? 'view link' : 'edit link'}, ${browser} on ${os}, ${window.innerWidth}px wide]`;
+            f.sending = true; f.error = '';
+            try {
+                const res = await fetch('/api/contact', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'idea', message: `${where}\n\n${f.text.trim()}`, email: f.email.trim(), website: f.website, elapsed: Date.now() - f.openedAt }),
+                });
+                let body = null; try { body = await res.json(); } catch (e) { }
+                if (res.ok && body && body.ok !== false) {
+                    f.sent = true;
+                    track(a => a.newUi('feedback_sent', 'pill'));
+                } else f.error = (body && body.error) || 'That didn\'t send. Try again in a moment.';
+            } catch (e) {
+                f.error = 'That didn\'t send. Check your connection and try again.';
+            } finally { f.sending = false; }
+        },
+        // The dates on the native calendar changed: what depends on them recomputes (hidden-events count).
+        onNativeRange() {
+            this.viewTick++;
+            this.nativePopover = null;
+            this.nativeQuick = null;
+            this.$nextTick(() => this.fitNativeMonthRows());
+        },
+
+        // ---- Editing on the native calendar (a native edit link) ------------------------------------------------
+        // Every write goes through commitScheduleAction in the record shapes classic's grid produces
+        // (ScheduleAdapter.toView / toCommand), so the repeat-exception stamps, all-day dates, "this event / all
+        // events", the merge that saves only the fields the person changed (noteStart, when they began), undo,
+        // Recent changes and analytics are classic's own. Nothing here writes the event list itself.
+
+        /** The stored row an event on the grid stands for (the grid may hold a display copy of it). */
+        nativeStored(ev) {
+            if (!ev) return null;
+            return (this.calendar.events || []).find((e) => e && String(e.id) === String(ev.id)
+                && String(e.recurrenceID ?? '') === String(ev.recurrenceID ?? '')) || null;
+        },
+        /** The series a row belongs to: itself for a repeating event, its parent for an edited occurrence. */
+        nativeSeriesOf(row) {
+            if (!row) return null;
+            const id = !isBlankId(row.recurrenceID) ? row.recurrenceID : (row.recurrencerule ? row.id : null);
+            if (id === null) return null;
+            return (this.calendar.events || []).find((e) => e && String(e.id) === String(id) && isBlankId(e.recurrenceID)) || null;
+        },
+        /** 'single', 'series' (a repeating event) or 'edited' (one occurrence edited on its own, a row of its own). */
+        /** A rule too big to expand (EventStore.unsafeRecurrence) is drawn once, so it is edited and deleted as one event. */
+        nativeKind(row) {
+            if (!row) return null;
+            if (!isBlankId(row.recurrenceID)) return 'edited';
+            return row.recurrencerule && !(typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(row.recurrencerule)) ? 'series' : 'single';
+        },
+        /** A stored row as classic's grid record (an edited occurrence is read beside its series, whose grid its slot is in). */
+        nativeRecord(row) {
+            const series = this.nativeKind(row) === 'edited' ? this.nativeSeriesOf(row) : null;
+            const rec = { ...ScheduleAdapter.toView(series ? [row, series] : [row])[0] };
+            // Native reads the rule itself (rrule.js), not Syncfusion's every-12-months stand-in for a yearly one (#48).
+            if (rec._gridRule) { rec.RecurrenceRule = rec._gridRule.rule; delete rec._gridRule; }
+            return rec;
+        },
+        /** One native action -> the shared write path. */
+        nativeAction(requestType, records, context) {
+            return this.commitScheduleAction({ requestType, addedRecords: [], changedRecords: [], deletedRecords: [], ...records }, context);
+        },
+        /** The calendar can't be changed here: say why (as classic does on a locked calendar). */
+        nativeCanEdit() {
+            if (this.canEdit && !this.isReadOnly) return true;
+            if (this.lockedOut) this.showToast(this.lockedOutMessage, 'info');
+            return false;
+        },
+        /** "This event / All events" for a repeating event (classic asks the same before it edits, moves or deletes one). */
+        nativeAskScope(title, onThis, onAll, ok = 'OK', onCancel = null) {
+            this.nativeAsk = { title, choice: 0, ok, cancel: onCancel, options: [
+                { label: 'This event', testid: 'scope-this', action: onThis },
+                { label: 'All events', testid: 'scope-all', action: onAll },
+            ] };
+        },
+        /** The open question's answer: an option and OK, a button, or (null) Cancel. */
+        nativeAnswer(button) {
+            const ask = this.nativeAsk;
+            this.nativeAsk = null;
+            if (!ask) return;
+            const c = this.nativeCard;
+            if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; }
+            else (button || ask.options[ask.choice]).action();
+            if (this._nativeMoveToast) this.nativeMoveToast();   // a drop that asked first: its toast now
+            if (c && c.closeAfterAsk && this.nativeCard === c && !this.nativeAsk) this.closeNativeCard();
+        },
+
+        // The quick box: a click (or a drag) on an empty part of the grid. A double-click opens the full editor.
+        onNativeCreate({ start, end, isAllDay, event: jsEvent, full }) {
+            if (!this.nativeEdit || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            // The event card (EventCard.js): beside the new event's block, a sheet on a phone.
+            if (typeof EventCard !== 'undefined') { this.openNativeNewCard({ start, end, isAllDay, jsEvent, full }); return; }
+            if (full) { this.nativeQuick = null; this.openNativeEditor({ mode: 'Add', fresh: { start, end, isAllDay, title: '' } }); return; }
+            // Beside the day (time grid) or under it (month), so the "New event" block stays in view; a phone shows
+            // the box as a sheet along the bottom instead (native-calendar.css).
+            const w = Math.min(364, window.innerWidth - 16), h = 180, pad = 8;
+            const x = jsEvent && jsEvent.clientX != null ? jsEvent.clientX : window.innerWidth / 2;
+            const y = jsEvent && jsEvent.clientY != null ? jsEvent.clientY : 120;
+            const box = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('.nc-col, .nc-cell, .nc-allday-cell') : null;
+            const r = box ? box.getBoundingClientRect() : { left: x, right: x, top: y, bottom: y };
+            let left, top;
+            if (box && box.classList.contains('nc-col')) {
+                left = r.right + pad + w < window.innerWidth ? r.right + pad : r.left - pad - w;
+                top = y - h / 2;
+            } else {
+                left = r.left;
+                top = r.bottom + pad + h < window.innerHeight ? r.bottom + pad : r.top - pad - h;
+            }
+            left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
+            top = Math.max(pad, Math.min(top, window.innerHeight - h - pad));
+            this.nativeQuick = { start, end, isAllDay, title: '', top, left };
+        },
+        saveNativeQuick(title) {
+            const q = this.nativeQuick;
+            if (!q) return;
+            this.nativeQuick = null;
+            // No title: "(No title)", as the editor saves it (classic stores Syncfusion's placeholder, "Add title").
+            this.nativeAction('eventCreate', { addedRecords: [{ Subject: title || '(No title)', StartTime: new Date(q.start), EndTime: nativeEnd(q.end, q.isAllDay),
+                IsAllDay: !!q.isAllDay, Type: 1, Description: '', RecurrenceRule: '' }] }, { action: 'Add' });
+        },
+        moreNativeQuick(title) {
+            const q = this.nativeQuick;
+            if (!q) return;
+            this.nativeQuick = null;
+            this.openNativeEditor({ mode: 'Add', fresh: { ...q, title } });
+        },
+
+        /**
+         * The full editor. mode: 'Add' (fresh: { start, end, isAllDay, title }), 'Save' (row: a single event or an
+         * edited occurrence), 'EditOccurrence' (row: the series; occurrence: { start, end } of the one clicked), or
+         * 'EditSeries' (row: the series). The record it starts from is noted (ScheduleAdapter.noteStart), so Save
+         * writes only what changed since now: a field someone else changes meanwhile is kept (finding D1).
+         */
+        openNativeEditor({ mode, row = null, occurrence = null, fresh = null }) {
+            if (!this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            this.nativeQuick = null;
+            let record;
+            if (mode === 'Add') {
+                record = { Subject: fresh.title || '', StartTime: new Date(fresh.start), EndTime: nativeEnd(fresh.end, fresh.isAllDay),
+                    IsAllDay: !!fresh.isAllDay, Type: 1, Description: '', RecurrenceRule: '' };
+            } else {
+                if (!row) return;
+                record = this.nativeRecord(row);
+                // One occurrence: a new row pointing at the series, at the occurrence's time (classic's EditOccurrence).
+                if (mode === 'EditOccurrence') Object.assign(record, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: record.Id,
+                    StartTime: new Date(occurrence.start), EndTime: new Date(occurrence.end) });
+                // The whole series, as classic's record has it: RecurrenceID = its own id.
+                if (mode === 'EditSeries') record.RecurrenceID = record.Id;
+                ScheduleAdapter.noteStart(record);
+            }
+            const shown = { id: mode === 'Add' ? null : record.Id, title: record.Subject || '', description: record.Description || '',
+                type: record.Type || 1, isAllDay: !!record.IsAllDay, start: record.StartTime, end: record.EndTime,
+                recurrencerule: record.RecurrenceRule || '', recurrenceID: mode === 'Save' ? (record.RecurrenceID || null) : null,
+                ...(mode === 'EditOccurrence' ? { _occurrenceOf: record.RecurrenceID } : {}) };
+            // Frozen: the form loads once, and a live update from another browser never resets what is being typed.
+            this.nativeEditor = { mode, record, occurrence, event: Object.freeze(shown) };
+            this.editorSaved = false;
+        },
+        closeNativeEditor() {
+            if (!this.nativeEditor) return;
+            // An editor that closes without a save is the "this was confusing or fiddly" signal (as classic's popupClose).
+            if (!this.editorSaved) track(a => a.editorAbandoned());
+            this.editorSaved = false;
+            this.nativeEditor = null;
+        },
+        saveNativeEditor(data) {
+            const ed = this.nativeEditor;
+            if (!ed) return;
+            const allDay = !!data.isAllDay;
+            const record = { ...ed.record, Subject: data.title, Description: data.description, Type: Number(data.type) || 1,
+                IsAllDay: allDay, StartTime: new Date(data.start), EndTime: nativeEnd(data.end, allDay) };
+            if (ed.mode !== 'EditOccurrence') record.RecurrenceRule = data.recurrencerule || '';
+            const finish = (ok) => {
+                if (ok) { this.editorSaved = true; this.closeNativeEditor(); return; }
+                // The series went (someone else deleted it) while this editor was open: nothing left to edit; the
+                // toast says why.
+                const seriesId = ed.mode === 'EditOccurrence' ? ed.record.RecurrenceID : ed.mode === 'EditSeries' ? ed.record.Id : null;
+                if (seriesId !== null && !this.nativeStored({ id: seriesId })) this.closeNativeEditor();
+            };
+            if (ed.mode === 'Add') return finish(this.nativeAction('eventCreate', { addedRecords: [record] }, { action: 'Add' }));
+            if (ed.mode === 'Save') return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'Save' }));
+            if (ed.mode === 'EditOccurrence') {
+                return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditOccurrence', occurrenceStart: ed.occurrence.start }));
+            }
+            // The whole series. Classic asks first whenever the series has skipped dates or separately edited
+            // occurrences, and the answer decides whether they survive (ScheduleAdapter.toCommand, keepOccurrences).
+            const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
+            const time = (v) => new Date(v).getTime();
+            const timing = time(record.StartTime) !== time(ed.record.StartTime) || time(record.EndTime) !== time(ed.record.EndTime)
+                || !!record.IsAllDay !== !!ed.record.IsAllDay || String(record.RecurrenceRule || '') !== String(ed.record.RecurrenceRule || '');
+            this.nativeSaveSeries(series, record, { timing }, finish);
+        },
+        // ---- "All events": the one path every series change takes (a drag, the card, the editor) ----
+        /**
+         * The series' record moved as one of its occurrences moved (from / to: { start, end }): by as much, in
+         * wall-clock days and minutes (a DST change in between keeps the clock time), from the series' own start (an
+         * earlier occurrence is never dropped), its repeat days and UNTIL moving with it (CalendarView.edits.shiftRule).
+         */
+        nativeSeriesMoved(series, from, to) {
+            const rec = this.nativeRecord(series);
+            rec.RecurrenceID = rec.Id;
+            ScheduleAdapter.noteStart(rec);
+            const shift = nativeShift(from.start, to.start), stretch = nativeShift(from.end, to.end);
+            return { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
+                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start) };
+        },
+        /**
+         * Save an "all events" change (record: the series' record as it should be). A series with skipped dates or
+         * edited occurrences keeps them without asking when its dates are untouched (a rename, a color, the details:
+         * asking let "rename, Enter, Enter" wipe them); a time or repeat change (timing) asks classic's question,
+         * keep focused. shift ({ from, to }, the series moved): kept stamps and UNTIL move with it (ScheduleAdapter).
+         * keep: an answer already given (the card asks once). done(ok, keepOccurrences, asked) runs once saved;
+         * cancel if the question is cancelled.
+         */
+        nativeSaveSeries(series, record, { timing, shift = null, keep = null, cancel = null }, done = () => {}) {
+            const save = (keepOccurrences, asked = false) => done(this.nativeAction('eventChange', { changedRecords: [record] },
+                { action: 'EditSeries', keepOccurrences, ...(shift ? { shift } : {}) }), keepOccurrences, asked);
+            if (!this.nativeHasOwn(series)) return save(false);
+            if (!timing) return save(true);
+            if (keep !== null) return save(keep);
+            this.nativeAskSeriesChange((k) => save(k, true), cancel);
+        },
+        // Classic's "match every occurrence to the series again?". Keeping them ("No") is the primary, focused
+        // answer, so Enter never deletes anyone's edits; clearing them takes a deliberate click.
+        nativeAskSeriesChange(save, cancel = null) {
+            this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE, cancel,
+                buttons: [
+                    { label: 'Yes', testid: 'confirm-yes', action: () => save(false) },
+                    { label: 'No', testid: 'confirm-no', primary: true, action: () => save(true) },
+                ] };
+        },
+
+        // The popup's pencil (or its date line), the editor of a search result: which event, and for a repeating one
+        // which part of it (classic's "Edit event / Entire series" question).
+        nativeEditEvent(ev, occurrence) {
+            const row = this.nativeStored(ev);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            if (kind === 'single' || ((kind === 'edited') && !series)) return this.openNativeEditor({ mode: 'Save', row });
+            if (kind === 'series' && !occurrence) return this.openNativeEditor({ mode: 'EditSeries', row });
+            const forThis = kind === 'edited' ? () => this.openNativeEditor({ mode: 'Save', row })
+                : () => this.openNativeEditor({ mode: 'EditOccurrence', row, occurrence });
+            this.nativeAskScope('Edit recurring event', forThis, () => this.openNativeEditor({ mode: 'EditSeries', row: series }));
+        },
+        // The popup's or the editor's Delete: no "Are you sure?" (the Undo toast covers it), but a repeating event asks
+        // which part, as classic does.
+        nativeDeleteEvent(ev, occurrence, fromEditor = null) {
+            const row = this.nativeStored(ev) || (fromEditor && fromEditor.mode === 'EditOccurrence' ? this.nativeStored({ id: fromEditor.record.RecurrenceID }) : null);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            const done = () => { if (fromEditor) { this.editorSaved = true; this.closeNativeEditor(); } };
+            const removeRow = () => { this.nativeAction('eventRemove', { deletedRecords: [this.nativeRecord(row)] }, { action: 'Delete' }); done(); };
+            const removeSeries = () => {
+                const rec = this.nativeRecord(series);
+                rec.RecurrenceID = rec.Id;
+                this.nativeAction('eventRemove', { deletedRecords: [rec] }, { action: 'DeleteSeries' });
+                done();
+            };
+            const removeOne = (when) => {
+                const rec = this.nativeRecord(series);
+                rec.RecurrenceID = rec.Id;
+                rec.StartTime = new Date(when);
+                this.nativeAction('eventRemove', { changedRecords: [rec] }, { action: 'DeleteOccurrence', occurrenceStart: new Date(when) });
+                done();
+            };
+            if (kind === 'single' || !series) return removeRow();
+            // From the editor the question was already answered when it opened.
+            if (fromEditor) {
+                if (fromEditor.mode === 'EditOccurrence') return removeOne(fromEditor.occurrence.start);
+                if (fromEditor.mode === 'EditSeries') return removeSeries();
+                return removeRow();
+            }
+            if (kind === 'series' && !occurrence) return removeSeries();
+            this.nativeAskScope('Delete recurring event', kind === 'edited' ? removeRow : () => removeOne(occurrence.start), removeSeries, 'Delete');
+        },
+        // Whether people categorise events at all decides if type labels are worth building on (classic sends it too).
+        onNativeColor() { track(a => a.featureUsed('event_type', 'popup')); },
+        // A double-click on an event opens its editor (classic's grid does the same).
+        onNativeOpen({ event, occurrence }) { if (typeof EventCard !== 'undefined') return this.openNativeCard({ event, occurrence }, true); this.nativeEditEvent(event, occurrence); },
+        onNativePopoverEdit() {
+            const p = this.nativePopover;
+            if (p) this.nativeEditEvent(p.event, p.occurrence);
+        },
+        onNativePopoverDelete() {
+            const p = this.nativePopover;
+            if (p) this.nativeDeleteEvent(p.event, p.occurrence);
+        },
+        onNativeEditorDelete() {
+            const ed = this.nativeEditor;
+            if (!ed) return;
+            const ev = ed.mode === 'EditOccurrence' ? { id: ed.record.RecurrenceID } : { id: ed.record.Id, recurrenceID: ed.mode === 'EditSeries' ? null : ed.record.RecurrenceID };
+            this.nativeDeleteEvent(ev, ed.occurrence, ed);
+        },
+
+        // Drag and resize. The event as it was when the drag began is the merge's starting point.
+        onNativeDragStart({ event }) {
+            if (this.nativeCard) this.nativeCardDone();
+            const row = this.nativeStored(event);
+            this._nativeDragFrom = row ? { ...row } : null;
+        },
+        onNativeMove({ event, occurrence, start, end }) {
+            const row = this.nativeStored(event);
+            const from = this._nativeDragFrom && row && String(this._nativeDragFrom.id) === String(row.id)
+                && String(this._nativeDragFrom.recurrenceID ?? '') === String(row.recurrenceID ?? '') ? this._nativeDragFrom : row;
+            this._nativeDragFrom = null;
+            if (!row || !this.nativeCanEdit()) return;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            const moveRow = () => {
+                const rec = this.nativeRecord(from);
+                ScheduleAdapter.noteStart(rec);
+                this.nativeAction('eventChange', { changedRecords: [{ ...rec, StartTime: start, EndTime: end }] }, { action: 'Save' });
+            };
+            if (kind === 'single' || !series) return moveRow();
+            const moveOne = () => {
+                const rec = this.nativeRecord(series);
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id, StartTime: start, EndTime: end });
+                this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: occurrence.start });
+            };
+            // All events (classic's drag moves only the one occurrence and never asks; Google asks): the series moves
+            // by as much as this occurrence did, in wall-clock days and minutes (a DST change in between keeps the
+            // clock time), and its repeat days move with it (weekly on Tuesdays dragged to a Wednesday repeats on
+            // Wednesdays). A series with skipped dates or edited occurrences asks classic's own question first, as
+            // its editor does for any series change: they match the series again, or they are kept.
+            const moveAll = () => {
+                // An edited occurrence is drawn at its edited time; the series moves from the slot it stands for (its
+                // exception stamp, read in the grid's frame as toView reads it).
+                const slot = kind === 'edited' ? ScheduleAdapter.stampDate(series.isAllDay
+                    ? Event.allDayExceptionsToLocal(row.recurrenceException) : row.recurrenceException) : null;
+                const fromStart = slot || new Date(occurrence.start);
+                const fromEnd = slot ? new Date(slot.getTime() + (new Date(occurrence.end) - new Date(occurrence.start))) : occurrence.end;
+                const moved = this.nativeSeriesMoved(series, { start: fromStart, end: fromEnd }, { start, end });
+                this.nativeSaveSeries(series, moved, { timing: true, shift: { from: fromStart, to: start } });
+            };
+            this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
+        },
+        /** Skipped dates or separately edited occurrences: what an "all events" change can reset. */
+        nativeHasOwn(series) {
+            return !!series && (!isBlankId(series.recurrenceException)
+                || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id)));
+        },
+        // ---- The event card (nativecal/components/EventCard.js), a native edit link's editor ----------------------
+        // One card for a new event and an existing one. Changes to an existing event are saved the moment they are
+        // made, each through the write path above (commitScheduleAction, in classic's record shapes), from the row
+        // as it is just then (noteStart), so only the field that changed is written and someone else's change made
+        // meanwhile is kept. Each change gets a toast with Undo (the store's own inverse). Cancel (or Escape) takes
+        // back every change made since the card opened; a new event is a draft until Done.
+        //
+        // nativeCard: { key, isNew, full, canRepeat, value, anchor, edited, place,
+        //               target: { kind: 'new' | 'row' | 'occ' | 'series', id, recurrenceID, seriesId, occurrence },
+        //               keepOccurrences, entries: [{ entry (a store undo entry), before: { target, value, canRepeat } }] }
+        //   kind 'row': a single event or an edited occurrence (its own row); 'occ': one occurrence of a series, not yet
+        //   asked "this event / all events"; 'series': the whole series (asked, or opened from a search result).
+
+        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at local midnight. */
+        nativeCardValue(row, occurrence) {
+            const rec = this.nativeRecord(row);
+            const allDay = !!rec.IsAllDay;
+            let start = new Date(occurrence ? occurrence.start : rec.StartTime), end = new Date(occurrence ? occurrence.end : rec.EndTime);
+            if (allDay) {
+                start = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                const exclusive = !end.getHours() && !end.getMinutes() && !end.getSeconds() && !end.getMilliseconds();
+                end = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (exclusive ? 1 : 0));
+                if (end < start) end = new Date(start);
+            }
+            return { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '' };
+        },
+        /** The card's start / end in the shapes classic's records carry (an all-day end: the next local midnight). */
+        nativeCardTimes(v) {
+            if (!v.isAllDay) return { StartTime: new Date(v.start), EndTime: new Date(v.end) };
+            const s = new Date(v.start), e = new Date(v.end);
+            return { StartTime: new Date(s.getFullYear(), s.getMonth(), s.getDate()), EndTime: nativeEnd(new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999), true) };
+        },
+        /** The fields a change touched, as record fields. */
+        nativeCardFields(before, after) {
+            const same = (a, b) => (a instanceof Date || b instanceof Date) ? new Date(a).getTime() === new Date(b).getTime() : a === b;
+            const out = {};
+            if (!same(before.title, after.title)) out.Subject = after.title;
+            if (!same(before.type, after.type)) out.Type = Number(after.type) || 1;
+            if (!same(before.description, after.description)) out.Description = after.description;
+            if (!same(before.rule, after.rule)) out.RecurrenceRule = after.rule || '';
+            if (!same(before.start, after.start) || !same(before.end, after.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
+            return out;
+        },
+        nativeCardClone(v) { return { ...v, start: new Date(v.start), end: new Date(v.end) }; },
+        /** A record with the card's fields on it. Switching All day changes what its stored times mean, so the stored
+         *  text they were read from (_storedStart/_storedEnd, kept verbatim when the meaning is unchanged) goes. */
+        nativeCardApply(rec, fields) {
+            const out = { ...rec, ...fields };
+            if ('IsAllDay' in fields && !!fields.IsAllDay !== !!rec.IsAllDay) { delete out._storedStart; delete out._storedEnd; delete out._shownEnd; }
+            return out;
+        },
+
+        /** Open the card on an event that was clicked (or double-clicked: full). */
+        openNativeCard({ event, occurrence, jsEvent }, full = false) {
+            const row = this.nativeStored(event);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            let target, value;
+            if (kind === 'series' && series && occurrence && occurrence.start) {
+                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) } };
+                value = { ...this.nativeCardValue(series, occurrence), rule: series.recurrencerule || '' };
+            } else if (kind === 'series') {
+                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null };
+                value = this.nativeCardValue(row);
+                target.occurrence = { start: new Date(value.start), end: new Date(value.end) };
+            } else {
+                target = { kind: 'row', id: row.id, recurrenceID: row.recurrenceID ?? null, seriesId: kind === 'edited' && series ? series.id : null, occurrence: null };
+                value = this.nativeCardValue(row);
+            }
+            const el = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('[data-testid^="event-"]') : null;
+            this.showNativeCard({ isNew: false, full, target, value, canRepeat: kind !== 'edited',
+                anchor: { testid: `event-${row.id}`, rect: el ? el.getBoundingClientRect().toJSON() : null }, returnTo: el });
+            this.nativeCardEdited(row);
+        },
+        /** A new event from a click or drag on the grid (or N): a draft until Done. */
+        openNativeNewCard({ start, end, isAllDay, jsEvent, full = false }) {
+            const s = new Date(start), e = new Date(end);
+            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '',
+                start: isAllDay ? new Date(s.getFullYear(), s.getMonth(), s.getDate()) : s,
+                end: isAllDay ? (() => { const x = new Date(e.getTime() - 1); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); })() : e };
+            if (value.isAllDay && value.end < value.start) value.end = new Date(value.start);
+            const r = jsEvent && jsEvent.clientX != null ? { left: jsEvent.clientX, top: jsEvent.clientY, width: 1, height: 1, right: jsEvent.clientX + 1, bottom: jsEvent.clientY + 1 } : null;
+            this.showNativeCard({ isNew: true, full, target: { kind: 'new' }, value, canRepeat: true, anchor: { testid: 'draft-block', rect: r }, returnTo: null });
+        },
+        showNativeCard({ isNew, full, target, value, canRepeat, anchor, returnTo }) {
+            this.nativeQuick = null;
+            this._nativeCardSeq = (this._nativeCardSeq || 0) + 1;
+            this._nativeCardReturn = returnTo && returnTo.dataset ? returnTo.dataset.testid : null;
+            this.nativeCard = { key: this._nativeCardSeq, isNew, full, canRepeat, target, value, opened: this.nativeCardClone(value), anchor, edited: '', place: 0,
+                keepOccurrences: null, entries: [] };
+        },
+        /** "Edited 5m ago": the newest change to this event in the history the app already reads (one read per card). */
+        nativeCardEdited(row) {
+            const c = this.nativeCard, key = this.eventKey(row);
+            const label = () => {
+                const hit = (this.undoEntries || []).find((u) => (u.keys || []).includes(key));
+                if (hit && this.nativeCard === c) c.edited = `Edited ${cardKit.ago(hit.savedAt, this.serverNow ? this.serverNow() : Date.now())}`;
+            };
+            label();
+            if (this.isExisting && Date.now() - (this._nativeHistoryAt || 0) > 60000) { this._nativeHistoryAt = Date.now(); this.loadUndoEntries().then(label).catch(() => {}); }
+        },
+        /** One change from the card (patch: the fields it changed; message: what the toast says). */
+        nativeCardChange(patch, message, meta = null) {
+            const c = this.nativeCard;
+            if (!c) return;
+            if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
+            const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
+            // Whether people categorize events at all (classic sends it too).
+            if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
+            if (c.isNew || !message) { c.value = after; return; }
+            if (!Object.keys(this.nativeCardFields(before, after)).length) { c.value = after; return; }
+            if (c.target.kind === 'occ') {
+                // A repeat belongs to the whole series; anything else asks first, once ("this event" is the default).
+                if ('rule' in patch) return this.nativeCardWrite('all', before, after, message);
+                this.nativeAskScope('Edit recurring event', () => this.nativeCardWrite('this', before, after, message),
+                    () => this.nativeCardWrite('all', before, after, message), 'OK', () => { if (this.nativeCard === c) c.value = before; });
+                return;
+            }
+            this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', before, after, message);
+        },
+        /**
+         * The details box, saved while typing and when it is left (EventCard saveDetails). One session of the box is one
+         * Undo step: each later save in it folds into the first (its own undo entry is dropped, so Undo puts back what was
+         * there before the session). Only the last save says "Details saved". If someone else changed the details while
+         * they were being typed, these win, and a toast says so with an Undo that puts theirs back.
+         */
+        nativeCardDetails(patch, d) {
+            const c = this.nativeCard;
+            const row = c.target.kind === 'occ' ? null : this.nativeStored({ id: c.target.kind === 'series' ? c.target.seriesId : c.target.id, recurrenceID: c.target.kind === 'series' ? null : c.target.recurrenceID });
+            // One occurrence of a series not yet asked "this event / all events": ask once, when the box is left.
+            if (c.target.kind === 'occ') { if (d.final && 'description' in patch) this.nativeCardChange(patch, 'Details saved'); return; }
+            // Kept off the reactive card (a store undo entry must stay the very object in the store's stack).
+            const prev = this._nativeDetSession;
+            const sess = prev && prev.card === c.key && prev.id === d.id ? prev : (this._nativeDetSession = { card: c.key, id: d.id, entry: null, mine: d.base, theirs: null });
+            if ('description' in patch && row) {
+                const now = row.description || '';
+                if (now !== sess.mine && now !== patch.description) sess.theirs = now;   // changed elsewhere meanwhile
+                const stack = this.store().undoStack, len = stack.length;
+                this._nativeDetailsQuiet = true;
+                this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: patch.description }, 'Details saved');
+                this._nativeDetailsQuiet = false;
+                if (stack.length > len) {
+                    if (sess.entry && stack.includes(sess.entry)) {
+                        // Fold into the session's first save: drop this undo entry (and the card's record of it).
+                        const mineEntry = stack.pop();
+                        this.nativeFoldWrote(sess.entry, mineEntry);
+                        const i = c.entries.findIndex((e) => e.entry === mineEntry);
+                        if (i >= 0) c.entries.splice(i, 1);
+                    } else sess.entry = stack[stack.length - 1];
+                }
+                sess.mine = patch.description;
+            }
+            if (!d.final) return;
+            this._nativeDetSession = null;
+            if (!sess.entry) return;
+            if (sess.theirs !== null) {
+                const theirs = sess.theirs;
+                this.showToast('Someone else edited these details too', 'info', { actionLabel: 'Undo', action: () => {
+                    if (this.nativeCard === c) this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: theirs }, 'Their details are back');
+                    else {
+                        const r = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
+                        if (!r) return;
+                        const rec = this.nativeRecord(r);
+                        ScheduleAdapter.noteStart(rec);
+                        if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Description: theirs }] }, { action: 'Save' })) this.showToast('Their details are back', 'success');
+                    }
+                } });
+            } else this.showToast('Details saved', 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /**
+         * A details session's first undo entry takes on what each later save in it wrote: an undo takes back only what
+         * this tab wrote and the row still holds (EventStore undoOnly), so it must know the session's last words.
+         */
+        nativeFoldWrote(into, from) {
+            const flat = (inv) => !inv ? [] : inv.type === 'batch' ? (inv.commands || []).flatMap(flat) : [inv];
+            const kept = flat(into && into.inverse);
+            for (const u of flat(from && from.inverse)) {
+                if (u.type !== 'update' || !u.wrote) continue;
+                const k = kept.find((x) => x.type === 'update' && x.wrote && x.key === u.key);
+                if (k) Object.assign(k.wrote, u.wrote);
+            }
+        },
+        /** The event changed in another browser while the card is open: the card shows it (the box being typed in waits). */
+        nativeCardRefresh() {
+            const c = this.nativeCard;
+            if (!c || c.isNew || this.nativeAsk) return;
+            const t = c.target;
+            const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
+            const v = this.nativeCardValue(row), cur = c.value;
+            const next = t.kind === 'row' ? v : { ...cur, title: v.title, type: v.type, description: v.description, rule: v.rule };
+            if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
+        },
+        nativeCardWrite(scope, before, after, message) {
+            const c = this.nativeCard;
+            if (!c || !this.nativeCanEdit()) return;
+            const snapshot = { target: { ...c.target }, value: before, canRepeat: c.canRepeat };
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const fields = this.nativeCardFields(before, after);
+            let ok = false;
+            if (scope === 'row') {
+                const row = this.nativeStored({ id: c.target.id, recurrenceID: c.target.recurrenceID });
+                if (!row) return this.nativeCardGone();
+                const rec = this.nativeRecord(row);
+                ScheduleAdapter.noteStart(rec);
+                if (this.nativeKind(row) === 'edited') delete fields.RecurrenceRule;   // an occurrence's rule is the series'
+                ok = this.nativeAction('eventChange', { changedRecords: [this.nativeCardApply(rec, fields)] }, { action: 'Save' });
+            } else if (scope === 'this') {
+                const series = this.nativeStored({ id: c.target.seriesId });
+                if (!series) return this.nativeCardGone();
+                let rec = this.nativeRecord(series);
+                delete fields.RecurrenceRule;
+                const seriesId = rec.Id;
+                rec = this.nativeCardApply(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay,
+                    ...this.nativeCardTimes(after), ...fields });
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: seriesId });
+                ok = this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: c.target.occurrence.start });
+                if (ok) {
+                    // Its new row, or (someone else saved "This event" on this slot first) the slot's row it updated.
+                    const own = (e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id);
+                    const stamp = ScheduleAdapter.stamp(c.target.occurrence.start);
+                    const child = (this.calendar.events || []).find((e) => own(e) && !ids.has(String(e.id)))
+                        || (this.calendar.events || []).find((e) => own(e) && String(e.recurrenceException || '').trim() === stamp);
+                    if (child) { c.target = { kind: 'row', id: child.id, recurrenceID: child.recurrenceID, seriesId: series.id, occurrence: null }; c.canRepeat = false; }
+                }
+            } else {
+                const series = this.nativeStored({ id: c.target.seriesId });
+                if (!series) return this.nativeCardGone();
+                // The shared "all events" path (nativeSeriesMoved, nativeSaveSeries), the one a drag of the series takes:
+                // a time change moves the series, and the stamps it keeps, by as much as this occurrence moved.
+                const timed = 'StartTime' in fields;
+                const from = this.nativeCardTimes(before), to = this.nativeCardTimes(after);
+                let moved = this.nativeRecord(series);
+                moved.RecurrenceID = moved.Id;
+                ScheduleAdapter.noteStart(moved);
+                if (timed) {
+                    moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
+                        { IsAllDay: !!after.isAllDay });
+                }
+                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule']) if (f in fields) moved[f] = fields[f];
+                this.nativeSaveSeries(series, moved, {
+                    timing: timed || 'RecurrenceRule' in fields,
+                    // (Switching All day changes what a stamp names: kept stamps stay as they are.)
+                    shift: timed && !!before.isAllDay === !!after.isAllDay ? { from: from.StartTime, to: to.StartTime } : null,
+                    keep: c.keepOccurrences,
+                    cancel: () => { if (this.nativeCard === c) c.value = before; },
+                }, (done, keepOccurrences, asked) => {
+                    if (this.nativeCard !== c) return;
+                    if (asked) c.keepOccurrences = keepOccurrences;   // asked once per card
+                    if (done) {
+                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(after.start), end: new Date(after.end) } };
+                        this.nativeCardSaved(c, snapshot, after, message);
+                    } else c.value = before;
+                });
+                return;
+            }
+            if (ok) this.nativeCardSaved(c, snapshot, after, message);
+            else c.value = before;
+        },
+        /** A change was saved: remember how to take it back, show it, offer Undo. */
+        nativeCardSaved(c, snapshot, after, message) {
+            const stack = this.store().undoStack;
+            // Raw (never a reactive proxy), so it can be found in the store's stack by identity.
+            c.entries.push(Vue.markRaw({ entry: stack[stack.length - 1], before: snapshot }));
+            c.value = this.nativeCardClone(after);
+            c.edited = 'Edited just now';
+            this._nativeGlow = `event-${c.target.id}`;
+            if (!this._nativeDetailsQuiet) this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /** The event (or its whole series) went away under the card (deleted in another browser): close it. */
+        nativeCardGone(series = false) {
+            this.nativeCard = null;
+            this.showToast(series ? "This event's series was deleted." : 'This event was deleted elsewhere', 'info');
+        },
+        nativeUndo() { if (this.store().canUndo) this.undoLastLocal(); },
+        /** After an undo (the toast, Cmd+Z): the card follows the event back, and the event glows once. */
+        nativeAfterUndo() {
+            const c = this.nativeCard;
+            if (c) {
+                const stack = this.store().undoStack;
+                let moved = false;
+                while (c.entries.length && !stack.includes(c.entries[c.entries.length - 1].entry)) {
+                    const { before } = c.entries.pop();
+                    c.target = before.target; c.canRepeat = before.canRepeat; c.value = this.nativeCardClone(before.value);
+                    moved = true;
+                }
+                if (moved) this.$nextTick(() => { c.place++; });
+            }
+            const id = this._nativeGlow;
+            if (id && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                setTimeout(() => document.querySelectorAll(`.nc [data-testid="${id}"]`).forEach((el) => { el.classList.remove('nc-glow'); void el.offsetWidth; el.classList.add('nc-glow'); }), 50);
+            }
+        },
+        /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
+        nativeCardDone({ title, description, smart } = {}) {
+            const c = this.nativeCard;
+            if (!c) return;
+            // The last change (a title saved as the card closes) is still asking "this event / all events": close
+            // once it is answered.
+            if (!c.isNew && this.nativeAsk) { c.closeAfterAsk = true; return; }
+            if (!c.isNew) return this.closeNativeCard();
+            const v = c.value;
+            const name = (title != null ? title : v.title || '').trim();
+            if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
+                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '' }] }, { action: 'Add' });
+            this.closeNativeCard();
+            if (!ok) return;
+            const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            this._nativeGlow = row ? `event-${row.id}` : null;
+            if (smart && row) {
+                // The time came from the title: say so, and Undo puts back the title as typed and the time it had.
+                const when = v.isAllDay ? '' : ` · ${cardKit.fmtDate(v.start, { weekday: 'short' })} ${this.nativeRange(v.start, v.end)}`;
+                this.showToast(`Added ${name}${when}`, 'success', { actionLabel: 'Undo', action: () => {
+                    const now = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
+                    if (!now) return;
+                    const rec = this.nativeRecord(now);
+                    ScheduleAdapter.noteStart(rec);
+                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: new Date(smart.base.start), EndTime: new Date(smart.base.end) }] }, { action: 'Save' })) this.showToast('Undone', 'success');
+                } });
+            } else this.showToast(`Added ${name || '(No title)'}`, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /** "5 – 6 PM", "11 AM – 1 PM", "17:00 – 18:00". */
+        nativeRange(a, b) {
+            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
+            const s = cardKit.fmtTime(a, f, true), e = cardKit.fmtTime(b, f, true);
+            if (f === '12' && s.slice(-2) === e.slice(-2)) return `${s.slice(0, -3)} – ${e}`;
+            return `${s} – ${e}`;
+        },
+        /** Cancel (or Escape): every change since the card opened is taken back; a new event is dropped. No Undo for that. */
+        nativeCardCancel() {
+            const c = this.nativeCard;
+            if (!c) return;
+            // A new event closed without adding is the "this was confusing or fiddly" signal (as classic's popupClose).
+            if (c.isNew) track(a => a.editorAbandoned());
+            let undid = 0;
+            const stack = this.store().undoStack;
+            while (c.entries.length && stack.length && stack[stack.length - 1] === c.entries[c.entries.length - 1].entry) {
+                c.entries.pop();
+                if (!this.undoLastLocal({ quiet: true })) break;
+                undid++;
+            }
+            this.closeNativeCard();
+            if (undid) this.showToast('Changes undone', 'info');
+        },
+        closeNativeCard() {
+            const c = this.nativeCard;
+            if (!c) return;
+            const card = document.querySelector('.nk-card');
+            const hadFocus = !!card && card.contains(document.activeElement);
+            if (hadFocus) document.activeElement.blur();
+            this.nativeCard = null;
+            const back = this._nativeCardReturn || (c.target && c.target.id != null ? `event-${c.target.id}` : null);
+            if (hadFocus && back) this.$nextTick(() => { const el = document.querySelector(`.nc [data-testid="${back}"]`); if (el) el.focus({ preventScroll: true }); });
+        },
+        nativeCardDelete() {
+            const c = this.nativeCard;
+            if (!c) return;
+            if (c.isNew) return this.closeNativeCard();
+            const t = c.target;
+            this.closeNativeCard();
+            // The event shrinks and fades where it was.
+            const el = document.querySelector(`.nc [data-testid="event-${t.id}"]`);
+            const ghost = () => {
+                if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+                const r = el.getBoundingClientRect(), g = document.createElement('div');
+                g.className = 'nc-ghost';
+                Object.assign(g.style, { left: `${r.left + window.scrollX}px`, top: `${r.top + window.scrollY}px`, width: `${r.width}px`, height: `${r.height}px`, background: getComputedStyle(el).backgroundColor });
+                document.body.appendChild(g);
+                setTimeout(() => g.remove(), 220);
+            };
+            this._nativeGlow = `event-${t.id}`;
+            if (t.kind === 'row') this.nativeDeleteEvent({ id: t.id, recurrenceID: t.recurrenceID }, null);
+            else if (t.kind === 'occ') this.nativeDeleteEvent({ id: t.seriesId }, t.occurrence);
+            else this.nativeDeleteEvent({ id: t.seriesId }, t.occurrence, { mode: 'EditSeries' });
+            if (!this.nativeAsk) ghost();
+        },
+        /** Duplicate: a copy the next day (a repeating event's copy is one event), and the card follows the copy. */
+        nativeCardDuplicate() {
+            const c = this.nativeCard;
+            if (!c || c.isNew) return;
+            const v = this.nativeCardClone(c.value);
+            const next = { ...v, start: cardKit.addDays(v.start, 1), end: cardKit.addDays(v.end, 1), rule: '' };
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
+            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: v.title || '(No title)', ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay,
+                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+            const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            if (!row) return;
+            c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
+            c.canRepeat = true;
+            c.anchor = { testid: `event-${row.id}`, rect: null };
+            const when = v.isAllDay ? cardKit.fmtDate(next.start) : `${cardKit.fmtDate(next.start, { weekday: 'short' })} ${cardKit.fmtTime(next.start, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
+            this.nativeCardSaved(c, snapshot, next, `Duplicated to ${when}`);
+            this.$nextTick(() => { c.place++; });
+        },
+        /** Edit types…: names for the colors, for the whole calendar (as Settings saves them). */
+        nativeCardLabels(names) {
+            let changed = 0;
+            (names || []).forEach((n, i) => { if (typeof n === 'string' && n.trim() !== (this.displayTypeLabels[i] || '')) { this.updateTypeLabel(i + 1, n); changed++; } });
+            if (changed) this.showToast('Types saved for everyone', 'success');
+        },
+        /** The calendar's own clicks on an edit link: the card, else (locked, view-only) the read-only popup. */
+        onNativeEventClick(payload) {
+            if (this.nativeEdit && this.canEdit && !this.isReadOnly) return this.openNativeCard(payload);
+            this.openNativePopover(payload);
+        },
+        /** A drop, a resize or an arrow key: saved as before (onNativeMove), then said in a toast with Undo, and the event settles. */
+        onNativeMoveSaved(payload) {
+            const len = this.store().undoStack.length;
+            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
+            const s = new Date(payload.start), e = new Date(payload.end);
+            const msg = payload.mode === 'resize' ? (payload.allDay ? `Ends ${cardKit.fmtDate(new Date(e.getTime() - 1))}` : `Ends ${cardKit.fmtTime(e, f, true)}`)
+                : payload.mode === 'resize-top' ? `Starts ${cardKit.fmtTime(s, f, true)}`
+                    : `Moved to ${cardKit.fmtDate(s, { weekday: 'short' })}${payload.allDay ? '' : ' ' + cardKit.fmtTime(s, f, true)}`;
+            const id = payload.event && payload.event.id;
+            this._nativeMoveToast = { len, msg, id, key: !!payload.key };
+            this.onNativeMove(payload);
+            this.nativeMoveToast();
+        },
+        nativeMoveToast() {
+            const p = this._nativeMoveToast;
+            if (!p || this.nativeAsk) return;   // still asking "this event / all events": checked again on the answer
+            this._nativeMoveToast = null;
+            if (this.store().undoStack.length <= p.len) return;
+            this._nativeGlow = `event-${p.id}`;
+            this.showToast(p.msg, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            this.$nextTick(() => {
+                const els = document.querySelectorAll(`.nc [data-testid="event-${p.id}"]`);
+                if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) els.forEach((el) => { el.classList.remove('nc-settle'); void el.offsetWidth; el.classList.add('nc-settle'); });
+                if (p.key && els[0]) els[0].focus({ preventScroll: true });
+            });
+        },
+        /** Keys on a native edit link: N new, Cmd/Ctrl+D duplicate, Delete, T today, arrows previous / next, D W M A views. */
+        onNativeKey(e) {
+            if (!this.nativeEdit || this.isReadOnly || !this.canEdit || e.defaultPrevented) return;
+            const el = document.activeElement;
+            const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+            if (typing || this.nativeAsk) return;
+            const open = [...document.querySelectorAll('[aria-modal="true"], .pc-modal')].some((m) => m.getClientRects().length > 0);
+            if (open) return;
+            const c = this.nativeCard, cal = this.$refs.nativeCal;
+            const k = e.key.toLowerCase();
+            if ((e.metaKey || e.ctrlKey) && k === 'd' && c && !c.isNew) { e.preventDefault(); this.nativeCardDuplicate(); return; }
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if ((e.key === 'Delete' || e.key === 'Backspace') && c && !c.isNew) { e.preventDefault(); this.nativeCardDelete(); return; }
+            if (c || !cal) return;
+            if (k === 'n') {
+                e.preventDefault();
+                const r = cal.visibleRange(), now = new Date();
+                const day = now.getTime() >= r.start && now.getTime() < r.end ? now : new Date(r.start);
+                const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.min(23, now.getHours() + 1));
+                this.openNativeNewCard({ start, end: new Date(start.getTime() + 3600000), isAllDay: false });
+                return;
+            }
+            if (el && el.closest && el.closest('.nc [data-testid^="event-"]')) return;   // arrows move a focused event (NativeCalendar keyMove)
+            const views = { d: 'Day', w: 'Week', m: 'Month', a: 'Agenda' };
+            if (k === 't') { e.preventDefault(); cal.goToday(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); cal.step(e.key === 'ArrowLeft' ? -1 : 1); }
+            else if (views[k]) { e.preventDefault(); cal.setView(views[k]); }
+        },
+        /** Tab stays inside the open question. */
+        nativeAskTrap(e) {
+            if (e.key !== 'Tab') return;
+            const items = [...e.currentTarget.querySelectorAll('button, input')].filter((x) => x.offsetParent !== null);
+            if (!items.length) return;
+            const i = items.indexOf(document.activeElement);
+            if (e.shiftKey && i <= 0) { e.preventDefault(); items[items.length - 1].focus(); }
+            else if (!e.shiftKey && i === items.length - 1) { e.preventDefault(); items[0].focus(); }
+        },
+
+        // Syncfusion's Schedule, built and wired as it always was: the classic calendar. Returns its
+        // CalendarView; nothing else in the app touches scheduleObj except through that or a guard.
+        mountSyncfusion() {
+            // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
+            // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
+            ej.base.L10n.load({
+                'en-US': {
+                    schedule: {
+                        newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
+                        deleteTitle: 'Delete event', editTitle: 'Edit event',
+                        deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
+                        editSeries: 'Entire series', deleteSeries: 'Entire series',
+                        editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
+                        editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
+                        endTimezone: 'End timezone', searchTimezone: 'Search timezone',
+                        beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
+                    },
+                    recurrenceeditor: { on: 'Repeat on' },
+                },
+            });
+            const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
+            const scheduleInitTimestamp = performance.now();
+            console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
+            scheduleObj.on('actionComplete', (args) => {
+                if (args?.requestType === 'toolBarRendered') {
+                    console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+                }
+            });
+            scheduleObj.addEventListener('dataBound', () => {
+                console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+            });
+            scheduleObj.on('eventsLoaded', () => {
+                console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+            });
+
+            // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
+            // first render and won't reactively update if set later. (See applyGlobalSettings
+            // for the post-render path used when settings change at runtime.)
+            scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
+            scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
+            scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
+            // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
+            // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
+            // the format live, so a settings change applies on the next render.
+            if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
+                const vm = this;
+                window.pcHourLabel = (date) => {
+                    const h = date.getHours();
+                    if (vm.globalSettings.timeFormat === '24') return String(h);
+                    return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
+                };
+                scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
+            }
+
+            // Build custom view configuration dynamically
+            const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
+            const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+            const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
+
+            scheduleObj.views = [
+                'Day',
+                'Week',
+                'Month',
+                customViewConfig,
+                'Year',
+                'Agenda'
+            ];
+            scheduleObj.enableAdaptiveUI = false;
+
+            scheduleObj.readonly = this.isReadOnly;
+
+
+            // Set up scheduler first, then apply settings after initialization
+            // set params from URL
+            let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
+            let url = new URL(sanitizedUrl);
+            let date_param = url.searchParams.get("d") || url.searchParams.get("date");
+            let view_param = url.searchParams.get("v") || url.searchParams.get("view");
+
+            let d;
+            if (d = Utils.parseDate(date_param)) {
+                scheduleObj.selectedDate = d;
+            }
+
+            if (view_param) {
+                switch (view_param.toLowerCase()) {
+                    case "d":
+                    case "day":
+                        scheduleObj.currentView = "Day"; break;
+                    case "w":
+                    case "week":
+                        scheduleObj.currentView = "Week"; break;
+                    case "12w":
+                    case "12weeks":
+                        // Map to custom 12 weeks view
+                        const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
+                        const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
+                            typeof v === 'object' && (v === customViewConfig)
+                        );
+                        if (twelveWeeksIndex !== -1) {
+                            scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
+                        }
+                        scheduleObj.currentView = twelveWeeksView.displayName;
+                        break;
+                    case "m":
+                    case "month":
+                        scheduleObj.currentView = "Month"; break;
+                    case "c":
+                    case "custom":
+                        // Check for URL parameter overrides for custom view
+                        const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
+                        const unitParam = url.searchParams.get("unit");
+
+                        let customViewToUse = customViewConfig;
+
+                        if (durParam && unitParam) {
+                            // Temporarily override custom view config from URL
+                            const duration = parseInt(durParam);
+                            const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
+
+                            if (this.validateCustomView(duration, unit)) {
+                                // Rebuild the custom view with URL parameters
+                                customViewToUse = this.buildCustomViewConfig(duration, unit);
+                                // Replace the custom view in the views array
+                                const customViewIndex = scheduleObj.views.findIndex(v =>
+                                    typeof v === 'object' && (v === customViewConfig)
+                                );
+                                if (customViewIndex !== -1) {
+                                    scheduleObj.views[customViewIndex] = customViewToUse;
+                                }
+                            }
+                        }
+
+                        // Set currentView to the display name
+                        scheduleObj.currentView = customViewToUse.displayName;
+                        break;
+                    case "q":
+                    case "quarter":
+                        // Map to custom 3 months view
+                        const quarterView = this.buildCustomViewConfig(3, 'Months');
+                        const quarterIndex = scheduleObj.views.findIndex(v =>
+                            typeof v === 'object' && (v === customViewConfig)
+                        );
+                        if (quarterIndex !== -1) {
+                            scheduleObj.views[quarterIndex] = quarterView;
+                        }
+                        scheduleObj.currentView = quarterView.displayName;
+                        break;
+                    case "y":
+                    case "year":
+                        scheduleObj.currentView = "Year"; break;
+                    case "a":
+                    case "agenda":
+                        scheduleObj.currentView = "Agenda"; break;
+                    default:
+                        break;
+                }
+            }
+
+            // disable drag and drop / resizing for touch devices
+            let touchDevice = ('ontouchstart' in document.documentElement);
+            scheduleObj.allowDragAndDrop = !touchDevice;
+            scheduleObj.allowResizing = !touchDevice;
+
+            // live binding to events
+            scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+
+            // Syncfusion is a VIEW. When the user adds, changes or removes an event on the grid,
+            // Syncfusion's own change is cancelled here and the user's intent goes to the
+            // EventStore as a command; the grid is then redrawn from the store (the calendar
+            // watcher calls updateCalendarView). Syncfusion never edits our data itself, so its
+            // internal records -- their id kinds, escaped text, stale fields -- never become it.
+            scheduleObj.actionBegin = (args) => {
+                if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
+                args.cancel = true;
+                this.editorSaved = true;
+                this.applyScheduleAction(args);
+            };
+            // An editor that closes without a save is the "this was confusing or fiddly" signal.
+            scheduleObj.popupClose = (args) => {
+                this.hideDraftBlock();
+                if (args.type !== 'Editor') return;
+                if (!this.editorSaved) track(a => a.editorAbandoned());
+                this.editorSaved = false;
+            };
+            // The user's change is measured from the event as it was when they started (see
+            // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
+            scheduleObj.dragStart = (args) => ScheduleAdapter.noteStart(args.data);
+            scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
+
+            // color events based on type
+            // Month view day names ("Monday") get a short form ("Mon") that phones show instead
+            // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
+            scheduleObj.renderCell = (args) => {
+                // Week/Day: the corner above the time column toggles the hours before the
+                // start hour (calendar.options.extended; click handler below). It used to say
+                // "12-4 AM" whatever the start hour was, and the same when they were showing.
+                if (args.elementType === 'emptyCells' && args.element
+                    && args.element.classList.contains('e-header-cells')) {
+                    const label = this.earlyHoursLabel();
+                    args.element.setAttribute('data-pc-label', label.text);
+                    if (label.title) args.element.title = label.title;
+                    return;
+                }
+                if (args.elementType !== 'monthDay' || !args.element) return;
+                const label = args.element.querySelector('span') || args.element;
+                const full = (label.textContent || '').trim();
+                if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
+            };
+
+            scheduleObj.eventRendered = (args) => {
+                // change color as needed
+                categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
+                if (scheduleObj.currentView === 'Agenda') {
+                    args.element.firstChild.style.borderLeftColor = categoryColor;
+                } else {
+                    args.element.style.backgroundColor = categoryColor;
+                    // Its text: dark on light colors, white on dark (style.css reads the variable).
+                    args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
+                }
+                ScheduleAdapter.showTitle(args.element, args.data);
+            }
+
+            // custom display for types
+            scheduleObj.popupOpen = (args) => {
+                // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
+                // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
+                // series, several selected) runs unchanged. The "this event or the series?" choice stays.
+                if (args.type === 'DeleteAlert') {
+                    document.body.classList.add('pc-skip-confirm');
+                    requestAnimationFrame(() => {
+                        const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
+                        if (del) del.click();
+                        setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
+                    });
+                    return;
+                }
+                if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+                // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
+                // label follows the title being typed (as Google Calendar does), so you see where it will land.
+                if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
+                // The popup header takes the event's color; its title and icons take the matching text color.
+                if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
+                    args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
+                }
+                // The date line opens the editor (click handler by appendTo below); say so on hover.
+                if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
+                    const when = args.element.querySelector('.e-event-popup .e-date-time');
+                    if (when) when.title = 'Change date or time';
+                }
+
+
+                // One popup at a time. A double-click on a day fires Syncfusion's quick
+                // popup twice and THEN the editor, and Syncfusion never closes that quick
+                // popup: it stays open behind the editor, and when its open animation
+                // finishes it focuses its own title box. Whatever the user was typing in
+                // the editor -- usually the description -- carries on into that invisible
+                // box, and the editor then saves with no title ("Add title"). That is the
+                // second half of #32: "no way to save once you've written a description".
+                //
+                // So a quick popup may not open over an editor, and opening the editor
+                // closes any quick popup already up.
+                if (args.type === 'QuickInfo' && document.querySelector('.e-schedule-dialog.e-popup-open')) {
+                    args.cancel = true;
+                    return;
+                }
+                if (args.type === 'Editor' && typeof scheduleObj.closeQuickInfoPopup === 'function') {
+                    scheduleObj.closeQuickInfoPopup();
+                }
+
+                if (args.type === 'Editor' && this.lockedOut) {
+                    args.cancel = true;
+                    this.showToast(this.lockedOutMessage, 'info');
+                    return;
+                }
+                if (args.type === 'Editor') {
+                    this.editorSaved = false;
+                    ScheduleAdapter.noteStart(args.data);
+                    // A yearly "last Monday of October" is drawn as every 12 months (ScheduleAdapter, #48); the
+                    // repeat editor shows and saves the yearly rule it stands for.
+                    if (args.data && args.data._gridRule) {
+                        const re = args.element.querySelector('.e-recurrenceeditor');
+                        const inst = re && re.ej2_instances && re.ej2_instances[0];
+                        if (inst) inst.setRecurrenceRule(ScheduleAdapter.editorRule(args.data), args.data.StartTime);
+                    }
+
+                    // Configure datetime pickers with strictMode and the user's chosen date format.
+                    // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
+                    // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
+                    // pattern from globalSettings.dateFormat, falling back to navigator.language.
+                    const startElement = args.element.querySelector('[name="StartTime"]');
+                    const endElement = args.element.querySelector('[name="EndTime"]');
+                    const dateFmt = this.resolveDateFormat();
+                    const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                    const dateTimeFmt = `${dateFmt} ${timeFmt}`;
+
+                    if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
+                        const startPicker = startElement.ej2_instances[0];
+                        startPicker.strictMode = true;
+                        startPicker.format = dateTimeFmt;
+                    }
+
+                    if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
+                        const endPicker = endElement.ej2_instances[0];
+                        endPicker.strictMode = true;
+                        endPicker.format = dateTimeFmt;
+                    }
+
+                    function setColor(id) {
+                        if (!window.btnObj) {
+                            return;
+                        }
+
+                        window.btnObj.element.style.background = app.COLORS[id - 1];
+                        // The color is a form field (name="Type", class e-field): Syncfusion reads
+                        // it into the record it hands actionBegin, and the store saves that. Nothing
+                        // writes into Syncfusion's own event objects.
+                        window.inputEle.setAttribute('value', id);
+                        window.inputEle.value = id;
+                        // Whether people categorise events at all decides if type
+                        // labels/colors are worth building on (see pro.md).
+                        track(a => a.featureUsed('event_type', 'popup'));
+                        // console.log("Color set to:", id, "for event:", args.data);
+                    }
+
+                    // Initial setup
+                    if (!args.element.querySelector('.custom-field-row-color')) {
+
+                        // console.log("Initial args", args);
+
+                        // button dropdown
+                        // TODO: allow live edit (vs reload for types)
+                        let items = app.getTypes();
+
+                        window.btnObj = new ej.splitbuttons.DropDownButton({
+                            items: items,
+                            iconCss: 'e-type',
+                            select: (button_args) => {
+                                // console.log("select type args", button_args);
+                                let type = button_args.item.value;
+                                // Only the form field changes; the record Syncfusion builds from
+                                // the form on Save carries it (see setColor).
+                                setColor(type);
+                            },
+                            open: () => {
+                                app.dropdownOpen = true;
+                                updateTooltipVisibility();
+                            },
+                            close: () => {
+                                app.dropdownOpen = false;
+                                // Take the hint out of the popup on every close. Syncfusion drops
+                                // its item list on close and, on the next open, renders the items
+                                // into the popup's FIRST CHILD -- which, with the list gone, was
+                                // this hint. On phones the hint is hidden, so the colors rendered
+                                // inside a hidden div: a 0x0 menu, and no way to change an event's
+                                // color after the first time per visit (#32: "impossible de
+                                // changer les couleurs"). open re-appends it after the list.
+                                if (window.typeTooltip && window.typeTooltip.parentElement) window.typeTooltip.remove();
+                                updateTooltipVisibility();
+                            }
+                        });
+
+                        var createElement = ej.base.createElement;
+                        let row = createElement('div', { className: 'custom-field-row-color group' });
+                        let formElement = args.element.querySelector('.e-schedule-form');
+                        formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
+                        let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
+
+                        window.inputEle = createElement('input', {
+                            className: 'e-type e-field', attrs: { name: 'Type' }
+                        });
+                        container.appendChild(window.inputEle);
+                        row.appendChild(container);
+
+                        btnObj.appendTo(container);
+                        window.inputEle.setAttribute('name', 'Type');
+                        window.inputEle.style.display = "none";
+                        window.inputEle.setAttribute('value', args.data.Type);
+
+                        // Add tooltip for customizing labels (shown in dropdown when opened)
+                        let tooltip = createElement('div', {
+                            id: 'type-label-hint',
+                            className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
+                            innerHTML: `Name these colors in Settings`
+                        });
+                        tooltip.style.background = 'var(--panel-bg)';
+                        tooltip.style.color = 'var(--text-color-1)';
+                        tooltip.style.borderTop = '1px solid var(--border-color)';
+                        // Will be appended to dropdown after it's rendered
+                        window.typeTooltip = tooltip;
+                    }
+
+                    // Function to update tooltip visibility based on dropdown state
+                    window.updateTooltipVisibility = () => {
+                        const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i + 1}`);
+                        const shouldShow = app.dropdownOpen && isDefaultLabels && window.innerWidth >= 768;
+
+                        if (window.typeTooltip) {
+                            // Append tooltip to dropdown popup if not already there
+                            if (app.dropdownOpen && !window.typeTooltip.parentElement) {
+                                const dropdownPopup = document.querySelector('.e-dropdown-popup.e-popup-open ul');
+                                if (dropdownPopup) {
+                                    dropdownPopup.parentElement.appendChild(window.typeTooltip);
+                                }
+                            }
+
+                            window.typeTooltip.classList.toggle('hidden', !shouldShow);
+                        }
+                    };
+
+                    // Initialize dropdown state
+                    app.dropdownOpen = false;
+                    updateTooltipVisibility();
+
+                    // Initialize with existing type or default to Type 1
+                    const initialType = args.data.Type || 1;
+                    setColor(initialType);
+
+                    // Make sure the event has a Type property even if not selected
+                    if (!args.data.Type) {
+                        args.data.Type = 1; // Default to first type if not set
+                    }
+
+                    //setColor(args.data.Type);
+                }
+
+                // Syncfusion positions the popup (top/left) based on its natural,
+                // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
+                // shrinks a long-description popup without updating that position, so a
+                // popup meant to be vertically centered near the click target can end up
+                // with its top or bottom pushed outside the viewport, with no way to scroll
+                // back to the clipped part.
+                //
+                // A JS fix that rewrites style.top after the fact was tried and reverted: it
+                // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
+                // close rendered blank) even though DOM and computed styles were identical to
+                // the working case -- a genuine paint bug from mutating position mid-transition,
+                // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
+                // position: fixed + vertical centering via pure CSS, which sidesteps that
+                // entirely since it participates in Syncfusion's own layout/paint pass instead
+                // of fighting it after the fact.
+                //
+                // The class must only apply when the popup actually overflows -- applying it
+                // unconditionally force-centers every popup regardless of size, dragging a
+                // short popup (e.g. a one-line description) away from the event it belongs to
+                // even when it would have fit fine at Syncfusion's own position.
+                const wrapper = args.element.closest('.e-quick-popup-wrapper');
+                if (wrapper) {
+                    // Widen the popup for long descriptions -- narrow-column wrapping makes a
+                    // multi-paragraph description feel cramped. 480px was chosen (not something
+                    // wider, like 700px) specifically to keep collision risk low: on a month view
+                    // packed with events, a much wider popup routinely covers a neighboring day's
+                    // event, and clicking what looks like that event actually lands on the
+                    // popup's own content -- Syncfusion doesn't see it as an event click at all,
+                    // so the popup silently keeps showing the wrong title/content at the wrong
+                    // position. Rather than chase that with active collision-avoidance (tried:
+                    // pushing the popup down until clear doesn't converge on a busy grid, and
+                    // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
+                    // to stay narrow enough that overlap is rare in the first place -- matching
+                    // how other calendar apps (e.g. Google Calendar) handle this same tension.
+                    // Must run before the overflow clamp below, since widening changes how the
+                    // text wraps and therefore how tall (and whether it overflows) the popup ends up.
+                    const LONG_DESCRIPTION_THRESHOLD = 140;
+                    wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
+
+                    const applyClampIfOverflowing = () => {
+                        const margin = 10;
+
+                        // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
+                        // 1000px+ off on a wide viewport, worse right after a different popup was
+                        // open and closed (its clamped/offset state seems to leak into the next
+                        // centering calculation), but present even on a cold click. Rather than
+                        // chase Syncfusion's internal math, anchor to args.target -- the actual
+                        // clicked .e-appointment element -- which is ground truth for where the
+                        // popup should visually appear, regardless of what Syncfusion computed.
+                        if (args.target) {
+                            const targetRect = args.target.getBoundingClientRect();
+                            const wrapperRect = wrapper.getBoundingClientRect();
+                            const offsetParentRect = wrapper.offsetParent
+                                ? wrapper.offsetParent.getBoundingClientRect()
+                                : { left: 0, top: 0 };
+
+                            let desiredLeft = targetRect.left - offsetParentRect.left;
+                            let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
+
+                            // Keep it on-screen: clamp horizontally, and flip above the target if
+                            // there's no room below.
+                            const viewportLeft = desiredLeft + offsetParentRect.left;
+                            if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
+                                desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
+                            }
+                            if (desiredLeft + offsetParentRect.left < margin) {
+                                desiredLeft = margin - offsetParentRect.left;
+                            }
+                            const viewportTop = desiredTop + offsetParentRect.top;
+                            if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
+                                desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
+                            }
+
+                            wrapper.style.left = `${desiredLeft}px`;
+                            wrapper.style.top = `${desiredTop}px`;
+                        }
+
+                        const rect = wrapper.getBoundingClientRect();
+                        const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
+                        wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
+                    };
+
+                    // popupOpen fires while the wrapper still carries its closed-state class
+                    // (e-popup-close) and pre-open position -- Syncfusion applies its final
+                    // position asynchronously as part of the open transition. Wait for the
+                    // class to flip to e-popup-open before measuring for overflow.
+                    if (wrapper.classList.contains('e-popup-open')) {
+                        applyClampIfOverflowing();
+                    } else {
+                        const classObserver = new MutationObserver(() => {
+                            if (wrapper.classList.contains('e-popup-open')) {
+                                classObserver.disconnect();
+                                requestAnimationFrame(applyClampIfOverflowing);
+                            }
+                        });
+                        classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
+                    }
+                }
+            }
+
+            // Belt to the braces above. Syncfusion can leave a quick popup alive behind the
+            // editor (a double-click opens two of them before the editor), and that popup
+            // pulls focus into its own title box when the user clicks into the editor's
+            // Description -- measured at 3ms after the click. Closing it through the API is
+            // not reliable against its own timers, so enforce the rule at the only place
+            // that matters: while an editor is open, focus may not enter a quick popup. It
+            // goes straight back to the field the user was in, so no keystroke is lost.
+            document.addEventListener('focusin', (e) => {
+                const target = e.target;
+                if (!target || !target.closest || !target.closest('.e-quick-popup-wrapper')) return;
+                if (!document.querySelector('.e-schedule-dialog.e-popup-open')) return;
+                const back = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.e-schedule-dialog')
+                    ? e.relatedTarget
+                    : document.querySelector('.e-schedule-dialog.e-popup-open input[name="Subject"]');
+                if (back) back.focus();
+                if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
+            }, true);
+
+            // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
+            // editor, as the pencil does. People clicked it expecting to change the time, and the
+            // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
+            // links and locked calendars have none, so their date line stays plain text.
+            document.addEventListener('click', (e) => {
+                const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
+                if (!when) return;
+                const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
+                if (edit && !edit.disabled && edit.offsetParent) edit.click();
+            });
+
+            scheduleObj.appendTo('#Schedule');
+
+            // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
+            // Say why, instead of leaving people clicking at a calendar that ignores them.
+            try {
+                const el = document.getElementById('Schedule');
+                if (el) el.addEventListener('dblclick', (e) => {
+                    if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
+                        this.showToast(this.lockedOutMessage, 'info');
+                    }
+                });
+            } catch (e) { /* no grid: nothing to explain */ }
+
+            // View links: a click on a day opens that day, as a click on its date number already
+            // does. Syncfusion's own day click opens the new-event box, which read-only mode
+            // turns off, so on a view link the click did nothing: a third of the day clicks there
+            // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
+            // A click made while an event popup or "+N more" list is open only closes it (as on an
+            // edit link); the popup is already gone by the click, so look at the press.
+            let popupAtPress = false;
+            scheduleObj.element.addEventListener('pointerdown', () => {
+                popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
+            }, true);
+            scheduleObj.element.addEventListener('click', (e) => {
+                if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
+                if (popupAtPress) {
+                    // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
+                    const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
+                    if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
+                    return;
+                }
+                const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
+                if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
+                const day = scheduleObj.getCellDetails(cell);
+                if (!day || !day.startTime) return;
+                scheduleObj.selectedDate = day.startTime;
+                scheduleObj.currentView = 'Day';
+            });
+
+            // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
+            // while it renders. On first load the grid is still being built (and fonts/styles may
+            // still be landing) when events are laid out, so chips can come out ~30px wide until
+            // something forces a layout (an edit did). Re-lay-out once after the first events
+            // render has settled, and whenever the container's width changes.
+            let settleTimer;
+            const relayout = () => {
+                clearTimeout(settleTimer);
+                settleTimer = setTimeout(() => scheduleObj.refreshLayout(), 50);
+            };
+            // A month-view chip is never narrower than one cell, so a narrower one is stale.
+            // Checked after every render (not on a timer, which was a guess about when the grid
+            // is done); capped so a view that can't satisfy it can't loop.
+            let staleRetries = 0;
+            scheduleObj.addEventListener('dataBound', () => {
+                requestAnimationFrame(() => {
+                    const cell = document.querySelector('.e-schedule .e-month-view .e-work-cells');
+                    const chip = document.querySelector('.e-schedule .e-month-view .e-appointment');
+                    if (!cell || !chip) { staleRetries = 0; return; }
+                    if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
+                    if (staleRetries++ < 3) relayout();
+                });
+            });
+            // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
+            // with empty page below, and the side panel (same grid row) follows. Rows grow, never
+            // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
+            const fitMonthRows = () => {
+                const sched = document.getElementById('Schedule');
+                const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
+                if (!rows.length) return false;
+                let h = 100;
+                if (window.innerWidth >= 1100) {
+                    const rect = sched.getBoundingClientRect();
+                    const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                    // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
+                    const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                    const cs = foot && getComputedStyle(foot);
+                    const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                    h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+                    // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
+                    if (document.getElementById('how')) h = Math.min(h, 116);
+                }
+                const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
+                if (Math.abs(now - h) < 2) return false;
+                sched.style.setProperty('--month-cell-h', h + 'px');
+                return true;
+            };
+            scheduleObj.addEventListener('dataBound', () => {
+                requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
+            });
+            this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
+            let fitTimer = null;
+            window.addEventListener('resize', () => {
+                clearTimeout(fitTimer);
+                fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
+            });
+            const calWrap = document.getElementById('cal2_wrap');
+            if (calWrap && window.ResizeObserver) {
+                let lastWidth = calWrap.offsetWidth;
+                new ResizeObserver(() => {
+                    const w = calWrap.offsetWidth;
+                    if (w && w !== lastWidth) { lastWidth = w; relayout(); }
+                }).observe(calWrap);
+            }
+
+            // Add event listener to mark month-start dates and colorize year view dots
+            scheduleObj.dataBound = function () {
+                // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
+                // is not a Vue dependency -- without this the count would go stale the moment
+                // the user changed week or switched view.
+                app.viewTick++;
+
+                // Find all date headers and mark ones with month names (contain space)
+                const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
+                dateHeaders.forEach(header => {
+                    const text = header.textContent.trim();
+                    // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
+                    if (text.includes(' ')) {
+                        header.classList.add('month-start');
+                    } else {
+                        header.classList.remove('month-start');
+                    }
+                });
+
+                // Colorize year view dots based on event types
+                if (scheduleObj.currentView === 'Year') {
+                    const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
+                    const allEvents = scheduleObj.eventsData || [];
+
+                    // Helper to check if a recurring event occurs on a given date
+                    const eventOccursOnDate = (event, targetDate) => {
+                        const eventStart = new Date(event.StartTime);
+                        const eventEnd = new Date(event.EndTime);
+                        const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+                        const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
+
+                        // Event must have started on or before target date
+                        const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+                        if (eventStartDay > targetStart) return false;
+
+                        // For non-recurring events, check if date overlaps
+                        if (!event.RecurrenceRule) {
+                            return eventStart < targetEnd && eventEnd > targetStart;
+                        }
+
+                        // For recurring events, parse the RecurrenceRule
+                        const rule = event.RecurrenceRule;
+                        const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+                        const targetDayName = dayNames[targetDate.getDay()];
+
+                        // Check BYDAY constraint
+                        const bydayMatch = rule.match(/BYDAY=([^;]+)/);
+                        if (bydayMatch) {
+                            const allowedDays = bydayMatch[1].split(',');
+                            if (!allowedDays.includes(targetDayName)) return false;
+                        }
+
+                        // Check FREQ and INTERVAL
+                        const freqMatch = rule.match(/FREQ=(\w+)/);
+                        const intervalMatch = rule.match(/INTERVAL=(\d+)/);
+                        const freq = freqMatch ? freqMatch[1] : 'DAILY';
+                        const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
+
+                        // Calculate if target date matches the recurrence pattern
+                        const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
+
+                        if (freq === 'DAILY') {
+                            return daysDiff % interval === 0;
+                        } else if (freq === 'WEEKLY') {
+                            // For weekly with BYDAY, just check if day is in BYDAY (already done above)
+                            // and target is at least interval weeks from a valid occurrence
+                            const weeksDiff = Math.floor(daysDiff / 7);
+                            return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
+                        } else if (freq === 'MONTHLY') {
+                            // Check if same day of month
+                            return eventStart.getDate() === targetDate.getDate();
+                        } else if (freq === 'YEARLY') {
+                            // Check if same month and day
+                            return eventStart.getMonth() === targetDate.getMonth() &&
+                                   eventStart.getDate() === targetDate.getDate();
+                        }
+
+                        return true; // Default: assume it occurs
+                    };
+
+                    cells.forEach(cell => {
+                        const appointmentDiv = cell.querySelector('.e-appointment');
+                        if (!appointmentDiv) return;
+
+                        // Get the date for this cell
+                        const dateMs = parseInt(cell.getAttribute('data-date'));
+                        const cellDate = new Date(dateMs);
+
+                        // Find all events that occur on this date
+                        const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
+
+                        if (eventsOnDate.length > 0) {
+                            // Get unique event types for this day
+                            const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
+
+                            if (types.length === 1) {
+                                // Single type: color the dot with that type's color
+                                const color = app.COLORS[types[0] - 1] || app.COLORS[0];
+                                appointmentDiv.style.backgroundColor = color;
+                            } else {
+                                // Multiple types: show multiple dots
+                                appointmentDiv.style.display = 'none';
+
+                                // Remove any existing color dots
+                                cell.querySelectorAll('.color-dot').forEach(d => d.remove());
+
+                                // Create a container for multiple dots
+                                const dotsContainer = document.createElement('div');
+                                dotsContainer.className = 'color-dots-container';
+                                dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
+
+                                // Add a dot for each type (max 3 to avoid overflow)
+                                types.slice(0, 3).forEach(type => {
+                                    const dot = document.createElement('div');
+                                    dot.className = 'color-dot';
+                                    const color = app.COLORS[type - 1] || app.COLORS[0];
+                                    dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
+                                    dotsContainer.appendChild(dot);
+                                });
+
+                                cell.appendChild(dotsContainer);
+                            }
+                        }
+                    });
+                }
+            };
+            return CalendarView.syncfusion(scheduleObj, this);
+        },
+
         // ============================================================
         // REGION: Calendar Initialization & Setup
         // ============================================================
@@ -2595,30 +3665,14 @@ const CalendarVueApp = {
         },
 
         updateCalendarView() {
-            // Step 1: Ensure this.syncFusionEvents is up-to-date from the master store (this.calendar.events).
-            // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
-            this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-
-            // Step 2: Hand the scheduler only the events the color filter admits.
-            //
-            // This filters the array rather than passing a DataManager plus an ej.data.Query
-            // predicate. The query built an allow-list of `Type == n` clauses, which is a
-            // second, separate definition of "visible" alongside isEventVisible() -- and
-            // every round of issue #41 was those two definitions disagreeing (first about
-            // whether the search panel was open, then about types with no color slot, then
-            // about how `type` is normalized). One predicate, used here and by
-            // hiddenEventCount, makes that whole class of bug unrepresentable.
-            scheduleObj.setProperties({
-                eventSettings: {
-                    dataSource: this.syncFusionEvents.filter(e => this.isEventVisible(e)),
-                    query: new ej.data.Query()
-                }
-            });
-
-            // Step 3: Re-bind the data to ensure the Scheduler reflects the changes.
-            // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
-            // when dataSource changes significantly.
-            scheduleObj.dataBind();
+            if (!this.calView) return;   // before mounted() built the calendar: it draws the events when it mounts
+            if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh());   // the open card follows a change from elsewhere
+            // Syncfusion is handed display records (ScheduleAdapter.toView); the native calendar reads
+            // calendar.events itself. Either way the color filter is one predicate, isEventVisible (#41):
+            // a second definition of "visible" (Syncfusion's ej.data.Query allow-list) is how every round
+            // of #41 happened. CalendarView.render() hands the grid only what it admits.
+            if (this.calView.kind === 'syncfusion') this.syncFusionEvents = this.calendar.getSyncFusionEvents();
+            this.calView.render();
         },
 
         /**
@@ -2644,9 +3698,11 @@ const CalendarVueApp = {
                         this.calendar.setEvents(list);
                     },
                     onError: (err, command) => {
-                        console.warn('[store] command failed:', err.message, command);
-                        track(a => a.jsError('command_failed', err.message, (command && command.label) || (command && command.type) || 'command'));
-                        this.showToast(`Couldn't save that change: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                        console.warn('[store] command failed:', err.code, command && command.type);
+                        // Analytics gets a code, never an event's text (EventStore.report); the title is for the toast only.
+                        const sent = EventStore.report(err, command);
+                        track(a => a.jsError('command_failed', sent.message, sent.where));
+                        this.showToast(err.userMessage || `Couldn't save that change: ${err.title ? `"${err.title}" ` : ''}${err.message.replace(/^\w+: /, '')}`, 'error');
                     },
                 });
             }
@@ -2656,24 +3712,36 @@ const CalendarVueApp = {
         /** A grid action (Syncfusion's add / change / remove, cancelled in actionBegin) -> the store. */
         applyScheduleAction(args) {
             const active = window.scheduleObj && window.scheduleObj.activeEventData && window.scheduleObj.activeEventData.event;
+            const ui = (window.scheduleObj && window.scheduleObj.uiStateValues) || {};
+            const context = {
+                action: window.scheduleObj && window.scheduleObj.currentAction,
+                occurrenceStart: active && active.StartTime,
+                keepOccurrences: !!ui.isIgnoreOccurrence,
+            };
+            // Syncfusion clears this flag in the step we cancel; clear it so a "No" here
+            // cannot leak into the next series edit.
+            ui.isIgnoreOccurrence = false;
+            return this.commitScheduleAction(args, context);
+        },
+
+        /**
+         * One calendar action, in Syncfusion's record shapes (ScheduleAdapter), -> the store: the one write path both
+         * calendars share. The classic grid hands its own actionBegin args here (applyScheduleAction); the native one
+         * builds the same args from what the person did (nativeAction). context: { action ('Add' | 'Save' | 'Delete' |
+         * 'EditOccurrence' | 'DeleteOccurrence' | 'EditSeries' | 'DeleteSeries'), occurrenceStart, keepOccurrences }.
+         * Returns true when something was saved.
+         */
+        commitScheduleAction(args, context) {
             let command;
             try {
-                const ui = (window.scheduleObj && window.scheduleObj.uiStateValues) || {};
-                command = ScheduleAdapter.toCommand(args, this.store(), {
-                    action: window.scheduleObj && window.scheduleObj.currentAction,
-                    occurrenceStart: active && active.StartTime,
-                    keepOccurrences: !!ui.isIgnoreOccurrence,
-                });
-                // Syncfusion clears this flag in the step we cancel; clear it so a "No" here
-                // cannot leak into the next series edit.
-                ui.isIgnoreOccurrence = false;
+                command = ScheduleAdapter.toCommand(args, this.store(), context);
             } catch (err) {
                 // An action the adapter cannot map safely: nothing is saved, the person is
                 // told, and it is logged with the action name (command_failed).
-                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${window.scheduleObj && window.scheduleObj.currentAction}` });
-                return;
+                this.store().onError(err, { type: 'schedule', where: `${args.requestType}/${context && context.action}` });
+                return false;
             }
-            if (!command.commands.length) return;
+            if (!command.commands.length) return false;
             const deleting = args.requestType === 'eventRemove';
             const subject = (r) => r && r.Subject ? `"${String(r.Subject).trim()}"` : 'event';
             const records = [...(args.deletedRecords || []), ...(args.changedRecords || [])];
@@ -2682,12 +3750,13 @@ const CalendarVueApp = {
                 : (args.deletedRecords || []).length ? `Deleted ${subject(args.deletedRecords[0])}`
                 : `Deleted one ${subject(records[0])}`;
             const r = this.store().dispatch(command, { label });
-            if (!r.ok) return;
+            if (!r.ok) return false;
             // A real, user-initiated change to this calendar (sync() also runs for other
             // people's edits echoing back, so it cannot be recorded there).
             if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             if (args.requestType === 'eventCreate') { track(a => a.eventAdded('grid', this.calendar)); this.noteHomepageEvent(); }
             if (deleting) this.offerUndo(label);
+            return true;
         },
 
         // ============================================================
@@ -2701,7 +3770,7 @@ const CalendarVueApp = {
             try { localStorage.setItem('pc_home_aside', this.homeAsideHidden ? 'hidden' : 'shown'); } catch (e) { /* this visit only */ }
             track(a => a.track('feature_used', { feature: this.homeAsideHidden ? 'home_aside_hidden' : 'home_aside_shown' }));
             // The calendar measures its width only on window resize; tell it the column moved.
-            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+            this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
         },
 
         // One tour_seen per section per page view, when half of it is on screen.
@@ -3018,11 +4087,11 @@ const CalendarVueApp = {
         // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
         // As many events as fit in a day on paper; the rest are "+N more".
         buildPrintMonth() {
-            const sch = window.scheduleObj;
-            if (!sch || !sch.getEvents) return null;
-            const sel = new Date(sch.selectedDate || Date.now());
+            const cal = this.calView;
+            if (!cal) return null;
+            const sel = cal.selectedDate();
             const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
-            const fdow = Number(sch.firstDayOfWeek) || 0;
+            const fdow = Number(this.globalSettings.firstDayOfWeek) || 0;
             const start = new Date(first); start.setDate(1 - ((first.getDay() - fdow + 7) % 7));
             const last = new Date(sel.getFullYear(), sel.getMonth() + 1, 0);
             const weeks = Math.ceil(((last - start) / 864e5 + 1) / 7);
@@ -3030,7 +4099,8 @@ const CalendarVueApp = {
             const loc = navigator.language || 'en-US';
             const en = /^en/i.test(loc);
             const time = (d) => { const t = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' }); return en ? t.replace(':00', '').replace(/\s?([AP])M/i, (m, x) => x.toLowerCase() + 'm') : t; };
-            const evs = (sch.getEvents(start, end, true) || []).map((e) => ({ s: new Date(e.StartTime), e: new Date(e.EndTime), all: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type }))
+            // Repeats expanded, as the grid draws them (CalendarView.occurrences: the color filter applies).
+            const evs = (cal.occurrences(start, end) || []).map((e) => ({ s: e.start, e: e.end, all: e.allDay, title: e.title || '(No title)', type: e.type }))
                 .sort((a, b) => (b.all - a.all) || (a.s - b.s));
             const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
             const out = [];
@@ -3274,8 +4344,9 @@ const CalendarVueApp = {
 
 
         updateCurrentViewURL() {
-            const currentView = scheduleObj.currentView;
-            const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
+            if (!this.calView) return;
+            const currentView = this.calView.currentView();
+            const currentDate = this.calView.selectedDate().toISOString().slice(0, 10);
 
             // Map display name to URL parameter
             let viewParam;
@@ -3502,8 +4573,10 @@ const CalendarVueApp = {
 
         searchEvents() {
             if (this.searchQuery.trim() !== '') {
+                // A title or its details (classic and native alike), ignoring case.
+                const q = this.searchQuery.toLowerCase();
                 this.searchResults = this.calendar.events.filter(event =>
-                    event.title.toLowerCase().includes(this.searchQuery.toLowerCase())
+                    String(event.title || '').toLowerCase().includes(q) || String(event.description || '').toLowerCase().includes(q)
                 );
 
                 // sort results by newest first
@@ -3548,14 +4621,7 @@ const CalendarVueApp = {
         // Syncfusion exposes it as getCurrentViewDates(); falling back to null means the
         // count degrades to "all events" rather than throwing.
         visibleDateRange() {
-            if (typeof scheduleObj === 'undefined' || !scheduleObj) return null;
-            const dates = typeof scheduleObj.getCurrentViewDates === 'function'
-                ? scheduleObj.getCurrentViewDates() : null;
-            if (!dates || !dates.length) return null;
-            const first = new Date(dates[0]).getTime();
-            const last = new Date(dates[dates.length - 1]).getTime();
-            if (isNaN(first) || isNaN(last)) return null;
-            return { start: first, end: last + 86400000 }; // through the end of the last day
+            return this.calView ? this.calView.visibleRange() : null;
         },
 
         // Does this series actually put an occurrence inside the window? The stored start
@@ -3568,10 +4634,9 @@ const CalendarVueApp = {
         recurrenceOccursInRange(event, range) {
             // The live scheduler cannot answer this: hidden events are filtered out of its
             // dataSource, so it would report "no occurrences" for precisely the events
-            // being counted. Expand the rule in isolation instead.
-            // An all-day series is expanded from the same values the grid is given
-            // (Calendar.getSyncFusionEvents): start, UNTIL and EXDATEs at the viewer's
-            // local midnight of their stored dates.
+            // being counted. The rule is expanded in isolation (CalendarView.occursInRange),
+            // from the values the grid is given: an all-day series' start, UNTIL and EXDATEs
+            // at the viewer's local midnight of their stored dates.
             const allDay = !!event.isAllDay;
             const ms = (v) => {
                 const d = allDay ? Event.allDayToLocal(v) : new Date(v);
@@ -3579,34 +4644,22 @@ const CalendarVueApp = {
             };
             const start = ms(event.start);
             if (isNaN(start)) return true;
-            const end = ms(event.end);
-            const duration = isNaN(end) ? 0 : Math.max(0, end - start);
             // A rule too big to expand is shown once (ScheduleAdapter.toView): count it the same way.
-            if (typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(event.recurrencerule)) return this.spansRange(start, start + duration, range);
-            const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
-            const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
-                : event.recurrenceException) || null;
-
-            try {
-                if (typeof ej.schedule.generate === 'function') {
-                    // Same call the scheduler makes when it renders a view: begin one event
-                    // length before the window, so an occurrence spilling in from the day
-                    // before is caught, and cap the walk at the window's length in days.
-                    const viewDate = new Date(range.start - duration);
-                    const days = Math.ceil((range.end - viewDate.getTime()) / 864e5) + 1;
-                    const firstDay = parseInt(this.globalSettings?.firstDayOfWeek) || 0;
-                    const dates = ej.schedule.generate(new Date(start), rule,
-                        exceptions, firstDay, days, viewDate);
-                    return dates.some(d => this.spansRange(d, d + duration, range));
-                }
-            } catch (err) {
-                // Fall through to the estimate: over-reporting is safer than not counting.
+            if (typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(event.recurrencerule)) {
+                const end = ms(event.end);
+                return this.spansRange(start, start + (isNaN(end) ? 0 : Math.max(0, end - start)), range);
             }
+            const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
+
+            // The calendar's own expansion (Syncfusion's ej.schedule.generate, or the native grid's rrule), the
+            // same one that draws the grid; null when it cannot answer, and then the estimate below.
+            const known = this.calView ? this.calView.occursInRange(event, range) : null;
+            if (known === true || known === false) return known;
 
             try {
                 const until = /UNTIL=([0-9TZ]+)/.exec(rule);
                 if (until) {
-                    const u = ej.schedule.getDateFromRecurrenceDateString(until[1]);
+                    const u = typeof ej !== 'undefined' ? ej.schedule.getDateFromRecurrenceDateString(until[1]) : null;
                     if (u && !isNaN(u.getTime()) && u.getTime() < range.start) return false;
                 }
                 const count = /COUNT=(\d+)/.exec(rule);
@@ -3665,14 +4718,11 @@ const CalendarVueApp = {
 
         // Edit from a search result: the same editor a double-click opens (a repeating event opens its series).
         editSearchResult(event) {
-            const data = (scheduleObj.eventsData || []).find(e => String(e.Id) === String(event.id) && !e.RecurrenceID);
-            if (data) scheduleObj.openEditor(data, data.RecurrenceRule ? 'EditSeries' : 'Save');
+            if (this.calView) this.calView.openEditor(event);
         },
 
         jumpToEvent(event) {
-            let startDate = new Date(event.start);
-            scheduleObj.selectedDate = startDate;
-            scheduleObj.currentView = 'Week';
+            if (this.calView) this.calView.goTo({ date: new Date(event.start), view: 'Week' });
         },
 
         toggleRecents() {
@@ -5488,6 +6538,7 @@ const CalendarVueApp = {
                 this.setIsReadOnly(out || this.viewRoute);
                 if (out) this.editTitle = false;
                 try {
+                    if (out && this.calView && this.calView.kind === 'native') this.calView.closePopups();
                     if (window.scheduleObj) {
                         if (out && typeof scheduleObj.closeEditor === 'function') scheduleObj.closeEditor();
                         if (out && typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
@@ -5670,7 +6721,7 @@ const CalendarVueApp = {
          * The server logs the undo as a change of its own, so it is remembered here too:
          * otherwise the /history fallback of the next Cmd+Z would offer to undo the undo.
          */
-        undoLastLocal() {
+        undoLastLocal({ quiet = false } = {}) {
             const before = this.calendar.events.map(e => new Event(e));
             const stack = this.store().undoStack;
             const tpl = this._templateUndo && this._templateUndo[this._templateUndo.length - 1];
@@ -5685,7 +6736,9 @@ const CalendarVueApp = {
             }
             if (!undone) return null;
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
-            this.showToast(`Undid: ${undone}`, 'success');
+            // The native edit link's card follows the event back (EventCard), and says only "Undone" (no button).
+            if (this.nativeEdit) this.nativeAfterUndo();
+            if (!quiet) this.showToast(this.nativeEdit ? 'Undone' : `Undid: ${undone}`, 'success');
             return undone;
         },
 
@@ -5741,6 +6794,8 @@ vueApp.config.errorHandler = (err, instance, info) => {
     console.error(err);
     try { window.pcReportError && window.pcReportError(err, `vue:${info}`); } catch (e) { /* never the failure */ }
 };
+// The native calendar's icons, used inside its own templates (a native view link only).
+if (typeof NcIcon !== 'undefined') vueApp.component('nc-icon', NcIcon);
 const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)

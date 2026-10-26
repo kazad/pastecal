@@ -1,6 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SlugService } from './SlugService.js';
 
+// Same as index.js: any name a calendar can have ("TEAM NUÑEZ", "d&d8", "sign-up!x"), not only [A-Za-z0-9_-].
+const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
+
 export class CalendarDirectory extends DurableObject {
     constructor(ctx, env) {
         super(ctx, env);
@@ -54,8 +57,8 @@ export class CalendarDirectory extends DurableObject {
             if (!body || !body.sourceCalendarId) {
                 return Response.json({ ok: false, error: 'invalid-argument', message: 'sourceCalendarId is required' }, { status: 400 });
             }
-            const sourceCalendarId = String(body.sourceCalendarId).trim();
-            if (!/^[A-Za-z0-9_-]{1,100}$/.test(sourceCalendarId)) {
+            const sourceCalendarId = String(body.sourceCalendarId);   // not trimmed: a name may end in a space
+            if (!validId(sourceCalendarId)) {
                 return Response.json({ ok: false, error: 'invalid-argument', message: 'Invalid calendar id' }, { status: 400 });
             }
             let publicViewId = null;

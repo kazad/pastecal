@@ -35,6 +35,39 @@
     // or resize began), keyed by Id|RecurrenceID. The user's change is the difference from
     // THIS, not from the current data -- see changesFrom.
     const opened = new Map();
+
+    // Syncfusion 23.2.6 draws a yearly "Nth weekday of a month" rule (FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10,
+    // its own editor's "every year on Oct Last Mon") on the wrong years: it skipped Oct 2027 (issue #48), and 148
+    // of 675 such rules checked against rrule.js came out wrong. The same rule written as every 12 months
+    // (FREQ=MONTHLY;INTERVAL=12;BYDAY=MO;BYSETPOS=-1) it draws right in all 675. So the grid is shown that form
+    // and the stored rule never changes: fromRecord turns it back. Only when BYMONTH is the start's month, where
+    // the two rules mean exactly the same dates.
+    const ruleParts = (rule) => String(rule || '').split(';').filter(Boolean).map((p) => p.split('='));
+    const yearlyByPosToGrid = (rule, start) => {
+        if (!rule || !start) return null;
+        const parts = ruleParts(rule), get = (k) => (parts.find(([key]) => key.toUpperCase() === k) || [])[1];
+        if (String(get('FREQ')).toUpperCase() !== 'YEARLY' || !/^-?[1-9]\d*$/.test(get('BYSETPOS') || '')
+            || !/^(MO|TU|WE|TH|FR|SA|SU)$/i.test(get('BYDAY') || '') || get('BYMONTH') !== String(start.getMonth() + 1)
+            || get('BYMONTHDAY') || get('BYWEEKNO') || get('BYYEARDAY')) return null;
+        const interval = parseInt(get('INTERVAL') || '1', 10);
+        if (!(interval >= 1)) return null;
+        const out = parts.filter(([k]) => k.toUpperCase() !== 'BYMONTH' && k.toUpperCase() !== 'INTERVAL')
+            .map(([k, v]) => k.toUpperCase() === 'FREQ' ? [k, 'MONTHLY'] : [k, v]);
+        out.push(['INTERVAL', String(12 * interval)]);
+        return out.map((p) => p.join('=')).join(';') + ';';
+    };
+    // The way back, also for a shown rule Syncfusion changed (e.g. "this and following" adds an UNTIL).
+    const yearlyByPosFromGrid = (rule, grid) => {
+        if (!grid || !rule) return rule;
+        if (rule === grid.shown) return grid.rule;
+        const parts = ruleParts(rule), get = (k) => (parts.find(([key]) => key.toUpperCase() === k) || [])[1];
+        const interval = parseInt(get('INTERVAL') || '0', 10);
+        if (String(get('FREQ')).toUpperCase() !== 'MONTHLY' || !get('BYSETPOS') || get('BYMONTH') || !(interval > 0) || interval % 12) return rule;
+        const out = parts.filter(([k]) => k.toUpperCase() !== 'INTERVAL')
+            .map(([k, v]) => k.toUpperCase() === 'FREQ' ? [k, 'YEARLY'] : [k, v]);
+        out.push(['BYMONTH', String(grid.month)], ['INTERVAL', String(interval / 12)]);
+        return out.map((p) => p.join('=')).join(';') + ';';
+    };
     const recKey = (r) => `${blank(r.Id) ? '' : String(r.Id)}|${blank(r.RecurrenceID) ? '' : String(r.RecurrenceID)}`;
 
     // Text on an event chip: one of these two, by contrast with the event's color.
@@ -50,6 +83,11 @@
         });
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
+
+    // A change to a series (or one of its occurrences) that is no longer in the calendar. userMessage is what the
+    // person is told; code is what analytics gets.
+    const seriesDeleted = (action) => Object.assign(new Error(`${action}: the series is not in the calendar`),
+        { code: 'series_deleted', userMessage: "This event's series was deleted." });
 
     const ScheduleAdapter = {
         /**
@@ -117,6 +155,29 @@
             return new Date(when).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
         },
 
+        /** The instant an exception stamp names (stamp's inverse), or null. */
+        stampDate(s) {
+            const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/i.exec(String(s || '').trim());
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null;
+        },
+
+        /**
+         * Exception stamps moved as a series moved from `from` to `to` (a drag of "all events"): the same wall-clock
+         * days and minutes (CalendarView.edits.shiftBy), so each stamp still names its slot in the moved series.
+         * A stamp that can't be read is kept as it is.
+         */
+        shiftStamps(list, from, to) {
+            const a = new Date(from), b = new Date(to);
+            const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+            const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+            return String(list || '').split(',').map((x) => x.trim()).filter(Boolean).map((s) => {
+                const d = ScheduleAdapter.stampDate(s);
+                if (!d) return s;
+                d.setDate(d.getDate() + days); d.setMinutes(d.getMinutes() + minutes);
+                return ScheduleAdapter.stamp(d);
+            }).join(',');
+        },
+
         /**
          * Our events -> the records Syncfusion draws.
          *
@@ -151,6 +212,8 @@
                     ? EventStore.unsafeRecurrence(e.recurrencerule) : null;
                 if (unsafe && !warnedRules.has(e.id)) { warnedRules.add(e.id); console.warn(`[pastecal] event ${e.id}: ${unsafe}; shown once, not repeated`); }
                 const rule = unsafe ? '' : e.recurrencerule;
+                const shownRule = allDaySeries ? Event.allDayRuleToLocal(rule) : rule;
+                const gridRule = yearlyByPosToGrid(shownRule, start);
                 return {
                     Id: asText(e.id),
                     Subject: e.title,
@@ -162,7 +225,8 @@
                     _allDaySeries: allDaySeries,
                     ...(allDaySeries ? { _storedRule: rule, _storedException: e.recurrenceException } : {}),
                     Description: e.description,
-                    RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(rule) : rule,
+                    RecurrenceRule: gridRule || shownRule,
+                    ...(gridRule ? { _gridRule: { shown: gridRule, rule: shownRule, month: start.getMonth() + 1 } } : {}),
                     Type: parseInt(e.type || 1, 10),
                     IsAllDay: !!e.isAllDay,
                     Recurrence: e.repeat,
@@ -173,8 +237,14 @@
             });
         },
 
+        /** The rule a record stands for, as Syncfusion's editor should show it (see yearlyByPosToGrid). */
+        editorRule(r) {
+            return r && r._gridRule ? yearlyByPosFromGrid(r.RecurrenceRule, r._gridRule) : r && r.RecurrenceRule;
+        },
+
         /** One Syncfusion record -> the fields of our event it describes. */
         fromRecord(r) {
+            if (r && r._gridRule && 'RecurrenceRule' in r) r = { ...r, RecurrenceRule: yearlyByPosFromGrid(r.RecurrenceRule, r._gridRule) };
             const out = {
                 id: blank(r.Id) ? null : r.Id,
                 recurrenceID: blank(r.RecurrenceID) ? null : r.RecurrenceID,
@@ -224,6 +294,8 @@
             if (action === 'EditOccurrence' || action === 'DeleteOccurrence') {
                 const r = (args.changedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
+                // The series was deleted (by someone else) while this occurrence's editor or popup was open.
+                if (r && !master) throw seriesDeleted(action);
                 const when = context.occurrenceStart || (r && r.StartTime);
                 if (master && when && (!store.find(keyOf(r)) || action === 'DeleteOccurrence')) {
                     // The grid shows an all-day occurrence at the viewer's local midnight; the
@@ -234,7 +306,14 @@
                     const list = String(master.recurrenceException || '').split(',').map((x) => x.trim()).filter(Boolean);
                     if (!list.includes(stamp)) list.push(stamp);
                     commands.push({ type: 'update', key: master, changes: { recurrenceException: list.join(',') } });
-                    if (action === 'EditOccurrence') {
+                    // One slot, one row: if this occurrence already has its edited row (someone else saved "This
+                    // event" on it while this editor was open), change that row instead of adding a second.
+                    const edited = action === 'EditOccurrence' && (store.getEvents() || []).find((e) => e && !blank(e.recurrenceID)
+                        && String(e.recurrenceID) === String(master.id) && String(e.recurrenceException || '').trim() === stamp);
+                    if (edited) {
+                        const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r);
+                        commands.push({ type: 'update', key: edited, changes: fields });
+                    } else if (action === 'EditOccurrence') {
                         commands.push({ type: 'add', event: { ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
                             recurrencerule: master.recurrencerule, recurrenceException: stamp } });
                     }
@@ -249,7 +328,7 @@
             if (action === 'DeleteSeries' || action === 'EditSeries') {
                 const r = (args.changedRecords || [])[0] || (args.deletedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
-                if (!master) throw new Error(`${action}: the series is not in the calendar`);
+                if (!master) throw seriesDeleted(action);
                 const ownOccurrences = (store.getEvents() || []).filter((e) => e.recurrenceID !== null && e.recurrenceID !== undefined
                     && String(e.recurrenceID) === String(master.id));
                 if (action === 'DeleteSeries') {
@@ -264,6 +343,17 @@
                     const changes = ScheduleAdapter.changesFrom(r);
                     if (context.keepOccurrences && !blank(master.recurrenceException)) {
                         delete changes.recurrenceException;
+                        // The series was moved (context.shift: { from, to }, a drag of "all events"): its skipped
+                        // dates and its edited occurrences' slots move with it, or a deleted date comes back and an
+                        // edited one shows twice.
+                        const shift = context.shift;
+                        if (shift) {
+                            changes.recurrenceException = ScheduleAdapter.shiftStamps(master.recurrenceException, shift.from, shift.to);
+                            for (const e of ownOccurrences) {
+                                if (!blank(e.recurrenceException)) commands.push({ type: 'update', key: e,
+                                    changes: { recurrenceException: ScheduleAdapter.shiftStamps(e.recurrenceException, shift.from, shift.to) } });
+                            }
+                        }
                     } else {
                         changes.recurrenceException = null;
                         for (const e of ownOccurrences) commands.push({ type: 'remove', key: e });
@@ -277,7 +367,7 @@
             const recurring = [...(args.changedRecords || []), ...(args.deletedRecords || [])]
                 .some((r) => !blank(r.RecurrenceRule) || !blank(r.RecurrenceID));
             if (recurring && action && !['Save', 'Add', 'Delete', 'EditOccurrence', 'DeleteOccurrence'].includes(action)) {
-                throw new Error(`unsupported action ${action} on a repeating event`);
+                throw Object.assign(new Error(`unsupported action ${action} on a repeating event`), { code: 'unsupported_action' });
             }
 
             for (const r of args.deletedRecords || []) commands.push({ type: 'remove', key: keyOf(r) });
