@@ -109,12 +109,45 @@ test('phone: the view link shows the badge and Add to my calendar in its header,
   await ctx.close();
 });
 
-test('embed: a tiny corner credit instead of the footer line', async ({ browser, request }) => {
+// Owner, Oct 26 2026: "make the iframe look better… a single line header… I don't like the floating bottom right
+// pastecal… make it something someone would be proud to embed". An embedded view link gets ONE quiet line: the
+// calendar's name, Add to my calendar (a new tab, never the host page), and pastecal's small mark as the credit.
+// No View only badge, no Make your own, no ⋮ menu, nothing floating over the events. ?theme=light|dark matches the host.
+for (const [w, h] of [[720, 640], [400, 600]]) {
+  for (const scheme of ['light', 'dark']) {
+    test(`embed ${w}px ${scheme}: one header line, the credit in it, nothing floating, nothing leaves the host page`, async ({ browser, request }) => {
+      const { viewId } = await seed(request);
+      const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`, { width: w, height: h });
+      await page.emulateMedia({ colorScheme: scheme });
+      const bar = page.getByTestId('embed-bar');
+      await expect(bar).toBeVisible();
+      await expect(bar.locator('h1')).toHaveText('Viewer chrome test');
+      const kids = await bar.evaluate((el) => [...el.children].filter((c) => c.getClientRects().length).map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.top + r.height / 2), Math.round(r.right)]; }));
+      expect(new Set(kids.map(([y]) => Math.round(y / 6))).size, 'everything on one line').toBe(1);
+      expect(Math.max(...kids.map(([, r]) => r)), 'nothing past the right edge').toBeLessThanOrEqual(w);
+      await expect(bar.getByTestId('embed-credit')).toHaveText('pastecal');
+      await expect(bar.getByTestId('embed-credit')).toHaveAttribute('target', '_blank');
+      await expect(bar.getByTestId('view-add-to-cal')).toHaveAttribute('target', '_blank');
+      for (const t of ['view-only-badge', 'view-only-badge-mobile', 'make-own', 'make-own-mobile', 'view-footer', 'mobile-header']) await expect(page.getByTestId(t)).toBeHidden();
+      // Nothing fixed-position over the calendar (the old corner credit sat on the last row's events).
+      expect(await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => getComputedStyle(e).position === 'fixed' && e.getClientRects().length && e.getBoundingClientRect().height > 0 && !e.closest('[role=dialog], .pc-toast')).map((e) => e.className))).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
+      await page.screenshot({ path: `snapshots/embed-${w}-${scheme}.png` });
+      await ctx.close();
+    });
+  }
+}
+
+test('embed ?theme=dark and ?theme=light win over the visitor\'s setting', async ({ browser, request }) => {
   const { viewId } = await seed(request);
-  const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`);
-  await expect(page.getByTestId('embed-credit')).toHaveText('pastecal');
-  await expect(page.getByTestId('view-footer')).toHaveCount(0);
-  await ctx.close();
+  for (const [theme, scheme] of [['dark', 'light'], ['light', 'dark']]) {
+    const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed&theme=${theme}`, { width: 720, height: 640 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await expect(page.getByTestId('embed-bar')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
+    await ctx.close();
+  }
 });
 
 // Was "no pitch on an edit link", then a pitch line above the quiet links. Since Oct 26 2026 (owner: "I don't like

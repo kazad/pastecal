@@ -99,7 +99,7 @@ const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ||
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
 
 const AddToCalendar = {
-    props: { href: String, nudgeKey: String },
+    props: { href: String, nudgeKey: String, target: { type: String, default: '_top' } },
     emits: ['pick'],
     data() { return { nudge: false }; },
     mounted() {
@@ -126,7 +126,7 @@ const AddToCalendar = {
     },
     template: `
         <div class="pc-addcal">
-            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" :href="href" target="_top" @click="pick">
+            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-label="Add to my calendar" :href="href" :target="target" :rel="target === '_blank' ? 'noopener' : null" @click="pick">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
             </a>
@@ -644,6 +644,8 @@ const CalendarVueApp = {
         /** This browser created the calendar (it's under "Your calendars"). */
         // "Make one like this" under a calendar this browser didn't make (an invitation, a view link).
         // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
+        /** A view link inside someone's page (an iframe, or ?embed): the one-line embed header instead of the site's. */
+        embedViewer() { return this.embedded && this.isReadOnly; },
         showMakeOwn() {
             return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
                 && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
@@ -3466,8 +3468,12 @@ const CalendarVueApp = {
         // Apply theme based on user preference and system settings
         applyTheme() {
             let isDark = false;
+            // ?theme=light|dark (an embed matching its host page) wins, as in index.html's first-paint script.
+            const forced = (() => { try { return new URLSearchParams(location.search).get('theme'); } catch (e) { return null; } })();
 
-            if (this.globalSettings.darkMode === 'auto') {
+            if (forced === 'light' || forced === 'dark') {
+                isDark = forced === 'dark';
+            } else if (this.globalSettings.darkMode === 'auto') {
                 // Use system preference
                 isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             } else {
