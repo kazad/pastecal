@@ -381,11 +381,13 @@ class CalendarDataService {
      * changed and has not yet saved -- the notes being typed -- is never replaced by a snapshot. (import() replaced the
      * options whole: another person's added event brought back the server's notes over keystrokes still inside the
      * 500 ms save debounce, stress A01.) A field both changed: this tab's, the newest intent, which it is about to send.
+     * edited(field): whether the person here changed it ('title', or an option's key). A value this tab only filled in
+     * (an option's default, on load) differs from the base too, but never outranks someone's saved one.
      */
-    static mergeMeta(base, mine, theirs) {
+    static mergeMeta(base, mine, theirs, edited = () => true) {
         const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-        const pick = (b, m, t) => {
-            if (same(m, b)) return t;
+        const pick = (b, m, t, field) => {
+            if (same(m, b) || !edited(field)) return t;
             if (Array.isArray(b) && Array.isArray(m) && Array.isArray(t)) {
                 return Array.from({ length: Math.max(m.length, t.length) }, (_, i) => (same(m[i], b[i]) ? t[i] : m[i]));
             }
@@ -395,10 +397,10 @@ class CalendarDataService {
         const bo = B.options || {}, mo = M.options || {}, to = T.options || {};
         const options = {};
         for (const k of new Set([...Object.keys(to), ...Object.keys(mo), ...Object.keys(bo)])) {
-            const v = pick(bo[k], mo[k], to[k]);
+            const v = pick(bo[k], mo[k], to[k], k);
             if (v !== undefined) options[k] = v;
         }
-        return { title: pick(B.title, M.title, T.title), options };
+        return { title: pick(B.title, M.title, T.title, 'title'), options };
     }
 
     // Firebase returns an array with holes as an object keyed by index ({"0":A,"2":B}),

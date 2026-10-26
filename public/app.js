@@ -428,6 +428,11 @@ const CalendarVueApp = {
             // The events array as the last remote snapshot left it, so the watcher can tell
             // an untouched echo from an echo plus a real local edit.
             remoteAppliedSignature: null,
+            // The calendar's own fields as the last snapshot left them (with the defaults this tab fills in on load), and
+            // which of them the person here has changed since ('title', 'notes', 'typeLabels'...): only those are kept
+            // over a snapshot (CalendarDataService.mergeMeta). A filled-in default is not a change.
+            appliedMeta: null,
+            metaDirty: {},
             // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
             // and its type dropdown are reused across opens, so handlers built on the first
             // open read this rather than their own stale closure.
@@ -954,6 +959,7 @@ const CalendarVueApp = {
                             this.updateCustomViewInSchedule();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
+                            this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                             // Add to recents when calendar loads, but mark as read-only
                             // The tab says which calendar this is (a short link's page is static: the server can't).
                             if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
@@ -1004,6 +1010,7 @@ const CalendarVueApp = {
                     this.updateCustomViewInSchedule();
                     // Re-initialize local settings to load custom colors and labels
                     this.initializeLocalSettings();
+                    this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                     // Add to recents when calendar loads.
                     //
                     // This callback is a live subscription: it re-fires on every
@@ -1499,6 +1506,7 @@ const CalendarVueApp = {
                     this.updateCalendarView();
                     return;
                 }
+                this.noteMetaEdits();
 
                 if (!this.isExisting) {
                     this.saveLocalStorage();
@@ -4376,6 +4384,26 @@ const CalendarVueApp = {
         calendarSignature() {
             return JSON.stringify([this.calendar.events || [], this.calendar.title ?? '', this.calendar.options || {}]);
         },
+        // The calendar as a snapshot left it: called after applyRemoteCalendar AND again once the subscription callback
+        // has filled in this tab's defaults (ensureCalendarOptionsDefaults, initializeLocalSettings), so neither the
+        // watcher (an idle tab writes nothing) nor the merge (a default never outranks someone's saved value) takes
+        // those defaults for the person's edits.
+        noteRemoteApplied() {
+            this.remoteAppliedSignature = this.calendarSignature();
+            this.appliedMeta = JSON.parse(JSON.stringify({ title: this.calendar.title ?? '', options: this.calendar.options || {} }));
+        },
+        // A local change to the calendar: which of its own fields the person changed (metaDirty), for the next merge.
+        noteMetaEdits() {
+            const was = this.appliedMeta;
+            if (!was) return;
+            const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+            const now = { title: this.calendar.title ?? '', options: this.calendar.options || {} };
+            if (!same(now.title, was.title)) this.metaDirty.title = true;
+            for (const k of new Set([...Object.keys(now.options), ...Object.keys(was.options || {})])) {
+                if (!same(now.options[k], (was.options || {})[k])) this.metaDirty[k] = true;
+            }
+            this.appliedMeta = JSON.parse(JSON.stringify(now));
+        },
         applyRemoteCalendar(c, { replace = false } = {}) {
             this.isApplyingRemote = true;
             try {
@@ -4403,8 +4431,16 @@ const CalendarVueApp = {
                 // save debounce) are never replaced by another person's snapshot (stress A01).
                 const baseMeta = CalendarDataService._previousSeenMeta && CalendarDataService._previousSeenMeta[this.calendar.id];
                 if (!replace && baseMeta && typeof CalendarDataService.mergeMeta === 'function') {
-                    const merged = CalendarDataService.mergeMeta(baseMeta, { title: this.calendar.title, options: this.calendar.options }, { title: c.title, options: c.options });
+                    const dirty = this.metaDirty || {};
+                    const merged = CalendarDataService.mergeMeta(baseMeta, { title: this.calendar.title, options: this.calendar.options },
+                        { title: c.title, options: c.options }, (field) => !!dirty[field]);
+                    // A field the server now holds as this tab has it is saved: no longer this tab's to keep.
+                    const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+                    if (same(merged.title, c.title)) delete dirty.title;
+                    for (const k of Object.keys(dirty)) if (k !== 'title' && same((merged.options || {})[k], (c.options || {})[k])) delete dirty[k];
                     c = { ...c, title: merged.title, options: merged.options };
+                } else if (replace) {
+                    this.metaDirty = {};
                 }
                 this.calendar.import(c);
             } finally {
@@ -4413,7 +4449,7 @@ const CalendarVueApp = {
                 // local edit landing in the same batch as a remote snapshot would
                 // otherwise be skipped along with it and never reach the server -- a new
                 // data-loss bug in the fix for the old one.
-                this.remoteAppliedSignature = this.calendarSignature();
+                this.noteRemoteApplied();
                 this.$nextTick(() => { this.isApplyingRemote = false; });
             }
         },

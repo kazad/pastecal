@@ -221,6 +221,39 @@ test('ROOT 1: two people rename different type labels at once: both names are ke
   await A.ctx.close(); await B.ctx.close();
 });
 
+// The defaults a tab fills in on load (customViewDuration, default type labels) are not the person's edits: an idle tab
+// writes nothing, and a default never outranks a name someone saved -- in an edit tab or on a view link.
+const roomOf = async (id) => (await (await fetch(`${BASE}/cal/${encodeURIComponent(id)}`)).json());
+test('ROOT 1: a tab that only opens a calendar writes nothing (its filled-in defaults are not edits)', async ({ browser }) => {
+  const id = await seed([{ id: 'e1', title: 'Practice', start: '2026-10-23T00:00:00.000Z', end: '2026-10-23T01:00:00.000Z', description: '', repeat: '',
+    recurrencerule: '', recurrenceID: null, recurrenceException: null, isAllDay: false, type: 1 }]);
+  const before = await roomOf(id);
+  const A = await open(browser, `/${id}?backend=cf`);
+  await A.page.waitForTimeout(3000);
+  const after = await roomOf(id);
+  expect({ v: after.v, options: after.calendar.options, lastEditedAt: after.calendar.lastEditedAt })
+    .toEqual({ v: before.v, options: before.calendar.options, lastEditedAt: before.calendar.lastEditedAt });
+  await A.ctx.close();
+});
+
+test('ROOT 1: a label someone names reaches an idle tab (edit and view link) over its default, and stays named after that tab edits', async ({ browser }) => {
+  const id = await seed([]);
+  const viewId = (await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceCalendarId: id }) })).json()).publicViewId;
+  const A = await open(browser, `/${id}?backend=cf`);
+  const V = await open(browser, `/view/${viewId}?backend=cf`);
+  const B = await open(browser, `/${id}?backend=cf`);
+  await B.page.getByTestId('settings-button-desktop').click();
+  await B.page.getByLabel('Label for type 1').fill('Practice');
+  await soon(async () => ((await calOf(id)).options.typeLabels || [])[0]).toBe('Practice');
+  await soon(() => vm(A.page, '(p.calendar.options.typeLabels || [])[0]')).toBe('Practice');
+  await soon(() => vm(V.page, '(p.calendar.options.typeLabels || [])[0]')).toBe('Practice');
+  await quickAdd(A.page, 'Snack duty tomorrow 3pm');
+  await soon(async () => (await calOf(id)).events.length).toBe(1);
+  await A.page.waitForTimeout(1500);
+  expect(((await calOf(id)).options.typeLabels || [])[0], 'A\'s edit did not send its default back').toBe('Practice');
+  await A.ctx.close(); await V.ctx.close(); await B.ctx.close();
+});
+
 // =====================================================================================================
 // ROOT A + ROOT 5: odd names, through Share's links
 // =====================================================================================================
