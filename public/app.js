@@ -3482,10 +3482,14 @@ const CalendarVueApp = {
                 isDark = this.globalSettings.darkMode === 'dark';
             }
 
-            document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-            this.swapSyncfusionTheme(isDark);
+            // The page's colors and the calendar's stylesheet change together: while the other theme's sheet is
+            // loading (seconds on a slow first fetch) the page keeps the theme the calendar is drawn in. Setting
+            // data-theme first painted the dark page around Syncfusion's light buttons -- white pills in the classic
+            // toolbar -- until the sheet arrived.
+            const setPage = () => document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+            this.swapSyncfusionTheme(isDark, setPage);
         },
-        swapSyncfusionTheme(dark) {
+        swapSyncfusionTheme(dark, done = () => {}) {
             // One self-hosted stylesheet per theme (scripts/build-vendor.sh), pinned to the
             // same Syncfusion version as the JS. index.html already loaded the right one
             // before first paint, so this is normally a no-op; it only works when the user
@@ -3493,15 +3497,16 @@ const CalendarVueApp = {
             // loaded: pointing the existing <link> at a new href drops the old rules first,
             // leaving the page unstyled (and Syncfusion measuring a collapsed grid) until
             // the new file arrives.
+            // `done` sets the page's own theme (data-theme), once this sheet is the one in force.
             const link = document.getElementById('syncfusion-theme');
-            if (!link) return;
             // A switch whose sheet is still loading is stale once the setting changes again
             // (light -> dark -> light before the dark file arrives): drop it, or its late onload
             // swaps in the wrong theme and leaves two sheets claiming the id.
-            if (this._themeLoading) { this._themeLoading.onload = null; this._themeLoading.remove(); this._themeLoading = null; }
+            if (this._themeLoading) { this._themeLoading.onload = this._themeLoading.onerror = null; this._themeLoading.remove(); this._themeLoading = null; }
+            if (!link) { done(); return; }   // (the native calendar: no Syncfusion sheet)
             const file = dark ? 'material-dark.css' : 'material.css';
             const url = new URL(link.href, location.href);
-            if (url.pathname.endsWith('/' + file)) return;
+            if (url.pathname.endsWith('/' + file)) { done(); return; }
             url.pathname = url.pathname.replace(/[^/]+$/, file);
             const next = link.cloneNode();
             next.removeAttribute('id');
@@ -3512,8 +3517,11 @@ const CalendarVueApp = {
                 this._themeLoading = null;
                 link.remove();
                 next.id = 'syncfusion-theme';
+                done();
                 if (window.scheduleObj) window.scheduleObj.refreshLayout();
             };
+            // The sheet never came (offline): the page follows the setting anyway, on the calendar's old colors.
+            next.onerror = () => { if (this._themeLoading !== next) return; this._themeLoading = null; next.remove(); done(); };
             link.after(next);
         },
 
