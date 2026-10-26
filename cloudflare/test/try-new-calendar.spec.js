@@ -93,9 +93,9 @@ test('the footer link opts in, the pill takes you back, and the choice sticks ac
   // The pill sits in the footer line, not over the calendar.
   const pill = page.getByTestId('new-cal-pill');
   await expect(pill).toBeVisible();
-  await expect(pill).toContainText('New calendar (beta)');
-  await expect(pill.getByTestId('new-cal-feedback')).toHaveText('Send feedback');
-  await expect(pill.getByTestId('back-to-classic')).toHaveText('Back to classic');
+  await expect(pill).toContainText('Beta');
+  await expect(pill.getByTestId('new-cal-feedback')).toHaveText('Feedback');
+  await expect(pill.getByTestId('back-to-classic')).toHaveText('Classic');
   await expect(page.getByTestId('try-new-cal')).toHaveCount(0);
   const pb = await pill.boundingBox(), cb = await page.locator('.pc-native-cal').boundingBox();
   expect(pb && cb && pb.y >= cb.y + cb.height - 1, 'the pill is below the calendar').toBe(true);
