@@ -180,6 +180,8 @@
         (function () {
             var mode = 'auto';
             try { mode = (JSON.parse(localStorage.getItem('pastecal_global_settings')) || {}).darkMode || 'auto'; } catch (e) { }
+            // ?theme=light|dark (an embed matching its host page) wins over this browser's setting.
+            try { var forced = new URLSearchParams(location.search).get('theme'); if (forced === 'light' || forced === 'dark') mode = forced; } catch (e) { }
             var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
             if (window.pcNativeCal) document.write('<link rel="stylesheet" href="/native-calendar.css?v=1792797113">');
@@ -341,8 +343,16 @@
         }, 10000);
     </script>
     <div id="app" data-testid="app-root" v-cloak>
+        <!-- Inside someone's page (a view link in an iframe): one quiet line instead of the site's header. The
+             calendar's name, Add to my calendar (a new tab, never the host page), and pastecal's small mark as the
+             credit; no badge, no pitch, nothing floating over the events. -->
+        <div v-if="embedViewer" class="pc-embed-bar" data-testid="embed-bar" v-cloak>
+            <h1 class="pc-embed-title" :title="displayCalendarTitle">{{ displayCalendarTitle }}</h1>
+            <add-to-calendar v-if="!isLoading && subscribePageURL()" :href="subscribePageURL()" target="_blank" @pick="trackSubscribe"></add-to-calendar>
+            <a v-if="!hideBranding && !pausedOwner" class="pc-embed-mark" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit"><img src="/img/pastecal.logo.svg" alt="" width="14" height="14" class="dark:brightness-150">pastecal</a>
+        </div>
         <!-- Mobile Header -->
-        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
+        <div v-if="!embedViewer" class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
             <!-- Row 1: Logo, Title, Menu -->
             <div class="relative flex items-center justify-between gap-2">
                 <!-- Logo & Recents -->
@@ -479,7 +489,7 @@
         <!-- Single dialog instance used by button triggers -->
         <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" :named="namedTypes" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
-        <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
+        <topbar v-if="!embedViewer" class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
@@ -852,7 +862,7 @@
             <p v-if="showMakeOwn && pageFooter === 'viewer'" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><button type="button" class="pc-link" @click="makeOwnCopy('style', pageFooter === 'viewer' ? 'view-footer' : 'edit-footer')" data-testid="view-footer-cta">Make one like this →</button><cal-switch v-if="showCalSwitch && pageFooter === 'viewer'" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></p>
             <p v-if="pageFooter === 'viewer' && !showMakeOwn" class="pc-view-footer" data-testid="view-footer-plain" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><cal-switch v-if="showCalSwitch" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></p>
             <p v-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
-            <a v-else-if="pageFooter === 'embed'" class="pc-embed-credit" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit" v-cloak>pastecal</a>
+            <!-- An embed: the credit is the mark in its one-line header (embed-bar); nothing here. -->
             <nav v-else-if="pageFooter === 'editor'" class="pc-edit-footer" aria-label="pastecal" data-testid="edit-footer" v-cloak><a href="/" class="pc-edit-footer-brand"><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150">pastecal</a><button v-if="showMakeOwn" type="button" class="pc-link pc-edit-footer-cta" @click="makeOwnCopy('style', 'edit-footer')" data-testid="view-footer-cta">Make one like this →</button><a href="/pricing" data-from="edit-footer">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><cal-switch v-if="showCalSwitch" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></nav>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
                 <span>This calendar is a draft, saved only in this browser. Press <b>Save &amp; share</b> to get a link anyone can open.</span>
@@ -1183,6 +1193,7 @@
                                 </button>
                             </div>
 
+                            <p class="pc-share-hint" data-testid="embed-hint">Matches your visitor's light or dark mode. To fix one, add <code>?theme=light</code> or <code>?theme=dark</code> to the link.</p>
                         </section>
 
                         <!-- Sharing only. Plans, editor links and billing live in the Plus tab: one line points there. -->
