@@ -215,9 +215,11 @@
         const wd = DAYS[d.getDay()];
         return [
             { id: 'none', rule: '' },
+            { id: 'day', rule: 'FREQ=DAILY;INTERVAL=1;' },
             { id: 'week', rule: `FREQ=WEEKLY;BYDAY=${wd};INTERVAL=1;` },
             { id: 'two', rule: `FREQ=WEEKLY;BYDAY=${wd};INTERVAL=2;` },
             { id: 'month', rule: `FREQ=MONTHLY;BYMONTHDAY=${d.getDate()};INTERVAL=1;` },
+            { id: 'year', rule: `FREQ=YEARLY;BYMONTHDAY=${d.getDate()};BYMONTH=${d.getMonth() + 1};INTERVAL=1;` },
             { id: 'weekday', rule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;' },
         ];
     }

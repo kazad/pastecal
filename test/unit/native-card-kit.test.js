@@ -67,7 +67,10 @@ test('words: times, lengths, ages, ordinals', () => {
 
 test('repeat rules: presets in classic\'s form, descriptions, a round trip that keeps every part', () => {
   const wed = new Date(2026, 9, 21);
-  assert.deepEqual(K.presets(wed).map((p) => p.rule), ['', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=2;', 'FREQ=MONTHLY;BYMONTHDAY=21;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;']);
+  assert.deepEqual(K.presets(wed).map((p) => p.rule), ['', 'FREQ=DAILY;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=2;',
+    'FREQ=MONTHLY;BYMONTHDAY=21;INTERVAL=1;', 'FREQ=YEARLY;BYMONTHDAY=21;BYMONTH=10;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;']);
+  // Each one-tap choice is written exactly as the Custom panel (classic's form) would write it.
+  for (const p of K.presets(wed).slice(1)) assert.equal(K.buildRule(K.parseRule(p.rule, wed)), p.rule, p.id);
   assert.equal(K.presetOf('FREQ=WEEKLY;BYDAY=WE;INTERVAL=1', wed), 'week');
   assert.equal(K.presetOf('FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;COUNT=4;', wed), 'custom');
   const d = (r) => K.describeRule(r, wed);

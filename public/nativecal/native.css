@@ -220,9 +220,11 @@
 .ne-field { display: block; margin: 8px 0; }
 .ne-field > span { display: block; font-size: 12px; color: #757575; margin-bottom: 2px; }
 .ne-field:focus-within > span { color: var(--nc-today); }
-.ne-field input, .ne-field select, .ne-field textarea { width: 100%; border: 0; border-bottom: 1px solid #757575; background: transparent; color: var(--nc-text);
-    font: 14px Roboto, sans-serif; padding: 6px 0; outline: none; box-sizing: border-box; }
-.ne-field input:focus, .ne-field select:focus, .ne-field textarea:focus { border-bottom: 2px solid var(--nc-today); }
+/* The fields are the shared .pc-field (components.css). v1 draws them as Syncfusion's underlined fields; v2 (below)
+   takes .pc-field as it is. background-color, never the background shorthand: that would wipe .pc-field's chevron. */
+html:not([data-ux="2"]) .ne-field input, html:not([data-ux="2"]) .ne-field select, .ne-field textarea { width: 100%; height: auto; border: 0; border-bottom: 1px solid #757575;
+    border-radius: 0; background-color: transparent; color: var(--nc-text); font: 14px Roboto, sans-serif; padding: 6px 0; outline: none; box-shadow: none; box-sizing: border-box; }
+html:not([data-ux="2"]) .ne-field input:focus, html:not([data-ux="2"]) .ne-field select:focus, .ne-field textarea:focus { border-bottom: 2px solid var(--nc-today); }
 .ne-field textarea { resize: vertical; }
 .ne-dt { display: flex; gap: 6px; }
 .ne-dt input[type=time] { width: 44%; }
@@ -238,7 +240,8 @@
 .ne-color-menu .sw { width: 8px; height: 28px; margin-right: 4px; }
 .ne-repeat { border-left: 2px solid var(--nc-line); padding-left: 12px; margin: 4px 0 8px; }
 .ne-inline { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.ne-num { width: 70px !important; }
+.ne-num { width: 70px !important; display: inline-block !important; }   /* "Day [7]" on one line (.pc-field is a block) */
+.ne-radio input[type=radio], .ne-check input { accent-color: var(--nc-today); }
 .ne-days { display: flex; gap: 6px; margin-top: 4px; }
 .ne-days button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--nc-line); background: var(--bg); color: var(--nc-text); cursor: pointer; font-size: 12px; }
 .ne-days button.on { background: var(--nc-today); border-color: var(--nc-today); color: #fff; }
@@ -257,14 +260,8 @@
 /* Lucide icons sit on the text line like a glyph would. */
 .nc-lucide { display: inline-block; flex: none; vertical-align: middle; }
 .ne-x, .nq-x, .np-icon, .nc-icon-btn { display: inline-flex; align-items: center; justify-content: center; }
-/* Dropdowns get the same Lucide chevron as the rest of the calendar, not the browser's arrow.
-   A mask (not a background image) so the chevron takes the text color in both themes. */
-.ne-field select { appearance: none; -webkit-appearance: none; padding-right: 24px; cursor: pointer; }
-.ne-select { position: relative; display: block; }
-.ne-select::after { content: ""; position: absolute; right: 2px; bottom: 9px; width: 16px; height: 16px; pointer-events: none;
-    background: var(--nc-text); opacity: .7;
-    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
-            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+/* v1's dropdowns: .pc-field's chevron, at the underline's right edge. */
+html:not([data-ux="2"]) .ne-field select { padding-right: 24px; background-position: right 2px center; cursor: pointer; }
 
 /* =========================================================================================
    v2 (?ux=2) -- the redesign. Same layout as v1 so nothing moves, but:
@@ -399,13 +396,11 @@ html[data-ux="2"] .ne-row { align-items: flex-start; }
 html[data-ux="2"] .ne-field { margin: 10px 0; }
 html[data-ux="2"] .ne-field > span { font-size: 12.5px; font-weight: 600; color: var(--nc-muted); margin-bottom: 5px; }
 html[data-ux="2"] .ne-field:focus-within > span { color: var(--nc-today); }
-html[data-ux="2"] .ne-field input, html[data-ux="2"] .ne-field select, html[data-ux="2"] .ne-field textarea {
+html[data-ux="2"] .ne-field textarea {
     border: 1px solid var(--nc-field); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
-html[data-ux="2"] .ne-field input:focus, html[data-ux="2"] .ne-field select:focus, html[data-ux="2"] .ne-field textarea:focus {
+html[data-ux="2"] .ne-field textarea:focus {
     border: 1px solid var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
-html[data-ux="2"] .ne-field select { padding-right: 32px; }
-html[data-ux="2"] .ne-select::after { right: 10px; bottom: 11px; }
-html[data-ux="2"] .ne-title-row .ne-field input { font-size: 17px; font-weight: 500; padding: 10px 12px; }
+html[data-ux="2"] .ne-title-row .ne-field input { height: var(--pc-h-lg); font-size: 17px; font-weight: 500; padding: 0 12px; }
 html[data-ux="2"] .ne-repeat { border-left: 0; background: var(--nc-soft); border-radius: 10px; padding: 4px 14px 8px; }
 html[data-ux="2"] .ne-days button { width: 34px; height: 34px; font-size: 13px; font-weight: 600; }
 html[data-ux="2"] .ne-foot { padding: 12px 18px 18px; gap: 8px; }
