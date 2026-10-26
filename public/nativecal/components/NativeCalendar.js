@@ -380,6 +380,8 @@ const NativeCalendar = (() => {
             // The app's default view (settings, or the calendar's own default once it has loaded).
             initialView(v) { const n = normView(v); if (n && n !== this.view) this.setView(n); },
             initialDate(v) { const d = parseDay(v); if (d) this.date = d; },
+            appEdits(on) { if (this._touchOn) this._touchOn(on && !this.readOnly); },
+            readOnly(ro) { if (this._touchOn) this._touchOn(this.appEdits && !ro); if (ro) this.drag = null; },
         },
         mounted() {
             this._tick = setInterval(() => { this.now = new Date(); }, 60000);
@@ -390,12 +392,21 @@ const NativeCalendar = (() => {
             window.addEventListener('mousemove', this._onMove);
             window.addEventListener('mouseup', this._onUp);
             // Touch: a long press lifts an event (appEdits); moving the finger first is a scroll and cancels it.
-            // Only a lifted drag stops the page from scrolling (this listener must not be passive for that).
+            // Only a lifted drag stops the page from scrolling, so the touchmove listener cannot be passive: it is
+            // added only where events can be dragged (never on a view link, where it would hold up every scroll),
+            // and on the calendar itself (a touch's events go to where it started, even once the finger leaves).
             this._onTouchMove = (e) => this.onTouchMove(e);
             this._onTouchEnd = (e) => this.onTouchEnd(e);
-            window.addEventListener('touchmove', this._onTouchMove, { passive: false });
-            window.addEventListener('touchend', this._onTouchEnd);
-            window.addEventListener('touchcancel', this._onTouchEnd);
+            this._touchOn = (on) => {
+                const el = this.$el;
+                if (!el || !!this._touching === on) return;
+                this._touching = on;
+                const how = on ? 'addEventListener' : 'removeEventListener';
+                el[how]('touchmove', this._onTouchMove, { passive: false });
+                el[how]('touchend', this._onTouchEnd);
+                el[how]('touchcancel', this._onTouchEnd);
+            };
+            this._touchOn(this.appEdits && !this.readOnly);
             // Escape drops a drag where it started (and the click that ends it does nothing).
             this._onKey = (e) => { if (e.key === 'Escape' && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
             window.addEventListener('keydown', this._onKey, true);
@@ -409,9 +420,7 @@ const NativeCalendar = (() => {
             window.removeEventListener('resize', this._onResize);
             window.removeEventListener('mousemove', this._onMove);
             window.removeEventListener('mouseup', this._onUp);
-            window.removeEventListener('touchmove', this._onTouchMove);
-            window.removeEventListener('touchend', this._onTouchEnd);
-            window.removeEventListener('touchcancel', this._onTouchEnd);
+            this._touchOn(false);
             window.removeEventListener('keydown', this._onKey, true);
             clearTimeout(this._press);
             document.removeEventListener('mousedown', this._onDocClick);

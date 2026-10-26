@@ -288,6 +288,53 @@ test('a repeating event: dragging one occurrence asks; "this event" stores class
   await ctx.close();
 });
 
+// All-day drags in month view, in Los Angeles and Tokyo, from data written in each. The expected rows are what
+// classic stores for the same gestures on the same seed (run against classic as the oracle, Oct 25 2026): the
+// new local midnights, the length kept, and the skipped date stamped at the viewer's midnight beside the
+// existing Tokyo stamp, kept verbatim.
+const ALLDAY_DRAGS = {
+  'America/Los_Angeles': { camp: ['2026-10-15T07:00:00.000Z', '2026-10-18T07:00:00.000Z'], exc: '20261012T150000Z,20261020T070000Z',
+    row: ['2026-10-22T07:00:00.000Z', '2026-10-23T07:00:00.000Z', '20261020T070000Z'] },
+  'Asia/Tokyo': { camp: ['2026-10-14T15:00:00.000Z', '2026-10-17T15:00:00.000Z'], exc: '20261012T150000Z,20261019T150000Z',
+    row: ['2026-10-21T15:00:00.000Z', '2026-10-22T15:00:00.000Z', '20261019T150000Z'] },
+};
+for (const [zone, want] of Object.entries(ALLDAY_DRAGS)) {
+  test(`all-day drags in month view store exactly what classic stores (${zone})`, async ({ browser }) => {
+    const id = await seed([
+      { ...timed('camp', 'Camp', '2026-10-13T07:00:00.000Z', '2026-10-16T07:00:00.000Z'), isAllDay: true, type: 4 },   // Oct 13-15, written in LA
+      { ...timed('tw', 'Tokyo weekly', '2026-10-05T15:00:00.000Z', '2026-10-06T15:00:00.000Z'), isAllDay: true, type: 6,   // Tuesdays, written in Tokyo
+        recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=4', recurrenceException: '20261012T150000Z' },
+    ]);
+    const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15', { timezoneId: zone });
+    const dragDays = async (title, from, to) => {
+      const a = await (await cell(page, from)).boundingBox(), b = await (await cell(page, to)).boundingBox();
+      const bar = page.locator('.nc-bar', { hasText: title });
+      let box = null;
+      for (const el of await bar.all()) { const r = await el.boundingBox(); if (r && r.y > a.y && r.y < a.y + a.height && r.x < a.x + a.width && r.x + r.width > a.x) { box = r; break; } }
+      expect(box, `${title} on ${from}`).not.toBe(null);
+      const x = Math.max(box.x + 20, Math.min(a.x + a.width / 2, box.x + box.width - 20)), y = box.y + box.height / 2;
+      await drag(page, { x, y }, { x: x + (b.x - a.x), y: y + (b.y - a.y) }, 12);
+      await page.mouse.up();
+    };
+    await dragDays('Camp', '2026-10-13', '2026-10-15');
+    await soon(async () => (await stored(id)).find((e) => e.id === 'camp').start).toBe(want.camp[0]);
+    expect((await stored(id)).find((e) => e.id === 'camp').end).toBe(want.camp[1]);
+    expect(await daysOf(page, 'event-camp')).toEqual(['2026-10-15', '2026-10-16', '2026-10-17']);
+    await dragDays('Tokyo weekly', '2026-10-20', '2026-10-22');
+    await pickScope(page, 'this');
+    await soon(async () => (await stored(id)).length).toBe(3);
+    const rows = await stored(id);
+    const series = rows.find((e) => e.id === 'tw'), row = rows.find((e) => !['camp', 'tw'].includes(e.id));
+    expect([series.start, series.end, series.recurrencerule, series.recurrenceException])
+      .toEqual(['2026-10-05T15:00:00.000Z', '2026-10-06T15:00:00.000Z', 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=4', want.exc]);
+    expect([row.start, row.end, row.recurrenceException, row.recurrenceID, row.isAllDay, row.recurrencerule])
+      .toEqual([...want.row, 'tw', true, 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=4']);
+    expect(await daysOf(page, 'event-tw')).toEqual(['2026-10-06', '2026-10-27']);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
 test('a repeating event from its popup: edit and delete "this event" / "all events", Undo, and classic\'s "match the series again?"', async ({ browser }) => {
   const id = await seed([timed('w', 'Weekly sync', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;', description: 'Room 4' })]);
   const { ctx, page, errors } = await open(browser, id, '&view=day&date=2026-10-13');
@@ -526,6 +573,42 @@ test('keyboard: Tab to an event and Enter opens it, Escape closes; Cmd/Ctrl+E qu
   await page.getByTestId('editor-title').fill('Dentist (Dr. Lee)');
   await page.getByTestId('editor-title').press('Enter');
   await soon(async () => (await stored(id))[0].title).toBe('Dentist (Dr. Lee)');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('the app around it: settings (24-hour, Monday first, a color and its name), a search result\'s Edit, Share', async ({ browser }) => {
+  const id = await seed([timed('g', 'Game', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00', { type: 2 })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
+  await page.getByTestId('settings-button-desktop').click();
+  await page.locator('#set-time-format').selectOption('24');
+  await page.locator('#set-first-day').selectOption('1');
+  await page.locator('[data-category-label="1"]').fill('Matches');
+  await page.locator('#color-picker-1').evaluate((el) => { el.value = '#00897b'; el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.nc-dayhead').first()).toContainText('Mon');
+  await expect(ev(page, 'g')).toContainText('13:00 - 14:00');
+  expect(await ev(page, 'g').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(0, 137, 123)');
+  await ev(page, 'g').dblclick();
+  await expect(page.getByTestId('editor-color-label')).toHaveText('Matches');
+  await page.getByTestId('editor-cancel').click();
+
+  // Search: a result's Edit opens the editor (CalendarView.openEditor).
+  await page.getByTestId('search-button-desktop').click();
+  await page.getByRole('searchbox', { name: 'Search events' }).fill('Game');
+  await page.getByTestId('search-results').getByText('Game').first().click();
+  await page.getByTestId('search-result-edit').first().click();
+  await expect(page.getByTestId('event-editor')).toBeVisible();
+  await expect(page.getByTestId('editor-title')).toHaveValue('Game');
+  await page.getByTestId('editor-title').fill('Game (final)');
+  await page.getByTestId('editor-save').click();
+  await soon(async () => (await stored(id))[0].title).toBe('Game (final)');
+  expect([await local(page, (await stored(id))[0].start), (await stored(id))[0].type]).toEqual(['2026-10-22 13:00', 2]);
+
+  // Share opens on a native edit link too.
+  await page.keyboard.press('Escape');
+  await page.getByTestId('share-pill-more').click();
+  await expect(page.locator('.pc-share')).toBeVisible();
   expect(errors).toEqual([]);
   await ctx.close();
 });
