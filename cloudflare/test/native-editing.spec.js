@@ -36,7 +36,7 @@ async function seed(events, options = {}) {
 }
 const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events || []);
 const byTitle = async (id, title) => (await stored(id)).find((e) => e.title === title);
-const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100, 250, 500] });
+const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100] });
 
 /** A browser in Los Angeles at a fixed time; every page error and Syncfusion request is recorded. */
 async function open(browser, id, query = '', { phone = false, timezoneId = 'America/Los_Angeles' } = {}) {

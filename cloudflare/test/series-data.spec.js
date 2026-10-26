@@ -30,7 +30,7 @@ async function seed(events) {
   return id;
 }
 const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events || []);
-const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100, 250, 500] });
+const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100] });
 const vm = (page, fn, arg) => page.evaluate(`(${fn})(document.querySelector('#app')._vnode.component.proxy, ${JSON.stringify(arg ?? null)})`);
 
 async function open(browser, id, query = '', { timezoneId = 'America/Los_Angeles' } = {}) {

@@ -199,7 +199,7 @@ async function reset(id, events, title = 'Data parity') {
 }
 /** The events as the server holds them. */
 const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events || []);
-const soon = (fn, timeout = 15_000) => expect.poll(fn, { timeout, intervals: [100, 250, 500] });
+const soon = (fn, timeout = 15_000) => expect.poll(fn, { timeout, intervals: [100] });
 
 /** A browser in a time zone: only local hosts and fonts/CDNs, the Cloudflare backend, a fixed clock. */
 async function openBrowser(browser, timezoneId = 'America/Los_Angeles') {
