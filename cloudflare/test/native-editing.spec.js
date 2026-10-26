@@ -1283,3 +1283,25 @@ test('phone (390px): scrolling over the sheet never scrolls the calendar or the 
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+// Owner, Oct 26 2026: "when I drag between days it doesn't show the location it's going to drop into". The lifted
+// event stayed in the column it started in (only its height followed the pointer) until the drop.
+test('week view: dragging to another day draws the event in that day\'s column, at its new time, before the drop', async ({ browser }) => {
+  const id = await seed([timed('d', 'Dentist', '2026-10-21T10:00:00-07:00', '2026-10-21T11:00:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-21');
+  const b = await ev(page, 'd').boundingBox();
+  const to = await slot(page, '2026-10-23', 12);
+  await drag(page, { x: b.x + b.width / 2, y: b.y + 10 }, { x: to.x, y: to.y + 10 });
+  // Mid-drag: inside Friday's column, showing Friday's new time; a dashed outline stays where it came from.
+  const fri = await page.locator(`.nc-col[data-day="${new Date(await localMidnight(page, '2026-10-23')).getTime()}"]`).boundingBox();
+  const now = await ev(page, 'd').boundingBox();
+  expect(now.x).toBeGreaterThanOrEqual(fri.x - 1);
+  expect(now.x + now.width).toBeLessThanOrEqual(fri.x + fri.width + 1);
+  await expect(ev(page, 'd')).toContainText('12:00 PM - 1:00 PM');
+  await expect(page.locator('.nc-origin')).toHaveCount(1);
+  await page.screenshot({ path: 'snapshots/native-drag-across-days.png' });
+  await page.mouse.up();
+  await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 12:00');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
