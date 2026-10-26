@@ -42,7 +42,7 @@ const stored = async (id) => ((await (await fetch(`${BASE}/cal/${id}`)).json()).
 const byId = async (id, eid) => (await stored(id)).find((e) => e.id === eid);
 const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100] });
 // A finding: expected to fail until fixed. RAW = true runs the findings as plain tests, to see each fail where it should.
-const RAW = true;
+const RAW = false;
 const finding = (why) => { if (!RAW) test.fail(true, why); };
 const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, `${name}.png`) }).catch(() => {});
 
@@ -234,7 +234,7 @@ test('S06 [card] broken (CJK): Enter that confirms an IME conversion saves and c
   await ctx.close();
 });
 
-test('S07 [grid] ugly: on a 390px phone a crowded hour shows one 18px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
+test('S07 [grid] ugly: on a 390px phone a crowded hour shows one 20px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
   finding('layoutDayColumns cap is at least 2 even when a column fits one 40px event');
   const evs = [];
   for (let i = 0; i < 20; i++) evs.push(timed(`ov${i}`, `Standup ${i}`, '2026-10-21T10:00:00-07:00', '2026-10-21T11:00:00-07:00', { type: (i % 8) + 1 }));
@@ -261,6 +261,238 @@ test('S08 [card] broken (de-DE): a German date typed in the date picker ("28.10.
   await ctx.close();
 });
 
+test('S09 [tz] broken: classic and native show a Tokyo-zoned weekly series on different days (classic repeats it in the viewer\'s zone)', async ({ browser }) => {
+  finding('ScheduleAdapter hands Syncfusion the rule as is: classic expands BYDAY=TU in Los Angeles, native in Tokyo');
+  // Every Tuesday 10 AM in Tokyo = Monday 6 PM in Los Angeles.
+  const id = await seed([timed('jp', 'Tokyo standup', '2026-10-20T01:00:00Z', '2026-10-20T01:30:00Z', { tz: 'Asia/Tokyo', recurrencerule: WEEKLY })]);
+  const N = await open(browser, id, '&view=week&date=2026-10-27');
+  const native = await N.page.evaluate(() => [...document.querySelectorAll('.nc .nc-timed')].map((e) => e.closest('.nc-col')?.dataset.day).filter(Boolean).map((d) => new Date(+d).toDateString()));
+  await N.ctx.close();
+  const C = await open(browser, id, '&view=week&date=2026-10-27', { classic: true });
+  await C.page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-appointment'), null, { timeout: 30_000 });
+  const classic = await C.page.evaluate(() => window.scheduleObj.getEvents(new Date(2026, 9, 25), new Date(2026, 10, 1), true).map((e) => new Date(e.StartTime).toString().slice(0, 21)));
+  await shot(C.page, 'S09-classic-tokyo-series-day');
+  expect({ native, classic }, 'both: Monday Oct 26, 6 PM in Los Angeles').toEqual({ native: ['Mon Oct 26 2026'], classic: ['Mon Oct 26 2026 18:00'] });
+  await C.ctx.close();
+});
+
+test('S10 [card] nit: on a 360x640 phone, "More details" on an event with long linked details scrolls the event\'s own title out of the sheet', async ({ browser }) => {
+  finding('expand() reveals the details box and the first field; the sheet stops 113px below the top and scrolls its title away');
+  const links = FIXTURE.events.find((e) => e.id === 'links');
+  const id = await seed([timed('p', 'Practice at Lincoln Field', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: links.description })]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { device: 'p360' });
+  await openCard(page, ev(page, 'p'), true);
+  await shot(page, 'S10-p360-title-scrolled-away');
+  const [t, c] = await Promise.all([box(page, '[data-testid="card-title"]'), box(page, '.nk-card')]);
+  expect(t.y, 'the title is inside the sheet').toBeGreaterThanOrEqual(c.y - 1);
+  await ctx.close();
+});
+
+test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliver of its fourth line under the third', async ({ browser }) => {
+  finding('growTitle caps the box at three lines plus padding; a scrolling textarea draws content into its bottom padding (and nothing says the title goes on)');
+  const id = await seed([timed('p', '🎉 会議 チーム 打ち合わせ — اجتماع الفريق الأسبوعي — a very long planning session title that keeps going and going past three lines of the card 🎉 会議 チーム 打ち合わせ — and more', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(page, ev(page, 'p'));
+  await page.getByTestId('card-title').evaluate((el) => el.blur());
+  await page.locator('.nk-h').screenshot({ path: path.join(SHOTS, 'S11-title-fourth-line-sliver.png') });
+  const lines = await page.getByTestId('card-title').evaluate((ta) => { const cs = getComputedStyle(ta); return (ta.clientHeight - parseFloat(cs.paddingTop)) / parseFloat(cs.lineHeight); });
+  expect(Math.abs(lines - Math.round(lines)), `${lines.toFixed(2)} lines in view`).toBeLessThan(0.1);
+  await ctx.close();
+});
+
+test('S12 [card] nit (a11y): the time, length and repeat lists show the current choice by color only (the type list says aria-selected)', async ({ browser }) => {
+  finding('EventCard: .nk-plist buttons for s/e/dur/rep carry class "cur" and no aria-selected / aria-current');
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(page, ev(page, 'p'), true);
+  const said = {};
+  for (const f of ['card-start-time', 'card-length', 'card-repeat', 'card-type']) {
+    await page.getByTestId(f).click();
+    await expect(picker(page)).toBeVisible();
+    said[f] = await picker(page).locator('.cur').first().evaluate((b) => b.getAttribute('aria-selected') === 'true' || !!b.getAttribute('aria-current'));
+    await page.keyboard.press('Escape');
+  }
+  expect(said).toEqual({ 'card-start-time': true, 'card-length': true, 'card-repeat': true, 'card-type': true });
+  await ctx.close();
+});
+
+test('S14 [card] nit: on Windows and Linux the shortcuts sheet and the event menu say ⌘D and ⌘Z (the keys there are Ctrl+D and Ctrl+Z)', async ({ browser }) => {
+  finding('the shortcuts dialog and the card menu print ⌘ whatever the platform');
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
+  expect(await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform))).toBe(false);
+  await page.keyboard.press('?');
+  await expect(page.getByTestId('shortcuts-close')).toBeVisible();
+  await shot(page, 'S14-shortcuts-cmd-on-linux');
+  const sheet = await page.getByTestId('shortcuts').innerText();
+  expect(sheet).toContain('Duplicate');
+  await page.keyboard.press('Escape');
+  await openCard(page, ev(page, 'p'), true);
+  await page.getByTestId('card-more-actions').click();
+  const menu = await page.getByTestId('card-menu').innerText();
+  expect({ sheet: /⌘/.test(sheet), menu: /⌘/.test(menu) }, 'Ctrl, not ⌘, off a Mac').toEqual({ sheet: false, menu: false });
+  await ctx.close();
+});
+
+// =====================================================================================================
+// Checked and found right.
+// =====================================================================================================
+
+test('S15 [sync] data-loss: A edits offline while B renames; when A reconnects, B\'s rename is undone (A\'s offline save carries the old title back)', async ({ browser }) => {
+  finding('the reconnect write sends what A last saw for the event, not only the fields A changed');
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00'),
+    timed('q', 'Game', '2026-10-23T17:00:00-07:00', '2026-10-23T18:00:00-07:00'), timed('r', 'Party', '2026-10-21T17:00:00-07:00', '2026-10-21T18:00:00-07:00')]);
+  const A = await open(browser, id, '&view=week&date=2026-10-22');
+  const B = await open(browser, id, '&view=week&date=2026-10-22');
+  await A.ctx.setOffline(true);
+  // Offline, A changes the type of "Practice" and renames "Game" (and never touches "Party").
+  await openCard(A.page, ev(A.page, 'p'));
+  await A.page.getByTestId('card-type').click();
+  await picker(A.page).locator('[data-t="4"]').click();
+  await A.page.getByTestId('card-done').click();
+  await openCard(A.page, ev(A.page, 'q'));
+  await A.page.getByTestId('card-title').fill('Game (away)');
+  await A.page.getByTestId('card-title').press('Enter');
+  await A.page.getByTestId('card-done').click();
+  // Online, B renames "Practice" and "Party".
+  for (const [k, t] of [['p', 'Practice (gym)'], ['r', 'Party (moved)']]) {
+    await openCard(B.page, ev(B.page, k));
+    await B.page.getByTestId('card-title').fill(t);
+    await B.page.getByTestId('card-title').press('Enter');
+    await B.page.getByTestId('card-done').click();
+  }
+  await soon(async () => (await stored(id)).map((e) => e.title).sort()).toEqual(['Game', 'Party (moved)', 'Practice (gym)']);
+  await A.ctx.setOffline(false);
+  await soon(async () => (await byId(id, 'q')).title, 20_000).toBe('Game (away)');
+  await A.page.waitForTimeout(1500);
+  await shot(A.page, 'S15-reconnect-undoes-rename');
+  const rows = Object.fromEntries((await stored(id)).map((e) => [e.id, [e.title, e.type]]));
+  expect(rows, "both people's changes are kept").toEqual({ p: ['Practice (gym)', 4], q: ['Game (away)', 1], r: ['Party (moved)', 1] });
+  await A.ctx.close(); await B.ctx.close();
+});
+
+test('keyboard only: open an event, More details, the time zone picker by name, type "tokyo", Enter; the clock time is kept in Tokyo, Done', async ({ browser }) => {
+  const id = await seed([timed('p', 'Standup', '2026-10-27T10:00:00-07:00', '2026-10-27T10:30:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-27');
+  await ev(page, 'p').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(card(page)).toBeVisible();
+  const tabTo = async (testid) => { for (let i = 0; i < 20; i++) { if (await page.evaluate((t) => document.activeElement?.dataset?.testid === t, testid)) return; await page.keyboard.press('Tab'); } throw new Error(`no Tab reaches ${testid}`); };
+  await tabTo('card-more'); await page.keyboard.press('Enter');
+  await expect(page.getByTestId('card-tz-button')).toHaveAccessibleName('Time zone: Pacific Time');
+  await tabTo('card-tz-button'); await page.keyboard.press('Enter');
+  await expect(picker(page)).toBeVisible();
+  await page.keyboard.type('tokyo');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('card-tz-button')).toHaveAccessibleName('Time zone: Japan Time');
+  await soon(async () => (await byId(id, 'p')).tz).toBe('Asia/Tokyo');
+  expect((await byId(id, 'p')).start, '10 AM, now in Tokyo').toBe(iso('2026-10-27T10:00:00+09:00'));
+  await tabTo('card-done'); await page.keyboard.press('Enter');
+  await expect(card(page)).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+/** Light boxes on a dark page: visible elements in `root` whose own background is light (luminance > 0.5). */
+const lightBoxes = (page, root) => page.evaluate((sel) => {
+  const lum = (c) => { const v = (c.match(/[\d.]+/g) || []).map(Number); if (v.length > 3 && v[3] < 0.3) return 0; const [R, G, B] = v.slice(0, 3).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * R + 0.7152 * G + 0.0722 * B; };
+  return [...document.querySelectorAll(sel)].flatMap((r) => [r, ...r.querySelectorAll('*')]).filter((e) => { const b = e.getBoundingClientRect(); return b.width > 4 && b.height > 4 && getComputedStyle(e).visibility !== 'hidden'; })
+    .filter((e) => { const c = getComputedStyle(e).backgroundColor; return !/rgba\(0, 0, 0, 0\)|transparent/.test(c) && lum(c) > 0.5; })
+    .map((e) => `${e.tagName.toLowerCase()}.${[...e.classList].slice(0, 3).join('.')} ${getComputedStyle(e).backgroundColor}`);
+}, root);
+
+for (const device of ['phone', 'p360', 'ipad', 'small', 'desk']) for (const how of ['system', 'setting', 'switched']) {
+  // (Reported: white date and ⋮ buttons on a 390px phone in dark mode. Not reproduced in Chromium, in any of these ways;
+  // WebKit, where iOS Safari would show it, cannot run on the test box.)
+  test(`classic dark mode (${how}), ${device}: the toolbar, its date picker and ⋮ menu, pressed, hovered, focused and after a pick, have no light boxes`, async ({ browser }) => {
+    const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+    const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-22', { device, colorScheme: how === 'system' ? 'dark' : 'light', classic: true,
+      settings: how === 'setting' ? { darkMode: 'dark' } : null });
+    await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-schedule .e-toolbar'), null, { timeout: 30_000 });
+    if (how === 'switched') await page.evaluate(() => { document.querySelector('#app')._vnode.component.proxy.globalSettings.darkMode = 'dark'; });
+    await page.waitForTimeout(1200);
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark');
+    test.info().annotations.push({ type: 'toolbar', description: await page.evaluate(() => [...document.querySelectorAll('.e-schedule .e-toolbar .e-toolbar-item')].map((e) => `${e.className}|${e.textContent.trim().slice(0, 20)}|${e.getClientRects().length}`).join(' ;; ')) });
+    await shot(page, `S13-classic-dark-${how}-${device}-toolbar`);
+    // Each toolbar button pressed, hovered and focused (a tap leaves :hover and :focus behind on a phone).
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1 });
+    const { nodeIds } = await cdp.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: '.e-schedule .e-toolbar .e-tbar-btn' });
+    const states = [];
+    for (const st of [['hover'], ['focus'], ['active'], ['hover', 'focus', 'focus-visible']]) {
+      for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: st });
+      await page.waitForTimeout(100);
+      for (const b of await lightBoxes(page, '.e-schedule .e-toolbar')) states.push(`${st.join('+')}: ${b}`);
+      if (st.length > 1) await shot(page, `S13-classic-dark-${how}-${device}-forced-states`);
+      for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: [] });
+    }
+    const found = { toolbar: await lightBoxes(page, '.e-schedule .e-toolbar'), states };
+    const tap = async (loc) => { if (DEVICES[device].hasTouch) await loc.tap(); else await loc.click(); };
+    const dr = page.locator('.e-schedule .e-date-range').first();
+    if (await dr.isVisible()) {
+      await tap(dr);
+      await page.waitForTimeout(500);
+      await shot(page, `S13-classic-dark-${how}-${device}-datepicker`);
+      found.datePicker = await lightBoxes(page, '.e-schedule-popup, .e-header-popup, .e-popup-open');
+      // Pick a month: the popup closes, the button keeps focus (and hover, on a touch screen).
+      const cell = page.locator('.e-header-popup .e-cell, .e-popup-open .e-cell').filter({ hasText: /Nov/ }).first();
+      if (await cell.isVisible().catch(() => false)) await tap(cell); else await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      await shot(page, `S13-classic-dark-${how}-${device}-after-pick`);
+      found.afterPick = await lightBoxes(page, '.e-schedule .e-toolbar');
+    }
+    const more = page.locator('.e-schedule .e-toolbar .e-toolbar-right .e-toolbar-item:visible, .e-schedule .e-toolbar .e-hor-nav:visible').last();
+    if (await more.isVisible().catch(() => false)) {
+      await tap(more);
+      await page.waitForTimeout(500);
+      await shot(page, `S13-classic-dark-${how}-${device}-overflow`);
+      found.overflow = await lightBoxes(page, '.e-toolbar-pop, .e-popup-open');
+      const wk = page.locator('.e-toolbar-pop .e-toolbar-item:visible').filter({ hasText: 'Week' }).first();
+      if (await wk.isVisible().catch(() => false)) {
+        await tap(wk);
+        await page.waitForTimeout(600);
+        await shot(page, `S13-classic-dark-${how}-${device}-after-menu`);
+        found.afterMenu = await lightBoxes(page, '.e-schedule .e-toolbar');
+      }
+    }
+    expect(found, `${device}: nothing light on the dark page`).toEqual(Object.fromEntries(Object.keys(found).map((k) => [k, []])));
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
+
+test('classic, dark mode reached other ways: the phone turns dark while the page is open; a view link and the home page at 390px dark', async ({ browser }) => {
+  // (Probing the report of white date and ⋮ buttons in classic's toolbar on a dark phone.)
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-22', { device: 'phone', classic: true });
+  await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-schedule .e-toolbar'), null, { timeout: 30_000 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(1500);
+  await shot(page, 'classic-turned-dark-phone');
+  const sheet = await page.evaluate(() => [document.documentElement.dataset.theme, document.getElementById('syncfusion-theme')?.getAttribute('href')?.split('/').pop().split('?')[0]]);
+  const light = await lightBoxes(page, '.e-schedule .e-toolbar');
+  // A view link, and the home page.
+  const view = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceCalendarId: id }) })).json();
+  const out = { sheet, light };
+  for (const [name, url] of [['home', '/?backend=cf'], ['view', view.publicViewId ? `/view/${view.publicViewId}?backend=cf` : null]]) {
+    if (!url) continue;
+    const c2 = await browser.newContext({ ...DEVICES.phone, colorScheme: 'dark', timezoneId: 'America/Los_Angeles' });
+    await c2.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
+    await c2.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+    const p2 = await c2.newPage();
+    await p2.goto(url);
+    await p2.waitForFunction(() => window.scheduleObj && document.querySelector('.e-schedule .e-toolbar'), null, { timeout: 30_000 }).catch(() => {});
+    await p2.waitForTimeout(800);
+    await shot(p2, `classic-dark-phone-${name}`);
+    out[name] = await lightBoxes(p2, '.e-schedule .e-toolbar');
+    await c2.close();
+  }
+  expect(out).toEqual({ sheet: ['dark', 'material-dark.css'], light: [], ...(out.home ? { home: [] } : {}), ...(out.view ? { view: [] } : {}) });
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
 // =====================================================================================================
 // Probes: screenshots across devices for the visual review (and what was checked and found right).
 // =====================================================================================================
@@ -271,7 +503,7 @@ function nasty() {
   out.push(timed('board', links.title, `${links.when[0]}:00-07:00`, `${links.when[1]}:00-07:00`, { description: links.description }));
   out.push(timed('long', '🎉 会議 チーム 打ち合わせ — اجتماع الفريق الأسبوعي — a very long planning session title that keeps going and going past three lines of the card '.repeat(2).trim(),
     '2026-10-22T13:00:00-07:00', '2026-10-22T14:30:00-07:00', { description: 'line\n'.repeat(30).trim(), type: 5 }));
-  out.push(timed('jp', 'Tokyo standup', '2026-10-20T17:00:00Z', '2026-10-20T17:30:00Z', { tz: 'Asia/Tokyo', recurrencerule: WEEKLY }));
+  out.push(timed('jp', 'Tokyo standup', '2026-10-20T01:00:00Z', '2026-10-20T01:30:00Z', { tz: 'Asia/Tokyo', recurrencerule: WEEKLY }));
   for (let i = 0; i < 6; i++) out.push({ ...timed(`ad${i}`, `Holiday ${i}`, '2026-10-23T00:00:00-07:00', '2026-10-24T00:00:00-07:00'), isAllDay: true, type: (i % 8) + 1 });
   for (let i = 0; i < 9; i++) out.push(timed(`ov${i}`, `Crowd ${i}`, '2026-10-21T15:00:00-07:00', '2026-10-21T16:00:00-07:00', { type: (i % 8) + 1 }));
   return out;
@@ -285,6 +517,7 @@ for (const [device, scheme, loc] of [['ipad', 'light', 'us'], ['ipad', 'dark', '
       timezoneId: de ? 'Europe/Berlin' : 'America/Los_Angeles', settings: de ? { timeFormat: '24', firstDayOfWeek: '1' } : null });
     const { width: W, height: H } = DEVICES[device].viewport;
     const tag = `probe-${device}-${scheme}-${loc}`;
+    if (await page.getByTestId('early-hours').isVisible().catch(() => false)) await page.getByTestId('early-hours').click();
     await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
     await shot(page, `${tag}-grid`);
     for (const k of ['long', 'board', 'jp']) {
@@ -320,7 +553,7 @@ for (const [device, scheme, loc] of [['ipad', 'light', 'us'], ['ipad', 'dark', '
 test('probe: right-click menu at the window edge, ? shortcuts on a phone, title of three lines', async ({ browser }) => {
   const id = await seed(nasty());
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-21', { viewport: { width: 1024, height: 600 }, device: 'small' });
-  const b = await ev(page, 'ad5').first().boundingBox();
+  const b = await ev(page, 'ad0').first().boundingBox();
   await page.mouse.click(b.x + b.width - 2, b.y + 2, { button: 'right' });
   await page.waitForTimeout(300);
   await shot(page, 'probe-rightclick-allday');
