@@ -1161,6 +1161,12 @@ test('phone (390px): scrolling over the sheet never scrolls the calendar or the 
     const now = await scrolls(page, 'g');
     expect([now.page, now.grid, now.card.y]).toEqual([opened.page, opened.grid, opened.card.y]);
   }
+  // A wheel above the sheet (the scrim over the grid): the calendar behind is out of reach while the sheet is open.
+  await page.mouse.move(195, 120);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(250);
+  const above = await scrolls(page, 'g');
+  expect([above.page, above.grid, above.card.y]).toEqual([opened.page, opened.grid, opened.card.y]);
   // Swiping on the sheet (it may scroll its own long details): the grid and the page behind stay put.
   const s = await card(page).boundingBox();
   const cdp = await ctx.newCDPSession(page);
