@@ -174,7 +174,7 @@
 
         // Check calendar variable 
         assert( 
-            typeof scheduleObj !== 'undefined', 
+            typeof scheduleObj !== 'undefined' || !!window.pcNativeCal,   // a native view link has no scheduleObj
             'Calendar instance exists', 
             'Global scheduleObj variable defined' 
         ); 
@@ -558,7 +558,7 @@
 
         // Check Syncfusion 
         assert( 
-            typeof ej !== 'undefined' && typeof ej.schedule !== 'undefined', 
+            (typeof ej !== 'undefined' && typeof ej.schedule !== 'undefined') || (!!window.pcNativeCal && typeof NativeCalendar !== 'undefined'),
             'Syncfusion Schedule is loaded', 
             'ej.schedule namespace exists' 
         ); 

@@ -64,8 +64,18 @@ const NativeCalendar = (() => {
         const h = d.getHours() % 12 || 12;
         return `${pad(h)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
     };
-    // The stored instant -> the calendar day it stands for (see header).
-    const allDayDate = (v) => { const r = new Date(new Date(v).getTime() + 12 * 3600000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
+    // The stored instant -> the calendar day it stands for (see header). The display shape both apps hand in
+    // (Event.allDayDisplayRange: local midnight of the first day .. local 23:59:59.999 of the last) is read as
+    // local dates, so it lands right in every zone, UTC+13 too (where rounding put local midnight a day early).
+    const allDayDate = (v) => {
+        const d = new Date(v);
+        if (!isNaN(d)) {
+            const ms = d.getMilliseconds(), s = d.getSeconds(), m = d.getMinutes(), h = d.getHours();
+            if (!h && !m && !s && !ms) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            if (h === 23 && m === 59 && s === 59 && ms === 999) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        }
+        const r = new Date(d.getTime() + 12 * 3600000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate());
+    };
     const toFloating = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
     const fromFloating = (u) => new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
     const utcStamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -151,7 +161,7 @@ const NativeCalendar = (() => {
         return items;
     }
 
-    return {
+    const component = {
         name: 'NativeCalendar',
         props: {
             events: { type: Array, default: () => [] },
@@ -167,8 +177,17 @@ const NativeCalendar = (() => {
             initialDate: { type: [String, Date], default: null },
             customDuration: { type: [Number, String], default: 3 },
             customUnit: { type: String, default: 'Months' },
+            // The main app's view links: a click on a month day opens that day (there is nothing to create).
+            openDayOnClick: { type: Boolean, default: false },
+            // The main app's look (its calendar today): view names as written ("Month"), times without a leading
+            // zero ("5:30 PM"), and event text dark or white by contrast with the event color (textOn).
+            appLook: { type: Boolean, default: false },
+            textOn: { type: Function, default: null },
+            // Month rows taller than the 100px default (the main app fills a wide window with the month, as before).
+            monthRowHeight: { type: Number, default: MONTH_ROW_PX },
         },
-        emits: ['update:events', 'event-click', 'event-create', 'view-change'],
+        // 'range-change' { view, date, start, end }: whenever the dates on screen change (view or navigation).
+        emits: ['update:events', 'event-click', 'event-create', 'view-change', 'range-change'],
         data() {
             return {
                 view: normView(this.initialView) || 'Month',
@@ -202,6 +221,8 @@ const NativeCalendar = (() => {
             customN() { const n = parseInt(this.customDuration, 10); const max = this.customWeeks ? 52 : 24; return n >= 1 ? Math.min(n, max) : 3; },
             customWeeks() { return /^week/i.test(String(this.customUnit || '')); },
             customLabel() { return `${this.customN} ${this.customWeeks ? 'Week' : 'Month'}${this.customN === 1 ? '' : 's'}`; },
+            // Changes whenever the dates on screen do (watched: 'range-change').
+            rangeKey() { return `${this.view}|${this.date.getTime()}|${this.first}|${this.customN}|${this.customWeeks}`; },
             title() {
                 const d = this.date, M = MONTHS[d.getMonth()];
                 if (this.view === 'Day') return `${M} ${d.getDate()}, ${d.getFullYear()}`;
@@ -236,7 +257,7 @@ const NativeCalendar = (() => {
                     const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
                     const occs = occurrencesBetween(this.shownEvents, ws, addDays(ws, 7));
                     const bars = layoutWeekBars(occs, ws, 7);
-                    const maxLanes = Math.floor((MONTH_ROW_PX - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
+                    const maxLanes = Math.floor((Math.max(MONTH_ROW_PX, this.monthRowHeight) - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
                     const hidden = [0, 0, 0, 0, 0, 0, 0];
                     for (const b of bars) if (b.lane >= maxLanes) for (let c = b.col; c < b.col + b.span; c++) hidden[c]++;
                     weeks.push({ key: ws.getTime(), start: ws, days, bars: bars.filter(b => b.lane < maxLanes), hidden,
@@ -319,6 +340,7 @@ const NativeCalendar = (() => {
         },
         watch: {
             view(v) { this.$emit('view-change', { view: v, date: this.date }); },
+            rangeKey() { this.$emit('range-change', { view: this.view, date: this.date, ...this.visibleRange() }); },
             // The app's default view (settings, or the calendar's own default once it has loaded).
             initialView(v) { const n = normView(v); if (n && n !== this.view) this.setView(n); },
             initialDate(v) { const d = parseDay(v); if (d) this.date = d; },
@@ -334,6 +356,7 @@ const NativeCalendar = (() => {
             this._onDocClick = (e) => { if (this.pickerOpen && !e.target.closest('.nc-picker, .nc-title')) this.pickerOpen = false; };
             document.addEventListener('mousedown', this._onDocClick);
             this.$nextTick(() => this.scrollToWorkHours());
+            this.$emit('range-change', { view: this.view, date: this.date, ...this.visibleRange() });
         },
         beforeUnmount() {
             clearInterval(this._tick);
@@ -368,6 +391,23 @@ const NativeCalendar = (() => {
                     : `${title}, ${day(o.start)} ${this.time(o.start)} to ${day(o.end)} ${this.time(o.end)}`;
             },
             viewLabel(v) { return v === 'Custom' ? this.customLabel : v; },
+            // The dates on screen, epoch ms, end exclusive: whole weeks for the month grids.
+            visibleRange() {
+                const d = this.date, v = this.view;
+                let s, e;
+                if (v === 'Day') { s = startOfDay(d); e = addDays(s, 1); }
+                else if (v === 'Week') { s = startOfWeek(d, this.first); e = addDays(s, 7); }
+                else if (v === 'Agenda') { s = startOfDay(d); e = addDays(s, 7); }
+                else if (v === 'Year') { s = new Date(d.getFullYear(), 0, 1); e = new Date(d.getFullYear() + 1, 0, 1); }
+                else {
+                    const byWeeks = v === 'Custom' && this.customWeeks;
+                    const m0 = byWeeks ? startOfWeek(d, this.first) : new Date(d.getFullYear(), d.getMonth(), 1);
+                    const mEnd = byWeeks ? addDays(m0, 7 * this.customN) : addMonths(m0, v === 'Month' ? 1 : this.customN);
+                    s = startOfWeek(m0, this.first); e = s;
+                    while (e < mEnd) e = addDays(e, 7);
+                }
+                return { start: s.getTime(), end: e.getTime() };
+            },
             goToday() { this.date = startOfDay(new Date()); this.pickerOpen = false; },
             togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
             pickMonth(m) { this.date = new Date(this.pickerYear, m, 1); this.pickerOpen = false; },
@@ -384,11 +424,15 @@ const NativeCalendar = (() => {
             dayLabel(d, inMonth) { return d.getDate() === 1 ? `${MONTHS[d.getMonth()].slice(0, 3)} 1` : String(d.getDate()); },
             weekdayName(i, short) { const n = WEEKDAYS[i]; return short ? n.slice(0, 3) : n; },
             // v2 drops the leading zero ("9:00 AM", and "5 AM" on the hour gutter).
-            time(d) { const t = fmtTime(d, this.timeFormat); return this.v2 && this.timeFormat !== '24' ? t.replace(/^0/, '') : t; },
+            time(d) { const t = fmtTime(d, this.timeFormat); return (this.v2 || this.appLook) && this.timeFormat !== '24' ? t.replace(/^0/, '') : t; },
             hourLabel(h) {
                 if (this.v2 && this.timeFormat !== '24') return `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+                if (this.appLook && this.timeFormat !== '24') return fmtTime(new Date(2000, 0, 1, h), this.timeFormat).replace(/^0/, '');
                 return fmtTime(new Date(2000, 0, 1, h), this.timeFormat);
             },
+            // The main app (textOn): its calendar paints event text dark or white by contrast with the event
+            // color (ScheduleAdapter.onColor), so a category looks the same here as there. Nothing otherwise.
+            ink(type) { return this.textOn && !this.v2 ? { color: this.textOn(this.color(type)) } : null; },
             earlyLabel() { const h = parseInt(this.startHour, 10); return this.timeFormat === '24' ? `00-${pad(h - 1)}` : `12-${(h - 1) % 12 || 12} AM`; },
             // People plan by color ("the orange ones are soccer"), so events are blocks of
             // their color with WHITE text, exactly as in the main app -- a category must look
@@ -403,18 +447,18 @@ const NativeCalendar = (() => {
             isTint(b) { return this.v2 && !(b.occ.allDay || this.isMultiDayTimed(b.occ)); },
             barStyle(b) {
                 return { left: `calc(${(b.col / 7) * 100}% + 2px)`, width: `calc(${(b.span / 7) * 100}% - 4px)`,
-                    top: `${DATE_HEADER_PX + b.lane * (BAR_PX + BAR_GAP)}px`, ...this.paint(b.occ.type, this.isTint(b)) };
+                    top: `${DATE_HEADER_PX + b.lane * (BAR_PX + BAR_GAP)}px`, ...this.paint(b.occ.type, this.isTint(b)), ...this.ink(b.occ.type) };
             },
             gridBarStyle(b, cols) {
                 return { left: `calc(${(b.col / cols) * 100}% + 2px)`, width: `calc(${(b.span / cols) * 100}% - 4px)`,
-                    top: `${4 + b.lane * (BAR_PX + BAR_GAP)}px`, ...this.paint(b.occ.type) };
+                    top: `${4 + b.lane * (BAR_PX + BAR_GAP)}px`, ...this.paint(b.occ.type), ...this.ink(b.occ.type) };
             },
             timedStyle(it) {
                 const w = 100 / it.cols;
                 const dragging = this.drag && this.drag.moved && this.drag.key === it.occ.key;
                 return { top: `${dragging ? this.drag.top : it.top}px`, height: `${dragging ? this.drag.height : it.height}px`,
                     left: `calc(${it.col * w}% + 1px)`, width: `calc(${w}% - 3px)`,
-                    ...this.paint(it.occ.type, true),
+                    ...this.paint(it.occ.type, true), ...this.ink(it.occ.type),
                     opacity: dragging ? 0.85 : 1, zIndex: dragging ? 5 : 1 };
             },
             // Crosses midnight at all -- Syncfusion draws even a 10pm-2am flight as a
@@ -427,6 +471,7 @@ const NativeCalendar = (() => {
                 this.$emit('event-click', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring }, jsEvent });
             },
             clickCell(day, jsEvent, hour, full) {
+                if (this.readOnly && this.openDayOnClick && hour === undefined && (this.view === 'Month' || this.view === 'Custom')) { this.openDay(day); return; }
                 if (this.readOnly) return;
                 this.selectedCell = (hour === undefined ? 'd' : 'h' + hour) + day.getTime();
                 let start, end, isAllDay;
@@ -543,7 +588,7 @@ const NativeCalendar = (() => {
           <button v-for="(m, i) in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" :key="m"
             :class="{ on: pickerYear === date.getFullYear() && i === date.getMonth() }" @click="pickMonth(i)">{{ m }}</button>
         </div>
-        <div class="nc-picker-foot"><button class="nc-link" @click="goToday">{{ v2 ? 'Today' : 'TODAY' }}</button></div>
+        <div class="nc-picker-foot"><button class="nc-link" @click="goToday">{{ v2 || appLook ? 'Today' : 'TODAY' }}</button></div>
       </div>
     </div>
     <!-- Phone: the view buttons do not fit, so they live behind a "more" menu, as in Syncfusion. -->
@@ -557,7 +602,7 @@ const NativeCalendar = (() => {
     </div>
     <div class="nc-views" role="tablist">
       <button v-for="v in views" :key="v" role="tab" :aria-selected="view === v"
-        :class="{ on: view === v }" :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v)">{{ v2 ? viewLabel(v) : viewLabel(v).toUpperCase() }}</button>
+        :class="{ on: view === v }" :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v)">{{ v2 || appLook ? viewLabel(v) : viewLabel(v).toUpperCase() }}</button>
     </div>
   </div>
 
@@ -565,10 +610,10 @@ const NativeCalendar = (() => {
   <div v-if="view === 'Month' || view === 'Custom'" class="nc-month" data-testid="month-view-grid">
     <div class="nc-month-head">
       <div v-for="i in weekdayOrder" :key="i" class="nc-weekday"
-        :class="{ today: now.getDay() === i && monthWeeks.some(w => w.days.some(d => isToday(d))) }">{{ weekdayName(i, v2 && isPhone) }}</div>
+        :class="{ today: now.getDay() === i && monthWeeks.some(w => w.days.some(d => isToday(d))) }">{{ weekdayName(i, (v2 || appLook) && isPhone) }}</div>
     </div>
     <div class="nc-month-body">
-      <div v-for="w in monthWeeks" :key="w.key" class="nc-week-row">
+      <div v-for="w in monthWeeks" :key="w.key" class="nc-week-row" :style="monthRowHeight > 100 ? { height: monthRowHeight + 'px' } : null">
         <div v-for="(d, c) in w.days" :key="c" class="nc-cell" :data-day="d.getTime()"
           :class="{ out: !w.inMonth(d), weekend: isWeekend(d), selected: selectedCell === 'd' + d.getTime() }"
           @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)">
@@ -673,6 +718,10 @@ const NativeCalendar = (() => {
   </div>
 </div>`,
     };
+    // The same expansion the grid draws, for the app's other readers of "what is on these days" (print, the
+    // hidden-events count): occurrencesBetween(events, rangeStart, rangeEnd) -> [{ event, start, end, allDay, ... }].
+    component.occurrencesBetween = occurrencesBetween;
+    return component;
 })();
 
 if (typeof window !== 'undefined') window.NativeCalendar = NativeCalendar;

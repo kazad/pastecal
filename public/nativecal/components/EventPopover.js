@@ -14,6 +14,8 @@ const EventPopover = {
         timeFormat: { type: String, default: '12' },
         colors: { type: Array, default: () => [] },
         readOnly: { type: Boolean, default: false },
+        // The main app: the header's text dark or white by contrast with the event color (app.js eventTextOn).
+        textOn: { type: Function, default: null },
     },
     emits: ['close', 'edit', 'delete'],
     data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2() }; },
@@ -67,7 +69,7 @@ const EventPopover = {
     <div class="np2-titlerow"><span class="np2-swatch" data-testid="popover-swatch" :style="{ background: headerColor }"></span>
       <div class="np2-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div></div>
   </template>
-  <div v-else class="np-head" :style="{ background: headerColor }" data-testid="popover-header">
+  <div v-else class="np-head" :style="{ background: headerColor, color: textOn ? textOn(headerColor) : null }" data-testid="popover-header">
     <div class="np-icons">
       <button v-if="!readOnly" class="np-icon" title="Edit" aria-label="Edit" data-testid="popover-edit" @click="$emit('edit', event)">
         <nc-icon name="pencil" :size="16"></nc-icon></button>

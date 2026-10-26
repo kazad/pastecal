@@ -36,7 +36,7 @@ import { sessionUserId, sameSite, UNLIMITED_TOP_LEVEL, lockForOwner } from './Ac
 import { LockClient } from './LockClient.js';
 import { SlugService, nameProblem } from './SlugService.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
-import { siteUrl } from './Site.js';
+import { siteUrl, NATIVE_CAL_META, nativeViewLinks } from './Site.js';
 import { previewPage } from './preview/page.js';
 import { metaBlock, STATIC_CARD } from './preview/meta.js';
 
@@ -375,7 +375,7 @@ export async function serveAt(request, env, url, { serveFeed }) {
     // or posted link previews as this calendar (og-cards: title, upcoming events, its card image), at this
     // address; the card and tags use the hidden view name, never the calendar's edit id.
     const page = await env.ASSETS.fetch(new Request(new URL('/', url), { headers: { Accept: 'text/html' } }));
-    const meta = `<meta name="pc-view" content="${esc(hit.alias)}"><meta name="pc-at" content="${esc('@' + handle + '/' + name)}">`;
+    const meta = `<meta name="pc-view" content="${esc(hit.alias)}"><meta name="pc-at" content="${esc('@' + handle + '/' + name)}">${nativeViewLinks(env) ? NATIVE_CAL_META : ''}`;
     const title = hit.title || `@${handle}/${name}`;
     const at = `${siteUrl(env)}/@${handle}/${name}`;
     const fallback = metaBlock({ title, docTitle: `${title} · pastecal`, url: at, image: `${siteUrl(env)}${STATIC_CARD}`, imageAlt: title,

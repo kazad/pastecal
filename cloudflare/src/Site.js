@@ -55,3 +55,9 @@ export function noindexEverywhere(env, host) {
 }
 
 export const ROBOTS_DISALLOW_ALL = 'User-agent: *\nDisallow: /\n';
+
+// View links drawn by pastecal's own calendar instead of Syncfusion's (docs/native-switch.md): with the var
+// NATIVE_VIEW_LINKS set to "1", view pages (/view/<id>, /@handle/<name>) carry this tag, which public/index.html
+// reads before it loads anything. Unset (the default), they stay classic. ?cal= and localStorage pc_cal override it.
+export const NATIVE_CAL_META = '<meta name="pc-cal" content="native">';
+export const nativeViewLinks = (env) => !!env && env.NATIVE_VIEW_LINKS === '1';
