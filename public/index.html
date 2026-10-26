@@ -379,7 +379,7 @@
                         </svg>
                     </div>
                     <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
-                        @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
+                        @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; viaPanel('logo_menu'); toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
                         class="mt-2"></navigation-dropdown>
                 </div>
 
@@ -392,7 +392,7 @@
                         @enter="editTitle = false">
                     </calendar-title>
                     <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
-                    <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
+                    <button v-if="!editTitle" v-on:click="viaPanel('header'); toggleNotes()" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
                         class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-m-notes">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-5 h-5">
@@ -411,7 +411,7 @@
                             stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     </button>
                     <!-- Share button -->
-                    <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" :class="{ 'pc-hdr-on': showShare }"
+                    <button v-if="isExisting" @click="viaPanel('header'); toggleShare()" aria-label="Share calendar" :class="{ 'pc-hdr-on': showShare }"
                         data-testid="share-button-mobile"
                         class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-m-act">
                         <icon name="share" class="w-5 h-5"></icon>
@@ -430,11 +430,11 @@
                         <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false"
                             class="pc-menu absolute right-0 top-full mt-2 w-48 z-50">
                         <!-- Phones: Notes lives here, so the title has room in the header. -->
-                        <button @click="showMobileMenu = false; toggleNotes()" data-testid="notes-button-mobile" class="pc-menu-item pc-m-notes-item">
+                        <button @click="viaPanel('menu'); showMobileMenu = false; toggleNotes()" data-testid="notes-button-mobile" class="pc-menu-item pc-m-notes-item">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
                                 Notes
                             </button>
-                        <button @click="showMobileMenu = false; toggleSearch()"
+                        <button @click="viaPanel('menu'); showMobileMenu = false; toggleSearch()"
                                 data-testid="search-button-mobile"
                                 class="pc-menu-item">
                                                                         <icon name="search" class="w-5 h-5"></icon>                                Search
@@ -444,12 +444,12 @@
                                 class="pc-menu-item">
                                 <span class="text-lg leading-none font-bold">+</span> Quick add event
                             </button>
-                                                            <button @click="showMobileMenu = false; toggleSettings()"
+                                                            <button @click="viaPanel('menu'); showMobileMenu = false; toggleSettings()"
                                                                     data-testid="settings-button-mobile"
                                                                     class="pc-menu-item">
                                                                     <icon name="settings" class="w-5 h-5"></icon>
                                                                     Settings
-                                                                </button>                            <button @click="showMobileMenu = false; toggleHelp()"
+                                                                </button>                            <button @click="viaPanel('menu'); showMobileMenu = false; toggleHelp()"
                                 class="pc-menu-item">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
@@ -467,7 +467,7 @@
             <div v-if="!isLoading && isReadOnly" class="pc-viewer-row" data-testid="viewer-row-mobile">
                 <span v-if="!lock.locked" class="pc-view-badge" data-testid="view-only-badge-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
                 <div class="pc-viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="viaPanel('paused'); openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
                     <add-to-calendar v-if="subscribePageURL()" :nudge-key="calendar.id" :href="subscribePageURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding && !pausedOwner" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
                 </div>
@@ -531,7 +531,7 @@
 
                         <!-- Navigation dropdown component -->
                         <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
-                            @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
+                            @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; viaPanel('logo_menu'); toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
                         </navigation-dropdown>
                     </div>
                 </logo>
@@ -585,18 +585,18 @@
                      timestamp rather than the calendar's. -->
                 <!-- The calendar's own actions, labeled (side panel tabs): search, notes, its history, settings. -->
                 <div class="pc-hdr-actions" v-if="!isLoading">
-                    <button v-on:click="toggleSearch" aria-label="Search events" data-testid="search-button-desktop" class="pc-hdr-btn pc-hdr-icon" title="Search events">
+                    <button v-on:click="viaPanel('header'); toggleSearch()" aria-label="Search events" data-testid="search-button-desktop" class="pc-hdr-btn pc-hdr-icon" title="Search events">
                         <icon name="search"></icon>
                     </button>
-                    <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }" class="pc-hdr-btn" title="Notes everyone sees">
+                    <button v-if="!editTitle" v-on:click="viaPanel('header'); toggleNotes()" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }" class="pc-hdr-btn" title="Notes everyone sees">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8"/></svg>
                         <span>Notes</span>
                     </button>
-                    <button v-if="lastEditLabel && canEdit" @click="showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }" class="pc-hdr-btn" :title="'Calendar edited ' + lastEditExact">
+                    <button v-if="lastEditLabel && canEdit" @click="viaPanel('header'); showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }" class="pc-hdr-btn" :title="'Calendar edited ' + lastEditExact">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></svg>
                         <span>{{ lastEditLabel }}</span>
                     </button>
-                    <button v-on:click="toggleSettings" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn pc-hdr-icon" title="Settings">
+                    <button v-on:click="viaPanel('header'); toggleSettings()" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn pc-hdr-icon" title="Settings">
                         <icon name="settings"></icon>
                     </button>
                 </div>
@@ -619,7 +619,7 @@
                 <!-- A view link's own actions: take it with you, or make one. "Make your own" is the free
                      plan's credit (Pro's trimmed branding drops it); the badge sits beside the title. -->
                 <div v-if="!isLoading && isReadOnly" class="pc-viewer-actions" data-testid="viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="viaPanel('paused'); openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
                     <add-to-calendar v-if="subscribePageURL()" :nudge-key="calendar.id" :href="subscribePageURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding && !pausedOwner" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
                 </div>
@@ -666,7 +666,7 @@
                                          lives in the full sharing panel, one click away. -->
                                     <button type="button"
                                         class="pc-btn pc-btn--xs pc-btn--pill pc-btn--primary pc-addr-share-btn ml-2"
-                                        @click.stop="toggleShare"
+                                        @click.stop="viaPanel('header'); toggleShare()"
                                         :class="{ 'pc-hdr-on': showShare }"
                                         :aria-expanded="showShare ? 'true' : 'false'"
                                         aria-label="Share this calendar"
@@ -894,7 +894,7 @@
                         <button v-for="t in sideTabs" :key="t.id" type="button" role="tab" class="pc-tab pc-side-tab"
                             :class="{ 'pc-side-tab--icon': t.icon }" :aria-label="t.icon ? t.label : null" :title="t.icon ? t.label : null"
                             :aria-selected="sideSelectedTab === t.id ? 'true' : 'false'" :data-testid="'side-tab-' + t.id"
-                            @click="openSideTab(t.id)"><icon v-if="t.icon" :name="t.icon"></icon><template v-else>{{ t.label }}</template></button>
+                            @click="viaPanel('tabs'); openSideTab(t.id)"><icon v-if="t.icon" :name="t.icon"></icon><template v-else>{{ t.label }}</template></button>
                     </div>
                     <h2 v-else class="pc-side-title" data-testid="side-title">{{ sideTitle }}</h2>
                     <button id="closeAllPanels" type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-side-close" data-testid="side-close"
@@ -1135,7 +1135,7 @@
                             <!-- Locked: the plain URL edits only for the owner (signed in) and editor-link holders, so it isn't
                                  called an edit link; helpers need an editor link, which lives in the Plus tab. -->
                             <div v-if="lock.locked" class="pc-link-head"><h4 class="pc-share-label">Calendar link</h4><span class="pc-pill">view only for others</span>
-                                <button v-if="!proOwner" type="button" class="pc-link pc-link-extra" @click="openPlusTab('share')" data-testid="share-editor-links">Editor links</button></div>
+                                <button v-if="!proOwner" type="button" class="pc-link pc-link-extra" @click="viaPanel('share'); openPlusTab('share')" data-testid="share-editor-links">Editor links</button></div>
                             <div v-else class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-pill pc-pill--danger">can edit</span></div>
                             <div class="pc-link-row">
                                 <button type="button" class="pc-link-field" :data-copy-key="'edit'" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">
@@ -1207,13 +1207,13 @@
 
                         <!-- Sharing only. Plans, editor links and billing live in the Plus tab: one line points there. -->
                         <p v-if="canEdit && !lock.locked && !lock.paused" class="pc-share-plus" data-testid="share-plus-line">Choose who can edit with Plus.
-                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Upgrade</button></p>
+                            <button type="button" class="pc-link" @click="viaPanel('share'); openPlusTab('share')" data-testid="share-get-pro">Upgrade</button></p>
                         <p v-else-if="lock.locked && proOwner" class="pc-share-plus" data-testid="share-plus-line">Editor links and billing are in the
-                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Plus tab</button></p>
+                            <button type="button" class="pc-link" @click="viaPanel('share'); openPlusTab('share')" data-testid="share-get-pro">Plus tab</button></p>
                         <p v-else-if="lock.paused && pausedOwner" class="pc-share-plus" data-testid="share-plus-line">{{ planName(proPlan) }} ended.
-                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Choose what happens</button></p>
+                            <button type="button" class="pc-link" @click="viaPanel('share'); openPlusTab('share')" data-testid="share-get-pro">Choose what happens</button></p>
                         <p v-else-if="lock.locked || lock.paused" class="pc-share-plus" data-testid="share-plus-line">Owner?
-                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-owner-signin">Sign in to manage it</button></p>
+                            <button type="button" class="pc-link" @click="viaPanel('share'); openPlusTab('share')" data-testid="share-owner-signin">Sign in to manage it</button></p>
                     </div>
 
                     <!-- Plus: on a free calendar, what an upgrade adds and one way to get it (the trial, checkout,

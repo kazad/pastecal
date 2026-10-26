@@ -1368,6 +1368,12 @@ const CalendarVueApp = {
         // page renders mixed light/dark (e.g. tooltip on /view/<slug> looks transparent
         // because bg-2 is light while the calendar grid is dark). This watcher makes
         // darkMode the single source of truth: any mutation re-applies both outputs.
+        sideTab(tab, was) {
+            if (!tab || tab === was || !this._panelVia) return;
+            const via = this._panelVia;
+            this._panelVia = null;
+            track(a => a.panelOpened(tab, via));
+        },
         'globalSettings.darkMode': {
             handler() {
                 this.applyTheme();
@@ -4902,6 +4908,13 @@ const CalendarVueApp = {
             return !!this.sideTab;
         },
 
+        /** A person's click that may open a side panel tab: where it came from (header, menu, tabs, share, paused,
+         *  logo_menu). The sideTab watcher counts the open once (panel_opened); opens nobody clicked (a pinned panel, a
+         *  restored tab) are never counted. Cleared after the click either way. */
+        viaPanel(via) {
+            this._panelVia = via;
+            setTimeout(() => { this._panelVia = null; }, 0);
+        },
         /** A tab in the side panel's row. Picking the open tab leaves it open. */
         openSideTab(id) {
             if (this.sideTab === id) return;
@@ -6131,10 +6144,13 @@ const CalendarVueApp = {
             }
         },
 
-        saveGlobalSettings() {
+        /** e: the change event of a Settings field (a person's change, counted as settings:<field>); none for the
+         *  first visit's automatic import, which used to count every new visitor as a Settings use. */
+        saveGlobalSettings(e) {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
-                track(a => a.featureUsed('settings'));
+                const field = e && e.target && String(e.target.id || e.target.getAttribute('aria-label') || '').replace(/^set-/, '').replace(/\W+/g, '_').toLowerCase();
+                if (field) track(a => a.featureUsed(`settings:${field}`));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);
