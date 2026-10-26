@@ -114,20 +114,7 @@ const settle = async (p) => { await p.addStyleTag({ content: HIDE }); await p.wa
   await shot(p, 'notes', { clip: { x: 470, y: 64, width: 710, height: 380 } });
   await ctx.close();
 }
-// 5. Print: one page, the month with its name, dates and a QR code.
-{
-  const { ctx, p } = await open(`/${id}`, { viewport: { width: 1056, height: 816 } });
-  await ready(p);
-  await p.waitForFunction(() => typeof window.qrcode === 'function', null, { timeout: 15000 });
-  await p.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
-  // The footer's link and QR code as they print on pastecal.com.
-  await vm(p, `vm.printLink = vm.printLink.replace(/^(localhost|127\\.0\\.0\\.1):\\d+/, 'pastecal.com'); const q = qrcode(0, 'M'); q.addData('https://' + vm.printLink + '/add'); q.make(); vm.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true });`);
-  await p.emulateMedia({ media: 'print' });
-  await settle(p);
-  await shot(p, 'print', { clip: { x: 0, y: 0, width: 1056, height: 730 } });
-  await ctx.close();
-}
-// 6. Plus: who can edit.
+// 5. Plus: who can edit.
 {
   const { ctx, p } = await open(`/${id}`);
   await ready(p);

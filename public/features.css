@@ -140,16 +140,10 @@ main.ft-main > * { max-width: none }
 @keyframes ft-org-hit2 { 0%, 28% { opacity: 0; transform: translateY(4px) } 32%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
 @keyframes ft-org-hit3 { 0%, 32% { opacity: 0; transform: translateY(4px) } 36%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
 
-/* 5. Print: the month comes out of the printer, and the QR code lights up (print.jpg, 1056x730: x 8 y 646 w 76 h 76). */
 .ft-slot { position: absolute; left: 8%; right: 8%; top: 7%; height: calc(2.4 * var(--u)); border: 1px solid var(--pc-field); border-radius: 999px; background: var(--pc-soft); box-shadow: inset 0 3px 6px -2px rgba(0,0,0,.25); z-index: 1 }
 .ft-feed { position: absolute; left: 12%; right: 12%; top: calc(7% + calc(1.2 * var(--u))); bottom: 0; overflow: hidden }
-.ft-print .ft-paper { left: 0; top: 0; width: 100%; padding: calc(3 * var(--u)) calc(3 * var(--u)) calc(1.5 * var(--u)); box-sizing: border-box; border-radius: 0 0 calc(.8 * var(--u)) calc(.8 * var(--u)); border-top: 0; background: var(--pc-paper) }
 .ft-sheet { position: relative; display: block }
 .ft-qrring { position: absolute; left: .4%; top: 88%; width: 7.6%; height: 11%; border-radius: calc(.6 * var(--u)) }
-.is-playing.ft-print .ft-paper { animation: ft-print-feed var(--art-dur) cubic-bezier(.4,0,.6,1) infinite }
-.is-playing.ft-print .ft-qrring { animation: ft-print-qr var(--art-dur) var(--pc-ease) infinite }
-@keyframes ft-print-feed { 0%, 4% { transform: translateY(-101%) } 40%, 95% { transform: none } 100% { transform: translateY(-101%) } }
-@keyframes ft-print-qr { 0%, 46% { box-shadow: 0 0 0 0 transparent } 50% { box-shadow: 0 0 0 1cqw color-mix(in srgb, var(--pc-primary) 40%, transparent) } 58% { box-shadow: 0 0 0 0 transparent } 62% { box-shadow: 0 0 0 1cqw color-mix(in srgb, var(--pc-primary) 40%, transparent) } 70%, 100% { box-shadow: 0 0 0 0 transparent } }
 
 /* 6. Lock: on a locked calendar, a visitor's tap on an event gets the app's own message (Pro.js lockedVisitor). */
 .ft-lock .ft-panel { right: 6%; top: 20%; width: 42% }
