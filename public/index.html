@@ -828,11 +828,11 @@
                  it). Inside someone's page: a tiny corner credit. An edit link: quiet links, no pitch. -->
             <!-- Under a calendar you didn't make: one quiet line. "Make one like this" starts a new calendar with
                  the same colors and type names, no events (makeOwnCopy 'style'). -->
-            <p v-if="showMakeOwn" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><button type="button" class="pc-link" @click="makeOwnCopy('style', pageFooter === 'viewer' ? 'view-footer' : 'edit-footer')" data-testid="view-footer-cta">Make one like this →</button></p>
-            <p v-if="pageFooter === 'viewer' && !showMakeOwn" class="pc-view-footer" data-testid="view-footer-plain" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span></p>
-            <p v-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
+            <p v-if="showMakeOwn" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><button type="button" class="pc-link" @click="makeOwnCopy('style', pageFooter === 'viewer' ? 'view-footer' : 'edit-footer')" data-testid="view-footer-cta">Make one like this →</button><cal-switch v-if="showCalSwitch && pageFooter === 'viewer'" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></p>
+            <p v-if="pageFooter === 'viewer' && !showMakeOwn" class="pc-view-footer" data-testid="view-footer-plain" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><cal-switch v-if="showCalSwitch" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></p>
+            <p v-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a><cal-switch v-if="showCalSwitch" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></p>
             <a v-else-if="pageFooter === 'embed'" class="pc-embed-credit" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit" v-cloak>pastecal</a>
-            <nav v-else-if="pageFooter === 'editor'" class="pc-edit-footer" aria-label="pastecal" data-testid="edit-footer" v-cloak><a href="/">pastecal · Simple shared calendars</a><a href="/pricing" data-from="edit-footer">Pricing</a><a href="/help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+            <nav v-else-if="pageFooter === 'editor'" class="pc-edit-footer" aria-label="pastecal" data-testid="edit-footer" v-cloak><a href="/">pastecal · Simple shared calendars</a><a href="/pricing" data-from="edit-footer">Pricing</a><a href="/help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><cal-switch v-if="showCalSwitch" :native="nativeCal" @switch="setCalPref($event, nativeCal ? 'pill' : 'footer')" @feedback="openCalFeedback" @hide="hideCalPill"></cal-switch></nav>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
                 <span>This calendar is a draft, saved only in this browser. Press <b>Save &amp; share</b> to get a link anyone can open.</span>
                 <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-link pc-show-guide" @click="toggleHomeAside"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>Show guide</button><a href="#how">How pastecal works ↓</a></span>
@@ -1792,6 +1792,36 @@
                     </svg>
                 </button>
             </div>
+        </div>
+
+        <!-- Feedback on the new calendar (beta), from its footer pill (CalSwitch). Goes to /api/contact (sendCalFeedback)
+             with the page kind, browser and screen width only, never the calendar. -->
+        <div v-if="calFeedback" class="pc-modal" @click.self="calFeedback = null" @keydown.esc="calFeedback = null" v-cloak>
+            <form class="pc-modal-panel pc-cal-feedback" role="dialog" aria-modal="true" aria-labelledby="cal-feedback-title" data-testid="cal-feedback" @submit.prevent="sendCalFeedback">
+                <button type="button" @click="calFeedback = null" aria-label="Close" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-modal-x">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+                <template v-if="calFeedback.sent">
+                    <h3 id="cal-feedback-title" class="pc-section-title">Thanks, sent.</h3>
+                    <p class="pc-cal-feedback-note" data-testid="cal-feedback-sent">We read every message.</p>
+                    <div class="pc-cal-feedback-actions"><button type="button" class="pc-btn pc-btn--primary" @click="calFeedback = null">Done</button></div>
+                </template>
+                <template v-else>
+                    <h3 id="cal-feedback-title" class="pc-section-title">The new calendar (beta)</h3>
+                    <label class="pc-cal-feedback-label" for="cal-feedback-text">What should we change?</label>
+                    <textarea id="cal-feedback-text" class="pc-field" rows="5" maxlength="1800" v-model="calFeedback.text" data-testid="cal-feedback-text" required></textarea>
+                    <label class="pc-cal-feedback-label" for="cal-feedback-email">Email (if you'd like a reply)</label>
+                    <input id="cal-feedback-email" class="pc-field" type="email" autocomplete="email" v-model="calFeedback.email" data-testid="cal-feedback-email">
+                    <!-- The contact form's honeypot: people never see it, bots fill it in. -->
+                    <input class="pc-cal-feedback-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" v-model="calFeedback.website">
+                    <p class="pc-cal-feedback-note">We get your message, the kind of page (edit or view link), your browser and your screen width. Never your calendar.</p>
+                    <p v-if="calFeedback.error" class="pc-cal-feedback-error" role="alert" data-testid="cal-feedback-error">{{ calFeedback.error }}</p>
+                    <div class="pc-cal-feedback-actions">
+                        <button type="button" class="pc-btn pc-btn--secondary" @click="calFeedback = null">Cancel</button>
+                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="calFeedback.sending || !calFeedback.text.trim()" data-testid="cal-feedback-send">{{ calFeedback.sending ? 'Sending…' : calFeedback.error ? 'Try again' : 'Send' }}</button>
+                    </div>
+                </template>
+            </form>
         </div>
 
         <pre v-text="syncFusionEvents" v-if="debug"></pre>

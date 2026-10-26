@@ -39,6 +39,9 @@ export function toDataPoints(body, country = '') {
                 str(country, 4),
                 // detail; the trial_* events' one value each (feature, interval, mode, trial_surface) too,
                 // contact_submitted's type, subscribe_nudge's action and pro_beta_joined's beta_surface (last, so no earlier event's detail moves)
+                // new_ui (the "Try the new calendar" opt-in, app.js) needs both its action and its source:
+                // "opt_in_footer", "opt_out_pill", "feedback_sent_pill".
+                name === 'new_ui' ? str(`${str(p.action, 20)}_${str(p.source, 12)}`, 40) :
                 str(p.add_via ?? p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where ?? p.feature ?? p.interval ?? p.mode ?? p.trial_surface ?? p.type ?? p.action ?? p.beta_surface, 40),
                 str(p.cached, 4),
                 str(p.hv, 8),

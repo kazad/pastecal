@@ -138,6 +138,28 @@ const AddToCalendar = {
 };
 
 // ============================================================
+// "Try the new calendar (beta)": a quiet item in the line under the calendar (edit links and view links, never
+// embeds or the homepage). On the classic calendar it opts this browser in; on the new one it is a small pill
+// with Send feedback and Back to classic, hidden for the rest of the session by its x. It lives inside the
+// footer line, not floating over the page, so it can never cover events, the filter banner or a toast, and the
+// month grid's fit-to-window math (fitMonthRows) already counts its height. The app does the switching.
+// ============================================================
+const CalSwitch = {
+    props: { native: Boolean },
+    emits: ['switch', 'feedback', 'hide'],
+    template: `
+        <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Try the new calendar (beta)</button>
+        <span v-else class="pc-cal-pill" role="group" aria-label="New calendar (beta)" data-testid="new-cal-pill">
+            <span class="pc-cal-pill-name">New calendar (beta)</span>
+            <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
+            <button type="button" class="pc-link" data-testid="new-cal-feedback" @click="$emit('feedback')">Send feedback</button>
+            <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
+            <button type="button" class="pc-link" data-testid="back-to-classic" @click="$emit('switch', 'classic')">Back to classic</button>
+            <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-cal-pill-x" aria-label="Hide until next visit" title="Hide until next visit" data-testid="new-cal-pill-hide" @click="$emit('hide')">&times;</button>
+        </span>`,
+};
+
+// ============================================================
 // COMPONENT REGISTRY
 // ============================================================
 // IMPORTANT: All components used in templates must be registered here!
@@ -163,6 +185,7 @@ const COMPONENT_REGISTRY = {
     'close-icon': CloseIcon,                   // Close icon SVG
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
+    'cal-switch': CalSwitch,                   // Footer: "Try the new calendar (beta)" / the beta pill
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
     'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
@@ -271,6 +294,11 @@ const CalendarVueApp = {
             lock: { locked: false, pro: false, paused: false, canEdit: true, proSettings: null },
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
+            // "Try the new calendar (beta)" (CalSwitch): which calendar draws this page (index.html decided), the
+            // pill hidden for this session, and the feedback dialog ({ text, email, ... } while open).
+            nativeCal: !!window.pcNativeCal,
+            calPillHidden: (() => { try { return sessionStorage.getItem('pc_cal_pill_hidden') === '1'; } catch (e) { return false; } })(),
+            calFeedback: null,
             proTrialUsed: false,
             proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
             proUnlimitedBusy: false,
@@ -793,6 +821,13 @@ const CalendarVueApp = {
             // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
             if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
             return this.isExisting ? 'editor' : '';
+        },
+        // The footer's "Try the new calendar (beta)" link or, on the new calendar, its pill (CalSwitch). Edit links
+        // and view links (locked and Pro ones too); never an embed, the homepage (classic only for now) or a pill
+        // hidden for this session.
+        showCalSwitch() {
+            if (this.embedded || this.isHomepageCalendar || !['viewer', 'pro', 'editor'].includes(this.pageFooter)) return false;
+            return !(this.nativeCal && this.calPillHidden);
         },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
         // reports its view code and never reveals the edit name behind it.
@@ -1570,6 +1605,61 @@ const CalendarVueApp = {
             if (Math.abs(this.nativeRowHeight - h) >= 2) this.nativeRowHeight = h;
         },
         eventTextOn(color) { return ScheduleAdapter.onColor(color); },
+        // ---- "Try the new calendar (beta)" (CalSwitch in the footer) ----
+        // This browser's choice of calendar, then a reload into it. The head script in index.html reads
+        // localStorage pc_cal before anything loads (so no flash, and no Syncfusion download in native mode); the
+        // same value also goes in a cookie (a year, whole site) so the Worker could see the choice one day, e.g. to
+        // send the right first byte. Nothing on the server reads it today, and nothing may depend on it: storage
+        // is the source of truth. "Back to classic" stores 'classic' rather than clearing: with nothing stored, a
+        // view link falls back to the server's default (<meta name="pc-cal">, NATIVE_VIEW_LINKS), which may be native.
+        // A ?cal= in the address would win over the stored choice, so it is dropped before reloading.
+        setCalPref(pick, source) {
+            const value = pick === 'native' ? 'native' : 'classic';
+            try { localStorage.setItem('pc_cal', value); } catch (e) { /* storage blocked: the ?cal= below still switches this page */ }
+            try { document.cookie = `pc_cal=${value}; Max-Age=31536000; Path=/; SameSite=Lax` + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) { }
+            track(a => a.newUi(value === 'native' ? 'opt_in' : 'opt_out', source, true));
+            const url = new URL(location.href);
+            url.searchParams.delete('cal');
+            // Storage blocked (some private modes): carry the choice in the address for this page at least.
+            let stored = null; try { stored = localStorage.getItem('pc_cal'); } catch (e) { }
+            if (stored !== value) url.searchParams.set('cal', value);
+            location.replace(url.toString());
+        },
+        hideCalPill() {
+            this.calPillHidden = true;
+            try { sessionStorage.setItem('pc_cal_pill_hidden', '1'); } catch (e) { }
+        },
+        openCalFeedback() {
+            this.calFeedback = { text: '', email: '', website: '', openedAt: Date.now(), sending: false, error: '', sent: false };
+            track(a => a.newUi('feedback_open', 'pill'));
+            this.$nextTick(() => { const t = document.querySelector('[data-testid="cal-feedback-text"]'); if (t) t.focus(); });
+        },
+        // Sent through the contact form's endpoint (/api/contact: same-site, honeypot, fill time, 5 an hour) as an
+        // 'idea', the message prefixed with where it came from. Never the calendar or its events: only the page
+        // kind, the browser and OS family, and the screen width.
+        async sendCalFeedback() {
+            const f = this.calFeedback;
+            if (!f || f.sending || !f.text.trim()) return;
+            const ua = navigator.userAgent;
+            const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\/|FxiOS/.test(ua) ? 'Firefox' : /Chrome\/|CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'other browser';
+            const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'ChromeOS'
+                : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'other OS';
+            const where = `[New calendar (beta) feedback: ${this.isReadOnly ? 'view link' : 'edit link'}, ${browser} on ${os}, ${window.innerWidth}px wide]`;
+            f.sending = true; f.error = '';
+            try {
+                const res = await fetch('/api/contact', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'idea', message: `${where}\n\n${f.text.trim()}`, email: f.email.trim(), website: f.website, elapsed: Date.now() - f.openedAt }),
+                });
+                let body = null; try { body = await res.json(); } catch (e) { }
+                if (res.ok && body && body.ok !== false) {
+                    f.sent = true;
+                    track(a => a.newUi('feedback_sent', 'pill'));
+                } else f.error = (body && body.error) || 'That didn\'t send. Try again in a moment.';
+            } catch (e) {
+                f.error = 'That didn\'t send. Check your connection and try again.';
+            } finally { f.sending = false; }
+        },
         // The dates on the native calendar changed: what depends on them recomputes (hidden-events count).
         onNativeRange() {
             this.viewTick++;
