@@ -537,8 +537,10 @@ const NativeCalendar = (() => {
             timedStyle(it) {
                 const w = 100 / it.cols;
                 const dragging = this.drag && this.drag.moved && this.drag.key === it.occ.key;
+                // Moved to another day: drawn in that day's column (the column it started in is 100% wide), full width.
+                const shift = dragging && this.drag.mode === 'move' && this.drag.targetDay ? dayIndex(this.drag.targetDay) - dayIndex(it.occ.start) : 0;
                 return { top: `${dragging ? this.drag.top : it.top}px`, height: `${dragging ? this.drag.height : it.height}px`,
-                    left: `calc(${it.col * w}% + 1px)`, width: `calc(${w}% - 3px)`,
+                    left: shift ? `calc(${shift * 100}% + 1px)` : `calc(${it.col * w}% + 1px)`, width: shift ? 'calc(100% - 3px)' : `calc(${w}% - 3px)`,
                     ...this.paint(it.occ.type, true), ...this.ink(it.occ.type),
                     opacity: dragging ? 0.85 : 1, zIndex: dragging ? 5 : 1 };
             },
@@ -737,6 +739,31 @@ const NativeCalendar = (() => {
                     } else d.height = Math.max(HOUR_PX / 2, d.height0 + dy);
                 }
             },
+            /** Where the drag would put the event: what onDragEnd saves, and what the lifted block shows while it moves. */
+            dragRange(d) {
+                let start = new Date(d.occ.start), end = new Date(d.occ.end);
+                if (d.mode === 'month') {
+                    const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
+                    start = addDays(start, shift); end = addDays(end, shift);
+                } else if (d.mode === 'move') {
+                    const minutes = ((d.top - d.top0) / HOUR_PX) * 60;
+                    const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
+                    // The grid is drawn in wall-clock hours, so a drag moves the clock time (DST-safe).
+                    const wall = (t) => { const x = addDays(t, shift); x.setMinutes(x.getMinutes() + Math.round(minutes)); return x; };
+                    start = wall(start); end = wall(end);
+                } else if (d.mode === 'resize-top') {
+                    start.setMinutes(start.getMinutes() + Math.round(((d.top - d.top0) / HOUR_PX) * 60));
+                } else {
+                    // By how much the bottom edge moved (an event starting above the first hour shown is drawn clipped).
+                    end.setMinutes(end.getMinutes() + Math.round(((d.height - d.height0) / HOUR_PX) * 60));
+                }
+                return { start, end };
+            },
+            /** The time a timed block shows: its new time while it is being dragged. */
+            blockTimes(occ) {
+                const d = this.drag;
+                return d && d.moved && d.key === occ.key && d.mode !== 'create' && d.mode !== 'days' ? this.dragRange(d) : { start: occ.start, end: occ.end };
+            },
             onDragEnd(e) {
                 const d = this.drag; if (!d) return;
                 setTimeout(() => { this.drag = null; }, 0);
@@ -754,23 +781,9 @@ const NativeCalendar = (() => {
                     this.$emit('event-create', { start: start.toISOString(), end: end.toISOString(), isAllDay: true, event: e, full: false });
                     return;
                 }
-                const ev = d.occ.event; let start = new Date(d.occ.start), end = new Date(d.occ.end);
-                if (d.mode === 'month') {
-                    if (!d.targetDay) return;
-                    const shift = dayIndex(d.targetDay) - dayIndex(start); if (!shift) return;
-                    start = addDays(start, shift); end = addDays(end, shift);
-                } else if (d.mode === 'move') {
-                    const minutes = ((d.top - d.top0) / HOUR_PX) * 60;
-                    const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
-                    // The grid is drawn in wall-clock hours, so a drag moves the clock time (DST-safe).
-                    const wall = (t) => { const x = addDays(t, shift); x.setMinutes(x.getMinutes() + Math.round(minutes)); return x; };
-                    start = wall(start); end = wall(end);
-                } else if (d.mode === 'resize-top') {
-                    start = new Date(start); start.setMinutes(start.getMinutes() + Math.round(((d.top - d.top0) / HOUR_PX) * 60));
-                } else {
-                    // By how much the bottom edge moved (an event starting above the first hour shown is drawn clipped).
-                    end = new Date(end); end.setMinutes(end.getMinutes() + Math.round(((d.height - d.height0) / HOUR_PX) * 60));
-                }
+                const ev = d.occ.event;
+                if (d.mode === 'month' && !(d.targetDay && dayIndex(d.targetDay) !== dayIndex(d.occ.start))) return;
+                const { start, end } = this.dragRange(d);
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
                 if (this.appEdits) {
                     this.$emit('event-move', { event: ev, occurrence: d.occ, start, end, allDay: !!d.occ.allDay, mode: d.mode });
@@ -903,7 +916,7 @@ const NativeCalendar = (() => {
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
               @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown="keyMove($event, it.occ)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
-              <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
+              <div v-if="(isLifted(it.occ) ? drag.height : it.height) > 34" class="nc-timed-time">{{ time(blockTimes(it.occ).start) }} - {{ time(blockTimes(it.occ).end) }}</div>
               <div class="nc-resize" data-testid="resize-bottom" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
               <div v-if="appEdits" class="nc-resize nc-resize-top" data-testid="resize-top" @mousedown.stop="startDrag($event, it.occ, 'resize-top', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
             </div>
