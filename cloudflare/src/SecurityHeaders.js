@@ -10,8 +10,10 @@
  *   - 'unsafe-inline': index.html has inline scripts (GTM, gtag, theme, Firebase config) and the
  *     GTM container injects Hotjar and Clarity as inline custom-HTML tags.
  * What the policy still enforces: scripts only from these hosts, no plugins (object-src), no
- * <base> hijack, forms post only here, and framing: edit pages ('none') vs /view/* (embeds are
- * a feature: frame-ancestors *).
+ * <base> hijack, forms post only here, and framing: any calendar may be framed, edit links and view links
+ * alike (owner, Oct 26 2026: "you should be able to iframe any calendar"; people link to them anyway). Only the
+ * pages that handle an account or a payment refuse it (frame-ancestors 'none'), where a framed page could trick
+ * someone into a click that costs them: sign-in, account, claiming an @name, pricing and Pro checkout.
  */
 export const CSP_BASE = [
     "default-src 'self'",
@@ -29,8 +31,12 @@ export const CSP_BASE = [
 
 export const isViewPath = (path) => path === '/view' || path.startsWith('/view/');
 
+/** Pages that handle an account or a payment: never framed. Everything else (every calendar) may be. */
+export const NO_FRAME = ['/signin', '/account', '/handle', '/pricing', '/pro'];
+export const isNoFramePath = (path) => NO_FRAME.some((p) => path === p || path === `${p}.html` || path.startsWith(`${p}/`));
+
 export function cspFor(path) {
-    return `${CSP_BASE}; frame-ancestors ${isViewPath(path) ? '*' : "'none'"}`;
+    return `${CSP_BASE}; frame-ancestors ${isNoFramePath(path) ? "'none'" : '*'}`;
 }
 
 /** Set the page security headers on a (mutable) Response for `path`. */
