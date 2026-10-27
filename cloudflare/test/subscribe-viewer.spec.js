@@ -299,3 +299,33 @@ test('every calendar may be framed (edit and view links, the homepage); the acco
   for (const p of [`/${id}`, `/view/${viewId}`, '/']) expect(await fa(p), p).toBe('*');
   for (const p of ['/account', '/signin']) expect(await fa(p), p).toBe("'none'");
 });
+
+// Owner, Oct 26 2026: "the iframe for the editable vs non editable has a different header". An embedded EDIT link gets
+// the same one quiet line as a view link (no site header, no footer), plus "Open in pastecal" for Share and Settings;
+// editing still works right on the calendar.
+for (const [w, h] of [[720, 640], [400, 600]]) {
+  test(`embedded edit link ${w}px: the same one-line header as a view link, Open in pastecal, and editing works`, async ({ browser, request }) => {
+    const { id } = await seed(request);
+    const { ctx, page } = await open(browser, `/${id}?backend=cf&embed`, { width: w, height: h });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const bar = page.getByTestId('embed-bar');
+    await expect(bar).toBeVisible();
+    await expect(bar.locator('h1')).toHaveText('Viewer chrome test');
+    for (const t of ['mobile-header', 'edit-footer', 'view-footer']) await expect(page.getByTestId(t)).toBeHidden();
+    await expect(page.locator('topbar')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.getAttribute('data-theme')), { timeout: 8000 }).toBe('dark');
+    await page.waitForTimeout(400);
+    const openLink = bar.getByTestId('embed-open');
+    await expect(openLink).toBeVisible();
+    await expect(openLink).toHaveAttribute('target', '_blank');
+    expect(new URL(await openLink.getAttribute('href')).pathname).toBe(`/${id}`);
+    const kids = await bar.evaluate((el) => [...el.children].filter((c) => c.getClientRects().length).map((c) => Math.round((c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2) / 6)));
+    expect(new Set(kids).size, 'one line').toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
+    await page.screenshot({ path: `snapshots/embed-edit-${w}.png` });
+    // Editing on the calendar: a day click offers a new event, as on the full page.
+    await page.locator('.e-month-view .e-work-cells').nth(10).click();
+    await expect(page.locator('.e-quick-popup-wrapper.e-popup-open, .e-schedule-dialog.e-popup-open').first()).toBeVisible({ timeout: 5000 });
+    await ctx.close();
+  });
+}

@@ -1563,3 +1563,6 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 /* The template pictures are light-mode screenshots: a touch dimmer on a dark page so they don't glare. */
 [data-theme="dark"] .pc-tour-tpl img { filter: brightness(.82) }
 [data-theme="dark"] .pc-tour-tpl:hover img { filter: none }
+.pc-embed-open { flex: none; font: var(--pc-fw-medium) var(--pc-fs-sm)/1 var(--pc-font); color: var(--pc-text-2); text-decoration: none; white-space: nowrap }
+.pc-embed-open:hover { color: var(--pc-link) }
+@media (max-width: 480px) { .pc-embed-open { font-size: var(--pc-fs-xs) } }

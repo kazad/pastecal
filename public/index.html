@@ -348,10 +348,10 @@
         }, 10000);
     </script>
     <div id="app" data-testid="app-root" v-cloak>
-        <!-- Inside someone's page (a view link in an iframe): one quiet line instead of the site's header. The
+        <!-- Inside someone's page (a calendar in an iframe, view or edit link): one quiet line instead of the site's header. The
              calendar's name, Add to my calendar (a new tab, never the host page), and pastecal's small mark as the
              credit; no badge, no pitch, nothing floating over the events. -->
-        <div v-if="embedViewer" class="pc-embed-bar" data-testid="embed-bar" v-cloak>
+        <div v-if="embedBar" class="pc-embed-bar" data-testid="embed-bar" v-cloak>
             <h1 class="pc-embed-title" :title="displayCalendarTitle">{{ displayCalendarTitle }}</h1>
             <!-- The calendar's notes, when it has any: a small panel inside the embed (links open in a new tab). -->
             <div v-if="!isLoading && (calendar.options && calendar.options.notes || '').trim()" class="pc-embed-notes" v-click-outside="() => { embedNotes = false; }" @keydown.esc="embedNotes = false">
@@ -363,10 +363,12 @@
                 <div v-if="embedNotes" ref="embedNotesPanel" class="pc-embed-notes-panel" role="dialog" aria-label="Notes" tabindex="-1" data-testid="embed-notes" v-html="getReadOnlyNotes()"></div>
             </div>
             <add-to-calendar v-if="!isLoading && subscribePageURL()" :href="subscribePageURL()" target="_blank" @pick="trackSubscribe"></add-to-calendar>
+            <!-- An embedded EDIT link edits right on the calendar; Share, Settings and history are in the full app. -->
+            <a v-if="!isReadOnly && isExisting" class="pc-embed-open" :href="getEditableURL()" target="_blank" rel="noopener" data-testid="embed-open">Open in pastecal ↗</a>
             <a v-if="!hideBranding && !pausedOwner" class="pc-embed-mark" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit"><img src="/img/pastecal.logo.svg" alt="" width="14" height="14" class="dark:brightness-150">pastecal</a>
         </div>
         <!-- Mobile Header -->
-        <div v-if="!embedViewer" class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
+        <div v-if="!embedBar" class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
             <!-- Row 1: Logo, Title, Menu -->
             <div class="relative flex items-center justify-between gap-2">
                 <!-- Logo & Recents -->
@@ -510,7 +512,7 @@
         <!-- Single dialog instance used by button triggers -->
         <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" :named="namedTypes" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
-        <topbar v-if="!embedViewer" class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
+        <topbar v-if="!embedBar" class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->

@@ -673,6 +673,8 @@ const CalendarVueApp = {
         tourTemplates() { return ['team', 'family', 'out', 'club'].map((id) => (this.templateChips || []).find((t) => t.id === id)).filter(Boolean); },
         tplInAside() { return this.isHomepageCalendar && !this.isReadOnly && this.wideHome && !this.homeAsideHidden; },
         embedViewer() { return this.embedded && this.isReadOnly; },
+        /** Any calendar inside someone's page (view or edit link; owner, Oct 26 2026: embeds look the same either way). */
+        embedBar() { return this.embedded && (this.isReadOnly || this.isExisting); },
         showMakeOwn() {
             return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
                 && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
@@ -862,6 +864,7 @@ const CalendarVueApp = {
             if (this.isLoading || this.viewProblem) return '';   // a view link that isn't a calendar: its notice says it all
             // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
             if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
+            if (this.isExisting && this.embedded) return 'embed';   // an embedded edit link: its one-line header carries the credit
             return this.isExisting ? 'editor' : '';
         },
         // The footer's "Try the new calendar (beta)" link or, on the new calendar, its pill (CalSwitch). Edit links
