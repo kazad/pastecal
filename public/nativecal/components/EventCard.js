@@ -17,7 +17,7 @@
  *                zone whether a time exists (K.exists). It never reads or builds a local Date: the viewer's zone has
  *                its own DST gaps (stress S01, S02). change() turns wall values back into instants.
  *   props.calendarZone  the calendar's zone (offered in the time zone list when it is not yours)
- *   emits        'change' (patch, message)   'done' ({ title, description })   'cancel'   'delete'   'duplicate'
+ *   emits        'change' (patch, message)   'done' ({ title, description, added })   'cancel'   'delete'   'duplicate'
  *                'labels' (names)            'expand'
  */
 const EventCard = (() => {
@@ -388,7 +388,7 @@ const EventCard = (() => {
                 this.change({ title: this.titleText }, `Renamed ${this.titleText.trim() || '(No title)'}`);
             },
             titleEnter() {
-                if (this.isNew) { this.done(); return; }
+                if (this.isNew) { this.done(true); return; }
                 this.commitTitle();
                 if (this.$refs.title) this.$refs.title.blur();
             },
@@ -512,12 +512,13 @@ const EventCard = (() => {
                 ta.style.overflowY = ta.scrollHeight > cap + 2 ? 'auto' : 'hidden';
                 if (c) c.scrollTop = top;
             },
-            done() {
+            /** added: Done or Enter, a deliberate add (a new event is kept even with nothing typed). */
+            done(added) {
                 if (this.picker) this.closePicker(false);
                 this.commitTitle();
                 this.saveDetails(true);
                 this.closing = true;   // the blur as it closes saves nothing more
-                this.$emit('done', { title: this.titleText, description: this.detText });
+                this.$emit('done', { title: this.titleText, description: this.detText, added: added === true });
             },
             cancel() { this.closing = true; this.$emit('cancel'); },
             // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
@@ -931,7 +932,7 @@ const EventCard = (() => {
       <button v-if="!full" type="button" class="nk-more" data-testid="card-more" @click="expand()">More details</button>
       <span class="nk-sp"></span>
       <button v-if="full || isNew" type="button" class="nk-cancel" data-testid="card-cancel" @click="cancel">Cancel</button>
-      <button type="button" class="nk-done" data-testid="card-done" @click="done">Done</button>
+      <button type="button" class="nk-done" data-testid="card-done" @click="done(true)">Done</button>
     </div>
   </div>
 </div>

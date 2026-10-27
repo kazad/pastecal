@@ -2436,7 +2436,7 @@ const CalendarVueApp = {
             }
         },
         /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
-        nativeCardDone({ title, description } = {}) {
+        nativeCardDone({ title, description, added } = {}) {
             const c = this.nativeCard;
             if (!c) return;
             // The last change (a title saved as the card closes) is still asking "this event / all events": close
@@ -2446,9 +2446,9 @@ const CalendarVueApp = {
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();
             const details = description != null ? description : v.description || '';
-            // Nothing entered at all: nothing was meant. Anything entered (details, a type, a repeat) is kept, untitled
-            // as "(No title)", as the editor and quick add save it (stress F03).
-            if (!name && !details.trim() && !v.rule && (Number(v.type) || 1) === 1) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
+            // Done or Enter adds it, untitled as "(No title)" as the editor and quick add save it (stress F03). A click
+            // outside with nothing entered was not meant: anything entered (details, a type, a repeat) is still kept.
+            if (!added && !name && !details.trim() && !v.rule && (Number(v.type) || 1) === 1) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
                 Type: Number(v.type) || 1, Description: details, RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
