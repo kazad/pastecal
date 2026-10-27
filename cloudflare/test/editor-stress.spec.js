@@ -254,6 +254,57 @@ test('F03b [card] drag a new event, press Enter without a title: it is added as 
   await ctx.close();
 });
 
+test('F03c [card] More details opens a centered modal over a scrim (as classic); the quick card has no "Edited" line', async ({ browser }) => {
+  const id = await seed([timed('p', 'Practice', '2026-10-30T15:00:00-07:00', '2026-10-30T16:00:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27', { colorScheme: 'dark', viewport: { width: 1440, height: 900 } });
+  await openCard(page, ev(page, 'p'));
+  await expect(page.getByTestId('card-edited')).toHaveCount(0);
+  await expect(card(page)).not.toContainText('Edited');
+  await shot(page, 'F03c-quick');
+  await page.getByTestId('card-more').click();
+  await expect(page.getByTestId('card-start-date')).toBeVisible();
+  await page.waitForTimeout(400);
+  await shot(page, 'F03c-full-modal');
+  await expect(page.getByTestId('card-scrim')).toBeVisible();
+  const b = await card(page).boundingBox();
+  expect(Math.abs(b.x + b.width / 2 - 720), 'centered across the window').toBeLessThan(4);
+  expect(b.y, 'top on screen').toBeGreaterThanOrEqual(0);
+  expect(b.y + b.height, 'bottom on screen').toBeLessThanOrEqual(900);
+  expect(b.width, 'a comfortable width').toBeGreaterThanOrEqual(640);
+  await ctx.close();
+});
+
+test('F03d [card] the next new event starts with the type the last one was added with; an untouched empty one is still dropped', async ({ browser }) => {
+  const id = await seed([]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
+  let at = await slot(page, '2026-10-27', 9);
+  await page.mouse.click(at.x, at.y + 6);
+  await expect(card(page)).toBeVisible();
+  await page.keyboard.type('Standup');
+  await page.getByTestId('card-type').click();
+  await picker(page).locator('[data-t="3"]').click();
+  await page.getByTestId('card-done').click();
+  await expect(card(page)).toBeHidden();
+  await page.waitForTimeout(1200);
+  const first = (await stored(id))[0];
+  expect(Number(first.type), 'picked a type other than the first').not.toBe(1);
+  at = await slot(page, '2026-10-28', 9);
+  await page.mouse.click(at.x, at.y + 6);
+  await expect(card(page)).toBeVisible();
+  await page.keyboard.type('Review');
+  await page.keyboard.press('Enter');
+  await expect(card(page)).toBeHidden();
+  at = await slot(page, '2026-10-29', 9);
+  await page.mouse.click(at.x, at.y + 6);
+  await expect(card(page)).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(card(page)).toBeHidden();
+  await page.waitForTimeout(1200);
+  const rows = await stored(id);
+  expect(rows.map((e) => [e.title, Number(e.type)]).sort(), 'Review has Standup\'s type; the empty one is not added').toEqual([['Review', Number(first.type)], ['Standup', Number(first.type)]]);
+  await ctx.close();
+});
+
 test('F04 [repeat] Custom… "Ends On" shows the date it will end on, and stores exactly that date', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');

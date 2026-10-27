@@ -271,7 +271,6 @@
 .nk-showall, .nk-more { border: 0; background: none; color: var(--pc-link); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); cursor: pointer;
     min-height: var(--pc-h-sm); padding: 0 var(--pc-space-2); margin-left: calc(-1 * var(--pc-space-2)); border-radius: var(--pc-radius-control); }
 .nk-showall:hover, .nk-more:hover { background: var(--pc-soft); }
-.nk-meta { font-size: .8929em; font-weight: var(--pc-fw-medium); line-height: normal; color: var(--pc-text-muted); margin-top: calc(-1 * var(--pc-space-2)); }   /* 12.5px */
 
 /* full: Starts / Ends, the length, the time zone, repeat, details */
 .nk-when { display: grid; grid-template-columns: 52px 116px 96px 1fr; align-items: center; gap: var(--pc-space-2); }
@@ -320,7 +319,7 @@
 .nk-foot { display: flex; align-items: center; gap: var(--pc-space-1); margin-left: 60px; position: sticky; bottom: 0; z-index: 2; background: var(--pc-raised);
     padding-bottom: var(--pc-space-3); margin-bottom: calc(-1 * var(--pc-space-3)); }   /* pinned when the card scrolls inside: Done stays in view */
 /* Writing long details: the card widens to a comfortable line (EventCard widen); it never narrows while open. */
-.nk-card.wide { width: 680px; }
+.nk-card.wide, .nk-card:not(.quick):not(.sheet) { width: 680px; }
 /* Scrolling inside the card (or its details, or a picker's list) never carries on into the calendar or the page. */
 .nk-card, .nk-card .nk-det, .nk-pick, .nk-pick *, .nk-menu { overscroll-behavior: contain; }
 /* A phone's sheet is open: the page behind it does not scroll (the calendar is inert; app.js watch nativeCard). */

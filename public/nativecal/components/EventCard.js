@@ -9,7 +9,7 @@
  * is made, and the app writes it through its one write path (app.js nativeCardChange -> commitScheduleAction),
  * with a toast and Undo. A new event is not saved until Done (or Enter, or a click outside with a title).
  *
- *   props.card   { key, value, isNew, full, canRepeat, anchor: { testid, rect }, edited, place }
+ *   props.card   { key, value, isNew, full, canRepeat, anchor: { testid, rect }, place }
  *                value: { title, type, description, isAllDay, start: Date, end: Date, rule, tz }
  *                (start, end: instants; all day: the midnights, here, of the first and the LAST day)
  *                tz: the event's own time zone ('' = each person's own). The card shows and edits the times as WALL
@@ -287,7 +287,9 @@ const EventCard = (() => {
                 c.style.maxHeight = ''; c.style.overflowY = '';
                 const h = c.offsetHeight;
                 let vx, vy;
-                if (!r) { vx = (window.innerWidth - w) / 2; vy = 120; }
+                // All the details: a modal in the middle of the window (as classic's editor), not a card off in a corner.
+                if (this.full) { vx = (window.innerWidth - w) / 2; vy = Math.max(M, (window.innerHeight - h) / 2); }
+                else if (!r) { vx = (window.innerWidth - w) / 2; vy = 120; }
                 else {
                     vx = r.right + 10;
                     if (vx + w > window.innerWidth - M) vx = r.left - w - 10;
@@ -326,8 +328,11 @@ const EventCard = (() => {
                 this.$emit('expand');
                 if (!reduced()) { this.expanding = true; setTimeout(() => { this.expanding = false; }, 260); }
                 this.$nextTick(() => {
-                    this.grow(); this.fit();
+                    // Centered at its full width, not the width it is animating from.
                     const c = this.$refs.card;
+                    if (c) c.style.transition = 'none';
+                    this.grow(); this.place(false);
+                    if (c) c.style.transition = '';
                     if (focus === 'det' && this.detView) this.editDetails(null);
                     else if (focus && this.$refs[focus]) this.$refs[focus].focus();
                     // "More details" pressed (it is gone now): focus goes on to the first field, not to the page.
@@ -830,7 +835,7 @@ const EventCard = (() => {
         },
         template: /* html */ `
 <teleport to="body">
-<div v-if="phone" class="nk-scrim" data-testid="card-scrim" aria-hidden="true"></div>
+<div v-if="phone || full" class="nk-scrim" data-testid="card-scrim" aria-hidden="true"></div>
 <div ref="card" class="nk-card" :class="cls" :style="cardStyle" role="dialog" :aria-label="isNew ? 'New event' : 'Event'" data-testid="event-card"
   @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd" @focusin="onFocusIn">
   <div class="nk-h">
@@ -862,7 +867,6 @@ const EventCard = (() => {
         @click="!$event.target.closest('a') && expand('det')"><div ref="qdet" class="nk-qtext" v-html="linked"></div></div>
       <button v-if="clamped || showAll" type="button" class="nk-showall" data-testid="card-show-all" @click="showAll = !showAll; $nextTick(() => { measureClamp(); fit(); })">{{ showAll ? 'Show less' : 'Show all' }}</button>
     </div>
-    <div v-if="!full && !isNew" class="nk-meta" data-testid="card-edited">{{ card.edited || '\u00a0' }}</div>
 
     <div v-if="full" class="nk-when">
       <span class="nk-gi" title="Time"><nc-icon name="clock" :size="18"></nc-icon></span>
