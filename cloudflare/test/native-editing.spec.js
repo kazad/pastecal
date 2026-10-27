@@ -706,7 +706,7 @@ test('the app around it: 24-hour time and Monday first in the card and pickers, 
   await ctx.close();
 });
 
-test('placement: at every corner the card and its pickers stay 12px inside the window; expanding moves it only near the bottom', async ({ browser }) => {
+test('placement: at every corner the card and its pickers stay 12px inside the window; More details opens centered', async ({ browser }) => {
   const id = await seed([
     timed('tl', 'Top left', '2026-10-18T06:00:00-07:00', '2026-10-18T07:00:00-07:00'),
     timed('tr', 'Top right', '2026-10-24T06:00:00-07:00', '2026-10-24T07:00:00-07:00'),
@@ -726,7 +726,7 @@ test('placement: at every corner the card and its pickers stay 12px inside the w
     await page.waitForTimeout(300);
     const c1 = await card(page).boundingBox();
     expect(within(c1, W, H), `${k}: full card inside`).toBe(true);
-    if (k[0] === 't') expect(Math.abs(c1.y - c0.y), `${k}: expanding does not move it`).toBeLessThan(1);
+    expect(Math.abs(c1.x + c1.width / 2 - W / 2), `${k}: More details is centered (as classic's editor)`).toBeLessThan(2);
     for (const f of ['card-start-date', 'card-end-time', 'card-repeat', 'card-type']) {
       await page.getByTestId(f).click();
       await expect(picker(page)).toBeVisible();
@@ -850,11 +850,11 @@ test('two people: details typed here are not overwritten by a change from anothe
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('long details: the card widens to 680px past five lines (never narrows while open, back to 560 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
+test('long details: the full card is 680px and never narrows while open, stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
   const id = await seed([timed('r', 'Right edge', '2026-10-23T10:00:00-07:00', '2026-10-23T11:00:00-07:00')]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'r'), true);
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(560);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(680);
   const ta = page.getByTestId('card-details');
   await ta.click();
   for (let i = 0; i < 7; i++) await page.keyboard.type(`Line ${i + 1}: who brings what, where we meet, and when.\n`);
@@ -1381,15 +1381,15 @@ test('a long title wraps beside the type button; Enter saves it; newlines become
   await ctx.close();
 });
 
-// The card: 560px on a desktop (the details box about 60 characters a line, four lines before it grows), 680px once
-// the details pass five lines, always 12px inside the window, on 1280x800 and on 1024x600.
+// More details: a centered 680px modal on a desktop (the details box four lines before it grows), always 12px inside
+// the window, on 1280x800 and on 1024x600.
 for (const [w, h] of [[1280, 800], [1024, 600]]) {
-  test(`card width and placement at ${w}x${h}: 560px, 680px for long details, 12px inside the window`, async ({ browser }) => {
+  test(`card width and placement at ${w}x${h}: 680px, 12px inside the window`, async ({ browser }) => {
     const fxs = require('../../test/fixtures/long-descriptions.json').events;
     const id = await seed(fxs.map((e) => timed(e.id, e.title, `${e.when[0]}:00-07:00`, `${e.when[1]}:00-07:00`, { description: e.description, type: e.type || 1 })));
     const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
     await page.setViewportSize({ width: w, height: h });
-    for (const [title, width] of [['Dentist', 560], ['Saturday tournament', 680], ['Meeting minutes', 680]]) {
+    for (const [title, width] of [['Dentist', 680], ['Saturday tournament', 680], ['Meeting minutes', 680]]) {
       await openCard(page, page.locator('.nc-bar', { hasText: title }).first(), true);
       await page.waitForTimeout(300);
       const r = await card(page).boundingBox();
@@ -1399,7 +1399,7 @@ for (const [w, h] of [[1280, 800], [1024, 600]]) {
       expect(r.x + r.width, `${title}: right edge`).toBeLessThanOrEqual(w - 12 + 0.5);
       expect(r.y + r.height, `${title}: bottom edge`).toBeLessThanOrEqual(h - 12 + 0.5);
       await expect(page.getByTestId('card-done')).toBeInViewport();
-      if (width === 560) expect((await page.getByTestId('card-details').boundingBox()).height, 'four lines before it grows').toBeGreaterThanOrEqual(100);
+      if (title === 'Dentist') expect((await page.getByTestId('card-details').boundingBox()).height, 'four lines before it grows').toBeGreaterThanOrEqual(100);
       await page.keyboard.press('Escape');
       await expect(card(page)).toHaveCount(0);
     }

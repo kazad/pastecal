@@ -1863,7 +1863,7 @@ const CalendarVueApp = {
             this.nativeQuick = null;
             // No title: "(No title)", as the editor saves it (classic stores Syncfusion's placeholder, "Add title").
             this.nativeAction('eventCreate', { addedRecords: [{ Subject: title || '(No title)', StartTime: new Date(q.start), EndTime: nativeEnd(q.end, q.isAllDay),
-                IsAllDay: !!q.isAllDay, Type: 1, Description: '', RecurrenceRule: '' }] }, { action: 'Add' });
+                IsAllDay: !!q.isAllDay, Type: this.nativeNewType(), Description: '', RecurrenceRule: '' }] }, { action: 'Add' });
         },
         moreNativeQuick(title) {
             const q = this.nativeQuick;
@@ -2177,13 +2177,17 @@ const CalendarVueApp = {
             const el = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('[data-testid^="event-"]') : null;
             this.showNativeCard({ isNew: false, full, target, value, canRepeat: kind !== 'edited',
                 anchor: { testid: `event-${row.id}`, rect: el ? el.getBoundingClientRect().toJSON() : null }, returnTo: el });
-            this.nativeCardEdited(row);
+        },
+        /** A new event's type: the one the last event added here had (a run of Work events stays Work), else the first. */
+        nativeNewType() {
+            const last = this._nativeLastType;
+            return last && last.cal === (this.calendar && this.calendar.id) ? last.type : 1;
         },
         /** A new event from a click or drag on the grid (or N): a draft until Done. */
         openNativeNewCard({ start, end, isAllDay, jsEvent, full = false }) {
             // (All day: the first and the last day's midnights here, read in this browser's wall clock.)
             const here = EventZone.localZone(), day = (x) => cardKit.instantOf(cardKit.startOfDay(cardKit.wallOf(x, here)), here);
-            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '', tz: '',
+            const value = { title: '', type: this.nativeNewType(), description: '', isAllDay: !!isAllDay, rule: '', tz: '',
                 start: isAllDay ? day(start) : new Date(start), end: isAllDay ? day(new Date(end).getTime() - 1) : new Date(end) };
             if (value.isAllDay && value.end < value.start) value.end = new Date(value.start);
             const r = jsEvent && jsEvent.clientX != null ? { left: jsEvent.clientX, top: jsEvent.clientY, width: 1, height: 1, right: jsEvent.clientX + 1, bottom: jsEvent.clientY + 1 } : null;
@@ -2193,18 +2197,8 @@ const CalendarVueApp = {
             this.nativeQuick = null;
             this._nativeCardSeq = (this._nativeCardSeq || 0) + 1;
             this._nativeCardReturn = returnTo && returnTo.dataset ? returnTo.dataset.testid : null;
-            this.nativeCard = { key: this._nativeCardSeq, isNew, full, canRepeat, target, value, opened: this.nativeCardClone(value), anchor, edited: '', place: 0,
+            this.nativeCard = { key: this._nativeCardSeq, isNew, full, canRepeat, target, value, opened: this.nativeCardClone(value), anchor, place: 0,
                 keepOccurrences: null, entries: [] };
-        },
-        /** "Edited 5m ago": the newest change to this event in the history the app already reads (one read per card). */
-        nativeCardEdited(row) {
-            const c = this.nativeCard, key = this.eventKey(row);
-            const label = () => {
-                const hit = (this.undoEntries || []).find((u) => (u.keys || []).includes(key));
-                if (hit && this.nativeCard === c) c.edited = `Edited ${cardKit.ago(hit.savedAt, this.serverNow ? this.serverNow() : Date.now())}`;
-            };
-            label();
-            if (this.isExisting && Date.now() - (this._nativeHistoryAt || 0) > 60000) { this._nativeHistoryAt = Date.now(); this.loadUndoEntries().then(label).catch(() => {}); }
         },
         /** One change from the card (patch: the fields it changed; message: what the toast says). */
         nativeCardChange(patch, message, meta = null) {
@@ -2406,7 +2400,6 @@ const CalendarVueApp = {
             // Raw (never a reactive proxy), so it can be found in the store's stack by identity.
             c.entries.push(Vue.markRaw({ entry: stack[stack.length - 1], before: snapshot }));
             c.value = this.nativeCardClone(after);
-            c.edited = 'Edited just now';
             this._nativeGlow = `event-${c.target.id}`;
             // No toast: the change is on screen and the event glows once; ⌘Z undoes. Toasts are for what you can't see
             // happen (a delete, someone else's edit, an error).
@@ -2436,7 +2429,7 @@ const CalendarVueApp = {
             }
         },
         /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
-        nativeCardDone({ title, description } = {}) {
+        nativeCardDone({ title, description, added } = {}) {
             const c = this.nativeCard;
             if (!c) return;
             // The last change (a title saved as the card closes) is still asking "this event / all events": close
@@ -2446,14 +2439,15 @@ const CalendarVueApp = {
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();
             const details = description != null ? description : v.description || '';
-            // Nothing entered at all: nothing was meant. Anything entered (details, a type, a repeat) is kept, untitled
-            // as "(No title)", as the editor and quick add save it (stress F03).
-            if (!name && !details.trim() && !v.rule && (Number(v.type) || 1) === 1) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
+            // Done or Enter adds it, untitled as "(No title)" as the editor and quick add save it (stress F03). A click
+            // outside with nothing entered was not meant: anything entered (details, a type, a repeat) is still kept.
+            if (!added && !name && !details.trim() && !v.rule && Number(v.type) === Number(c.opened.type)) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
                 Type: Number(v.type) || 1, Description: details, RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
             this.closeNativeCard();
             if (!ok) return;
+            this._nativeLastType = { cal: this.calendar.id, type: Number(v.type) || 1 };
             const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             this._nativeGlow = row ? `event-${row.id}` : null;
         },

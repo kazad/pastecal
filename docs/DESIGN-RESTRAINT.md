@@ -20,6 +20,13 @@ and the key pages carry a budget that can only go down (`cloudflare/test/restrai
 6. **A small visual vocabulary.** Two type weights per view, one accent color, one corner radius per kind of element,
    the spacing tokens. No raw browser controls (`test/unit/native-fields.test.js`).
 7. **Nothing floats over content** except what you are working on (the event card, a picker, a dialog).
+8. **A deliberate action always acts.** Enter, Done, Save do what they say, even with fields left empty (an untitled
+   event is "(No title)"). Only accidental exits (a click outside, a swipe) may quietly do nothing.
+9. **Remember the last choice.** A run of similar entries should not repeat the same picks (a new event takes the type
+   of the last one added).
+10. **More room means a modal, not a bigger popover.** The quick card sits beside its event; "More details" is a
+   centered dialog over a scrim, as classic's editor was.
+11. **Status text must tell you something you don't know.** "Edited just now" under the change you just made is noise.
 
 ## The budget
 
@@ -35,6 +42,7 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 | View link, desktop | 0 | 3 | 1 | 46 | |
 | View link, phone | 0 | 2 | 1 | 32 | +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
 | Embed, 720 | 0 | 0 | 0 | 18 | one quiet header line |
+| Event card (quick view) | - | - | - | 13 | title, type, date and times, More details, Done; the "Edited just now" line (3 words) removed Oct 27 2026 |
 
 ## Next, in order
 
