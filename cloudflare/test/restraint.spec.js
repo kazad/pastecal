@@ -88,3 +88,28 @@ for (const p of PAGES) {
     }
   });
 }
+
+// The event card is a screen too (Oct 27 2026: an "Edited just now" line under every event shipped because the budget
+// only covered pages). An event without details: its title, type, time, and the actions; nothing that repeats what
+// the person just did. Words and lines may only go down.
+test('restraint: event card (quick view of an event without details)', async ({ browser, request }) => {
+  const s = await seed(request);
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  const page = await ctx.newPage();
+  await page.goto(`/${s.id}?backend=cf&cal=native&view=month`);
+  await page.waitForFunction(() => window.__appMounted, null, { timeout: 20_000 });
+  await page.locator('.nc [data-testid="event-e1"]').first().click();
+  const c = page.getByTestId('event-card');
+  await expect(c).toBeVisible();
+  await page.waitForTimeout(300);
+  const m = await c.evaluate((el) => {
+    const text = [...el.querySelectorAll('*')].filter((x) => x.offsetParent && !x.children.length).map((x) => x.textContent.trim()).filter(Boolean);
+    const vals = [...el.querySelectorAll('textarea, input')].filter((x) => x.offsetParent).map((x) => x.value).filter(Boolean);
+    const words = [...text, ...vals].join(' ').split(/\s+/).filter((w) => /\w/.test(w)).length;
+    return { words, text: [...vals, ...text].join(' | ') };
+  });
+  console.log(`RESTRAINT event card ${JSON.stringify(m)}`);
+  if (!MEASURE_ONLY) expect(m.words, `words on the quick card (${m.text})`).toBeLessThanOrEqual(13);   // Practice, Type 1, the date and times, More details, Done (16 with the old "Edited just now")
+  await ctx.close();
+});
