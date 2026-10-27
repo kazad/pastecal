@@ -169,9 +169,9 @@ export const ICSService = {
 
     // UNTIL: an all-day series' as a DATE; a series written with TZID, as the UTC instant its last day ends in the zone
     // (RFC 5545: with a TZID start, UNTIL is UTC), the day both calendars read it as (EventZone.untilDay).
-    seriesRule(rule, allDay, zone = null, own = false) {
+    seriesRule(rule, allDay, zone = null, own = false, startMs = NaN) {
         if (!allDay) {
-            if (!zone) return rule;
+            if (!zone) return this.weeklyDaysInUtc(rule, startMs);
             return rule.replace(/(^|;)UNTIL=(\d{8}(?:T\d{6}Z?)?)/i, (match, sep, value) => {
                 const day = EventZone.untilDay(value, zone, own);
                 if (!day) return match;
@@ -183,6 +183,27 @@ export const ICSService = {
             const date = this.allDayStampDate(value);
             return date ? `${sep}UNTIL=${date}` : match;
         });
+    },
+
+    // No zone at all (no options.tz, no all-day events to guess from): the series is written in UTC, as before, but a
+    // weekly BYDAY names the creator's LOCAL weekdays. A start west of UTC falls on the next UTC day (Tue 5:30 PM in LA is
+    // Wed 00:30Z), east of it on the day before, so the rule repeated on the wrong day in every calendar app (Oct 26
+    // 2026, production demo). The start's own UTC weekday tells which way: shift every BYDAY day by that gap. When both
+    // neighbors are listed (Tue,Thu with a UTC Wednesday) west and east are equally possible; west is assumed, where most
+    // calendars are. The hour can still be off by one for half the year (no zone, no DST); the day is right.
+    weeklyDaysInUtc(rule, startMs) {
+        if (!Number.isFinite(startMs) || !/(^|;)FREQ=WEEKLY(;|$)/i.test(rule)) return rule;
+        const m = rule.match(/(^|;)BYDAY=([A-Za-z,]+)(?=;|$)/);
+        if (!m) return rule;
+        const D = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+        const days = m[2].toUpperCase().split(',');
+        if (days.some((d) => !D.includes(d))) return rule;
+        const utc = new Date(startMs).getUTCDay();
+        if (days.includes(D[utc])) return rule;
+        const shift = days.includes(D[(utc + 6) % 7]) ? 1 : days.includes(D[(utc + 1) % 7]) ? -1 : 0;
+        if (!shift) return rule;
+        const moved = days.map((d) => D[(D.indexOf(d) + shift + 7) % 7]).join(',');
+        return rule.replace(m[0], `${m[1]}BYDAY=${moved}`);
     },
 
     allDayStampDate(value) {
@@ -265,7 +286,7 @@ export const ICSService = {
         const allDay = !!event.isAllDay;
         const tz = this.zoneOf(event, calZone);
         const rule = event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)
-            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), allDay, tz, !!EventStore.validZone(event.tz))) : null;
+            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), allDay, tz, !!EventStore.validZone(event.tz), this.toMs(event.start))) : null;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
         let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
         const dateParam = allDay ? ';VALUE=DATE' : tz ? `;TZID=${tz}` : '';

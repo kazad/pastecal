@@ -215,3 +215,33 @@ test('VTIMEZONE: every offset change, then the yearly rule, as Intl has them (no
         assert.deepEqual(wrong, [], `${tz}: every week at noon, through 2035`);
     }
 });
+
+// Oct 26 2026: after A02 shipped, the production demo (no options.tz, no all-day events) still published its Tue/Thu
+// 5:30 PM practice with BYDAY=TU,TH against a UTC Wednesday start: Monday/Wednesday evenings in every calendar app. With
+// no zone, the feed now moves BYDAY to the start's UTC days, so the DAY is right everywhere (the hour may be off by one
+// for half the year: no zone, no DST).
+test('no zone at all: a weekly series lands on its local weekdays in a calendar app (west, east, and both neighbors listed)', async () => {
+    const { ICSService } = await import('../../cloudflare/src/ICSService.js');
+    // [made in, local start, BYDAY, expected local weekdays]
+    const CASES = [
+        ['America/Los_Angeles', [2026, 8, 1, 17, 30], 'TU,TH', ['TU', 'TH']],   // Tue 5:30 PM = Wed 00:30Z (both neighbors: west)
+        ['America/Los_Angeles', [2026, 9, 6, 19, 0], 'TU', ['TU']],              // Tue 7 PM = Wed 02:00Z
+        ['Asia/Tokyo', [2026, 9, 6, 8, 0], 'TU', ['TU']],                       // Tue 8 AM = Mon 23:00Z (east)
+        ['Europe/London', [2026, 9, 6, 18, 0], 'TU', ['TU']],                   // same UTC day: unchanged
+    ];
+    for (const [zone, [y, mo, d, h, mi], byday, want] of CASES) {
+        const startMs = EventZone.fromWall(y, mo, d, h, mi, 0, zone);
+        const events = [{ id: 's', title: 'Practice', start: new Date(startMs).toISOString(), end: new Date(startMs + 3600e3).toISOString(),
+            recurrencerule: `FREQ=WEEKLY;BYDAY=${byday};INTERVAL=1;COUNT=8;`, isAllDay: false, type: 1 }];
+        const ics = ICSService.generateICS({ id: 'c', title: 'No zone', options: {}, events }, 'c');
+        assert.ok(!/TZID/.test(ics), 'still UTC: nothing says where the calendar is');
+        const cal = new ICAL.Component(ICAL.parse(ics));
+        const it = new ICAL.Event(cal.getFirstSubcomponent('vevent')).iterator();
+        const seen = new Set();
+        for (let n, k = 0; (n = it.next()) && k < 8; k++) {
+            const w = EventZone.wall(n.toJSDate().getTime(), zone);
+            seen.add(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][new Date(Date.UTC(w.y, w.m, w.d)).getUTCDay()]);
+        }
+        assert.deepEqual([...seen].sort(), [...want].sort(), `${zone} ${byday}: ${ics.match(/RRULE:.*/)[0]}`);
+    }
+});
