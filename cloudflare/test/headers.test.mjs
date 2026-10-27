@@ -30,7 +30,7 @@ function headersFor(path) {
     return out;
 }
 
-for (const path of ['/', '/my-team', '/beta/x', '/view/ab12cd34ef']) {
+for (const path of ['/', '/my-team', '/beta/x', '/view/ab12cd34ef', '/account', '/signin', '/pricing']) {
     const h = headersFor(path);
     assert.equal(h['content-security-policy'], cspFor(path), `${path}: _headers CSP differs from SecurityHeaders.js`);
     assert.equal(h['x-content-type-options'], 'nosniff');
@@ -38,11 +38,15 @@ for (const path of ['/', '/my-team', '/beta/x', '/view/ab12cd34ef']) {
 }
 step('_headers and SecurityHeaders.js give every page the same CSP, nosniff and Referrer-Policy');
 
-assert.match(cspFor('/my-team'), /frame-ancestors 'none'$/);
-assert.match(cspFor('/'), /frame-ancestors 'none'$/);
-assert.match(cspFor('/view/ab12cd34ef'), /frame-ancestors \*$/);
-assert.equal((headersFor('/view/x')['content-security-policy'].match(/frame-ancestors/g) || []).length, 1, 'view pages get ONE policy');
-step("edit pages: frame-ancestors 'none'; /view/*: frame-ancestors * (one policy, not two)");
+// Owner, Oct 26 2026: any calendar may be framed, edit links too (whether to embed an editable calendar is the
+// owner's choice); only the account and payment pages refuse it.
+for (const p of ['/my-team', '/', '/view/ab12cd34ef', '/board-events-sign-up!x', '/@kalid/soccer', '/beta/x']) assert.match(cspFor(p), /frame-ancestors \*$/, p);
+for (const p of ['/signin', '/account', '/account.html', '/handle', '/pricing', '/pro/done']) {
+    assert.match(cspFor(p), /frame-ancestors 'none'$/, p);
+    assert.equal(headersFor(p)['content-security-policy'], cspFor(p), `${p}: _headers agrees`);
+}
+for (const p of ['/my-team', '/view/x', '/account']) assert.equal((headersFor(p)['content-security-policy'].match(/frame-ancestors/g) || []).length, 1, `${p}: ONE policy`);
+step("calendars (edit and view links, the homepage): frame-ancestors *; account and payment pages: 'none' (one policy each)");
 
 for (const d of ["object-src 'none'", "base-uri 'self'", "form-action 'self'", "default-src 'self'"]) assert.ok(cspFor('/x').includes(d), d);
 step('object-src none, base-uri self, form-action self, default-src self');

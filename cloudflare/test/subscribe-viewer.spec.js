@@ -290,3 +290,12 @@ for (const [w, h] of [[720, 640], [400, 600]]) {
     await ctx.close();
   });
 }
+
+// Owner, Oct 26 2026: "you should be able to iframe any calendar" — whether to embed an EDITABLE calendar is the owner's
+// choice. An edit link loads inside another site's page; the account pages still refuse to be framed.
+test('every calendar may be framed (edit and view links, the homepage); the account pages refuse', async ({ request }) => {
+  const { id, viewId } = await seed(request);
+  const fa = async (p) => ((await request.get(p)).headers()['content-security-policy'] || '').match(/frame-ancestors ([^;]+)/)?.[1];
+  for (const p of [`/${id}`, `/view/${viewId}`, '/']) expect(await fa(p), p).toBe('*');
+  for (const p of ['/account', '/signin']) expect(await fa(p), p).toBe("'none'");
+});
