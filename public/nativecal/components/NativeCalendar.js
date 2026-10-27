@@ -593,13 +593,22 @@ const NativeCalendar = (() => {
                 return { left: `calc(${(b.col / cols) * 100}% + 2px)`, width: `calc(${(b.span / cols) * 100}% - 4px)`,
                     top: `${4 + b.lane * (BAR_PX + BAR_GAP)}px`, ...this.paint(b.occ.type), ...this.ink(b.occ.type) };
             },
+            /**
+             * Where a timed event sits across its day: lanes share the column minus a strip on the right (as Google and
+             * classic), so there is always room to click beside events and add another at the same time.
+             */
+            lane(col, cols) {
+                // ~17px on a desktop week, up to 48px in a wide day; next to nothing in a phone's 40px week column.
+                const room = '(100% - clamp(2px, 12% - 6px, 48px))';
+                return { left: `calc(${room} * ${col / cols} + 1px)`, width: `calc(${room} / ${cols} - 2px)` };
+            },
             timedStyle(it) {
-                const w = 100 / it.cols;
                 const dragging = this.drag && this.drag.moved && this.drag.key === it.occ.key;
                 // Moved to another day: drawn in that day's column (the column it started in is 100% wide), full width.
                 const shift = dragging && this.drag.mode === 'move' && this.drag.targetDay ? dayIndex(this.drag.targetDay) - dayIndex(it.occ.start) : 0;
-                return { top: `${dragging ? this.drag.top : it.top}px`, height: `${dragging ? this.drag.height : it.height}px`,
-                    left: shift ? `calc(${shift * 100}% + 1px)` : `calc(${it.col * w}% + 1px)`, width: shift ? 'calc(100% - 3px)' : `calc(${w}% - 3px)`,
+                // 2px shorter than its time: back-to-back events read as two (as Google and classic).
+                const lane = shift ? { ...this.lane(0, 1), left: `calc(${shift * 100}% + 1px)` } : this.lane(it.col, it.cols);
+                return { top: `${dragging ? this.drag.top : it.top}px`, height: `${Math.max(12, (dragging ? this.drag.height : it.height) - 2)}px`, ...lane,
                     ...this.paint(it.occ.type, true), ...this.ink(it.occ.type),
                     opacity: dragging ? 0.85 : 1, zIndex: dragging ? 5 : 1 };
             },
@@ -982,7 +991,7 @@ const NativeCalendar = (() => {
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
             <!-- Where a dragged event came from, while it is being moved: a dashed outline, nothing to read or click. -->
             <div v-for="it in gridLayout.timed[i].filter((x) => drag && drag.moved && drag.mode === 'move' && drag.key === x.occ.key)" :key="'origin' + it.occ.key"
-              class="nc-origin" :class="{ copy: drag.copy }" aria-hidden="true" :style="{ top: it.top + 'px', height: it.height + 'px', left: 'calc(' + (it.col * 100 / it.cols) + '% + 1px)', width: 'calc(' + (100 / it.cols) + '% - 3px)', '--c': color(it.occ.type), ...(drag.copy ? ink(it.occ.type) : {}) }"><template v-if="drag.copy"><div class="nc-timed-title">{{ it.occ.title }}</div><div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div></template></div>
+              class="nc-origin" :class="{ copy: drag.copy }" aria-hidden="true" :style="{ top: it.top + 'px', height: Math.max(12, it.height - 2) + 'px', ...lane(it.col, it.cols), '--c': color(it.occ.type), ...(drag.copy ? ink(it.occ.type) : {}) }"><template v-if="drag.copy"><div class="nc-timed-title">{{ it.occ.title }}</div><div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div></template></div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ), narrow: it.narrow, short: it.height < 44 }" :data-testid="tid(it.occ)" @contextmenu="eventMenu($event, it.occ)"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
@@ -993,7 +1002,7 @@ const NativeCalendar = (() => {
               <div v-if="appEdits" class="nc-resize nc-resize-top" data-testid="resize-top" @mousedown.stop="startDrag($event, it.occ, 'resize-top', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
             </div>
             <button v-for="m in gridLayout.more[i]" :key="'more' + m.top" type="button" class="nc-more-timed" data-testid="more-timed"
-              :style="{ top: m.top + 'px', height: m.height + 'px', left: 'calc(' + (m.col * 100 / m.cols) + '% + 1px)', width: 'calc(' + (100 / m.cols) + '% - 3px)' }"
+              :style="{ top: m.top + 'px', height: Math.max(12, m.height - 2) + 'px', ...lane(m.col, m.cols) }"
               :aria-label="m.n + (m.cols > 1 ? ' more events' : ' events at this time')" :title="m.n + (m.cols > 1 ? ' more' : ' events')" @mousedown.stop @touchstart.stop @click.stop="moreTimed(d)" @dblclick.stop>+{{ m.n }}</button>
             <div v-if="isToday(d) && nowTop >= 0" class="nc-now-line" :style="{ top: nowTop + 'px' }"></div>
           </div>
