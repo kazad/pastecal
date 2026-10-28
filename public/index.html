@@ -1891,7 +1891,7 @@
                         @input="copyNameEdited" data-testid="copy-name">
                 </div>
                 <p v-if="copyDialog.taken" class="pc-small-dialog-text" role="alert" data-testid="copy-taken">
-                    <strong v-text="'pastecal.com/' + copyDialog.taken.slug"></strong> is taken.<template v-if="copyDialog.taken.options.length"> Try
+                    <strong>pastecal.com/{{ copyDialog.taken.slug }}</strong> is taken.<template v-if="copyDialog.taken.options.length"> Try
                     <span v-for="(o, i) in copyDialog.taken.options" :key="o" class="whitespace-nowrap"><button type="button" class="pc-link" @click="makeCopy(o)">{{ o }}</button>{{ i < copyDialog.taken.options.length - 1 ? ', ' : '.' }}</span></template>
                 </p>
                 <p v-else-if="copyDialog.error" class="pc-small-dialog-text pc-say-err" role="alert" data-testid="copy-error">{{ copyDialog.error }}</p>

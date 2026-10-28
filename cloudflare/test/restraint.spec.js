@@ -89,6 +89,51 @@ for (const p of PAGES) {
   });
 }
 
+// The side panel's Settings and You tabs, and the Make a copy dialog (Oct 28 2026: "Only me" moved out of Settings into
+// You). Words shown in the panel (labels, hints, option text in view, not what is typed) and filled buttons: none in a
+// panel, one in the dialog. Budgets in docs/DESIGN-RESTRAINT.md; they may only go down.
+const PANELS = [
+  { name: 'Settings panel', open: "p.openSideTab('settings')", el: 'settings', budget: { filled: 0, words: 43 } },
+  { name: 'You panel', open: "p.openSideTab('you')", el: 'you', budget: { filled: 0, words: 36 } },
+  { name: 'Make a copy dialog', open: "p.openCopyDialog('settings')", el: 'copy-dialog', budget: { filled: 1, words: 8 } },
+];
+for (const P of PANELS) {
+  test(`restraint: ${P.name}`, async ({ browser, request }) => {
+    const s = await seed(request);
+    for (const scheme of ['dark', 'light']) {
+      const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme });
+      await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+      const page = await ctx.newPage();
+      await page.goto(`/${s.id}?backend=cf`);
+      await page.waitForFunction(() => window.__appMounted && document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 });
+      await page.evaluate((e) => Function('p', e)(document.querySelector('#app')._vnode.component.proxy), P.open);
+      await expect(page.getByTestId(P.el)).toBeVisible();
+      await page.waitForTimeout(300);
+      const m = await page.getByTestId(P.el).evaluate((root) => {
+        const probe = document.createElement('span'); document.body.appendChild(probe);
+        probe.style.color = 'var(--pc-primary)'; const primary = getComputedStyle(probe).color; probe.remove();
+        const filled = [...root.querySelectorAll('button, a[href]')].filter((b) => b.offsetParent && getComputedStyle(b).backgroundColor === primary).length;
+        const text = [];
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let n; (n = walker.nextNode());) {
+          const el = n.parentElement; if (!el || !el.offsetParent || el.closest('option')) continue;
+          if (n.textContent.trim()) text.push(n.textContent.trim());
+        }
+        // A select shows its chosen option: those words are on screen too.
+        for (const sel of root.querySelectorAll('select')) if (sel.offsetParent && sel.selectedOptions[0]) text.push(sel.selectedOptions[0].textContent.trim());
+        const words = text.join(' ').split(/\s+/).filter((w) => /\w/.test(w)).length;
+        return { filled, words, text: text.join(' | ') };
+      });
+      console.log(`RESTRAINT ${P.name} ${scheme} ${JSON.stringify(m)}`);
+      if (!MEASURE_ONLY) {
+        expect(m.filled, `filled buttons in the ${P.name}`).toBeLessThanOrEqual(P.budget.filled);
+        expect(m.words, `words in the ${P.name} (${m.text})`).toBeLessThanOrEqual(P.budget.words);
+      }
+      await ctx.close();
+    }
+  });
+}
+
 // The event card is a screen too (Oct 27 2026: an "Edited just now" line under every event shipped because the budget
 // only covered pages). An event without details: its title, type, time, and the actions; nothing that repeats what
 // the person just did. Words and lines may only go down.

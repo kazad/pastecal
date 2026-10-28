@@ -555,7 +555,7 @@ class CloudCalendarService extends CalendarDataService {
         const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents, partial };
         const tz = this._browserTz();
-        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...this._name(), ...(tz ? { tz } : {}) })) { room.inflight = null; room.unsent = true; }
+        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...(tz ? { tz } : {}), ...this._name() })) { room.inflight = null; room.unsent = true; }
     }
 
     static _sendMeta(room, meta, opts = {}) {
