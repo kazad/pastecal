@@ -607,9 +607,9 @@ test('F31 [card] broken: the Undo toast from a delete sits on top of the next ca
 // Checked and found right.
 // =====================================================================================================
 
-test('look sweep: desktop and phone, light and dark, en-US and de-DE (24-hour, Monday first): card and every picker on screen, no sideways scroll, dark follows the system', async ({ browser }) => {
-  test.setTimeout(180_000);
-  for (const dev of ['desk', 'phone']) for (const scheme of ['light', 'dark']) for (const loc of ['us', 'de']) {
+// One test per device, color scheme and locale, so the eight run side by side.
+for (const dev of ['desk', 'phone']) for (const scheme of ['light', 'dark']) for (const loc of ['us', 'de']) {
+  test(`look sweep: desktop and phone, light and dark, en-US and de-DE (24-hour, Monday first): card and every picker on screen, no sideways scroll, dark follows the system (${dev}, ${scheme}, ${loc})`, async ({ browser }) => {
     const z = loc === 'de' ? '+02:00' : '-07:00';
     const id = await seed([timed('p', 'Practice at Lincoln Field with the whole under-12 squad', `2026-10-22T17:00:00${z}`, `2026-10-22T18:00:00${z}`, { description: 'Bring water https://example.org/a' })]);
     const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22', { phone: dev === 'phone', colorScheme: scheme,
@@ -648,8 +648,8 @@ test('look sweep: desktop and phone, light and dark, en-US and de-DE (24-hour, M
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `${tag}: no sideways scroll`).toBeLessThanOrEqual(W);
     expect(errors, tag).toEqual([]);
     await ctx.close();
-  }
-});
+  });
+}
 
 test('small windows: 1024x600 and 900x500 keep the card, Done and the pickers on screen; events at the top and bottom of the day', async ({ browser }) => {
   const id = await seed([

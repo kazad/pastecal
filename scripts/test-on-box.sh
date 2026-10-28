@@ -7,7 +7,8 @@
 #   bash scripts/test-on-box.sh --sync-only            copy and install only;  --no-sync  skips that step
 #                                                      (scripts/gate.sh copies once, then runs both kinds at once)
 # Each checkout gets its own folder and ports on the box, so parallel agents don't collide. BOX_WORKERS Playwright
-# workers (default 16, one per core) share BOX_SERVERS local servers (default 4); BOX_JOBS Worker suites run at once
+# workers (default 24: Chrome is CPU-bound on its 16 cores, and 24 keeps them busy while tests wait; 16 took 130 s,
+# 24 and 32 took 118 s) share BOX_SERVERS local servers (default 6; more servers alone changed nothing); BOX_JOBS Worker suites run at once
 # (default 16).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,7 +30,7 @@ if [ "$SYNC" = 1 ]; then
   rsync -az --delete --exclude node_modules --exclude .wrangler --exclude cloudflare/test-results --exclude test/native-audit/out \
     --exclude .cloudflare --exclude snapshots "$ROOT/" "omarchy:$DEST/" || { echo "rsync to omarchy failed"; exit 2; }
 fi
-ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-16}" "${BOX_SERVERS:-4}" "$MODE" "$SYNC" "${BOX_JOBS:-16}" "$@" <<'EOF'
+ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-24}" "${BOX_SERVERS:-6}" "$MODE" "$SYNC" "${BOX_JOBS:-16}" "$@" <<'EOF'
 set -u
 DEST=$1 PORT=$2 WORKERS=$3 SERVERS=$4 MODE=$5 SYNC=$6 JOBS=$7; shift 7
 cd ~/"$DEST" || exit 2
