@@ -1,14 +1,23 @@
 import { DurableObject } from 'cloudflare:workers';
 import { SlugService } from './SlugService.js';
+import CalendarName from '../../public/services/CalendarName.js';
 
 // Same as index.js: any name a calendar can have ("TEAM NUÑEZ", "d&d8", "sign-up!x"), not only [A-Za-z0-9_-].
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 
-// Editable always wins. One row per lowercase name, and an edit name is somebody's calendar: no write may turn it
+// Editable always wins. One row per name key, and an edit name is somebody's calendar: no write may turn it
 // into a view row. A view link named after a calendar (July 2025's custom view names checked only other views) took
 // the row at the Oct 4 2026 cutover, and 45 calendars' edit links then forwarded to /view/<name> (Oct 28 2026).
-// The spellings that read as one name ("Foo", "foo", "foo "): a NEW calendar may not take one whose key another has.
-const nameKey = (id) => String(id ?? '').trim().toLowerCase();
+// The spellings that read as one name ("Foo", "foo", "foo ", NFD "Nuñez"): CalendarName.key, for the directory's
+// `normalized` column and the registry's name_key alike. A NEW calendar may not take one whose key another has.
+//
+// Keys before Oct 2026 were lowercase only (CalendarName.legacyKey): a row for "royal city " sat at "royal city ".
+// Until /rekey (scripts/rekey-directory.mjs) moves every such row, a name with no row at its key is also looked up at
+// its legacy key (rowAt), every change by name reaches the row at either key, and a registration moves its own row.
+const key = (s) => CalendarName.key(s);
+const legacyKey = (s) => CalendarName.legacyKey(s);
+const keysOf = (s) => [...new Set([key(s), legacyKey(s)])];
+const ROW = 'normalized, actual_slug, is_readonly, target_id, created_at, ended_at';
 
 const EDITABLE_TAKEN = { ok: false, conflict: true, editable: true, error: 'already-exists', reason: 'calendar', message: 'That is a calendar’s name' };
 
@@ -31,10 +40,10 @@ export class CalendarDirectory extends DurableObject {
             const cols = this.sql.exec(`PRAGMA table_info(directory)`).toArray().map((c) => c.name);
             if (!cols.includes('ended_at')) this.sql.exec(`ALTER TABLE directory ADD COLUMN ended_at INTEGER`);
             // Every calendar that exists, by its EXACT id (case and spaces kept: "Foo", "foo" and "foo " are three).
-            // The directory above has one row per lowercase name, so a case variant or a spaced name has no row of its
+            // The directory above has one row per name key, so a case variant or a spaced name has no row of its
             // own; the daily archive and the new-name check read this instead (Oct 28 2026: 54 calendars, 4,974 events,
             // were missing from the archive). Written by a room when it first stores a calendar, and by /rooms/add.
-            // name_key: lowercase with surrounding spaces trimmed (nameKey), the spellings that read as one name.
+            // name_key: CalendarName.key(id) (trimmed, lowercase, NFC), the spellings that read as one name.
             this.sql.exec(`CREATE TABLE IF NOT EXISTS rooms (
                 id TEXT PRIMARY KEY,
                 name_key TEXT NOT NULL,
@@ -45,9 +54,20 @@ export class CalendarDirectory extends DurableObject {
         });
     }
 
-    // The row at this lowercase name is an editable calendar's.
-    isEditable(norm) {
-        return this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND is_readonly = 0`, norm).toArray().length > 0;
+    // The row for this name: at its key, else (a row not yet re-keyed) at its legacy key. null if none.
+    rowAt(name) {
+        for (const k of keysOf(name)) {
+            const r = this.sql.exec(`SELECT ${ROW} FROM directory WHERE normalized = ?`, k).toArray()[0];
+            if (r) return r;
+        }
+        return null;
+    }
+
+    // A calendar's own row, still at its legacy key, moves to the key when the calendar writes it again (another
+    // calendar's row stays, for /rekey to settle).
+    dropLegacyTwin(name, actualSlug) {
+        const k = key(name), old = legacyKey(name);
+        if (old !== k) this.sql.exec(`DELETE FROM directory WHERE normalized = ? AND actual_slug = ?`, old, actualSlug);
     }
 
     async fetch(request) {
@@ -63,10 +83,8 @@ export class CalendarDirectory extends DurableObject {
             if (!slug || !SlugService.isLookupable(slug)) {
                 return Response.json({ found: false });
             }
-            const norm = SlugService.normalizeSlug(slug);
-            const rows = this.sql.exec(`SELECT actual_slug, is_readonly, target_id, ended_at FROM directory WHERE normalized = ?`, norm).toArray();
-            if (!rows.length) return Response.json({ found: false });
-            const r = rows[0];
+            const r = this.rowAt(slug);
+            if (!r) return Response.json({ found: false });
             // A tombstone leads nowhere: no targetId (callers must not fall back to the name itself).
             if (r.ended_at) return Response.json({ found: true, actualSlug: r.actual_slug, isReadOnly: true, ended: true, targetId: null });
             return Response.json({
@@ -92,19 +110,17 @@ export class CalendarDirectory extends DurableObject {
                 if (!SlugService.validateSlug(customSlug)) {
                     return Response.json({ ok: false, error: 'invalid-argument', message: 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.' }, { status: 400 });
                 }
-                const norm = SlugService.normalizeSlug(customSlug);
-                if (norm === SlugService.normalizeSlug(sourceCalendarId)) return Response.json(EDITABLE_TAKEN, { status: 409 });   // its own edit name
-                const existing = this.sql.exec(`SELECT actual_slug FROM directory WHERE normalized = ?`, norm).toArray();
-                if (existing.length) {
+                const norm = key(customSlug);
+                if (norm === key(sourceCalendarId)) return Response.json(EDITABLE_TAKEN, { status: 409 });   // its own edit name
+                if (this.rowAt(customSlug)) {
                     return Response.json({ ok: false, error: 'already-exists', message: 'Slug is already taken' }, { status: 409 });
                 }
                 publicViewId = norm;
             } else {
                 for (let i = 0; i < 5; i++) {
                     const candidate = SlugService.generatePublicViewId(10);
-                    const norm = SlugService.normalizeSlug(candidate);
-                    const existing = this.sql.exec(`SELECT actual_slug FROM directory WHERE normalized = ?`, norm).toArray();
-                    if (!existing.length) {
+                    const norm = key(candidate);
+                    if (!this.rowAt(candidate)) {
                         publicViewId = norm;
                         break;
                     }
@@ -124,13 +140,14 @@ export class CalendarDirectory extends DurableObject {
             if (!body || !body.actualSlug) return Response.json({ ok: false, error: 'bad body' }, { status: 400 });
             // Names are exact: never trimmed (a calendar may be called "royal city ", stress A19).
             const actualSlug = String(body.actualSlug);
-            const norm = SlugService.normalizeSlug(actualSlug);
+            const norm = key(actualSlug);
             const isReadOnly = body.isReadOnly ? 1 : 0;
             const targetId = body.targetId ? String(body.targetId) : actualSlug;
             const now = Date.now();
 
-            // Check if existing mapping exists
-            const existing = this.sql.exec(`SELECT actual_slug, is_readonly, ended_at FROM directory WHERE normalized = ?`, norm).toArray();
+            // Check if existing mapping exists (at the key, or a row not yet re-keyed)
+            const cur = this.rowAt(actualSlug);
+            const existing = cur ? [cur] : [];
             if (existing.length && existing[0].ended_at) return Response.json({ ok: false, conflict: true, ended: true });
             if (isReadOnly && existing.length && !existing[0].is_readonly) return Response.json(EDITABLE_TAKEN);   // even forced
             if (existing.length && existing[0].actual_slug !== actualSlug) {
@@ -142,6 +159,7 @@ export class CalendarDirectory extends DurableObject {
 
             this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
                 norm, actualSlug, isReadOnly, targetId, now);
+            this.dropLegacyTwin(actualSlug, actualSlug);
             return Response.json({ ok: true, actualSlug, normalized: norm });
         }
 
@@ -154,12 +172,11 @@ export class CalendarDirectory extends DurableObject {
             if (!SlugService.validateSlug(slug)) {
                 return Response.json({ ok: false, error: 'invalid-argument', message: 'Invalid slug or reserved word' }, { status: 400 });
             }
-            const norm = SlugService.normalizeSlug(slug);
+            const norm = key(slug);
             const isReadOnly = body.isReadOnly ? 1 : 0;
             const targetId = String(body.targetId);   // a calendar's name: exact
-            if (isReadOnly && norm === SlugService.normalizeSlug(targetId)) return Response.json(EDITABLE_TAKEN, { status: 409 });
-            const existing = this.sql.exec(`SELECT actual_slug FROM directory WHERE normalized = ?`, norm).toArray();
-            if (existing.length) {
+            if (isReadOnly && norm === key(targetId)) return Response.json(EDITABLE_TAKEN, { status: 409 });
+            if (this.rowAt(slug)) {
                 return Response.json({ ok: false, error: 'already-exists', message: 'Slug is already taken' }, { status: 409 });
             }
             const now = Date.now();
@@ -173,8 +190,9 @@ export class CalendarDirectory extends DurableObject {
         if (request.method === 'POST' && path === '/retarget') {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug || !body.targetId) return Response.json({ ok: false }, { status: 400 });
-            const norm = SlugService.normalizeSlug(body.slug);
-            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`, String(body.targetId), norm);
+            for (const k of keysOf(body.slug)) {
+                this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`, String(body.targetId), k);
+            }
             return Response.json({ ok: true });
         }
 
@@ -183,20 +201,22 @@ export class CalendarDirectory extends DurableObject {
         if (request.method === 'POST' && path === '/end') {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug) return Response.json({ ok: false }, { status: 400 });
-            const norm = SlugService.normalizeSlug(body.slug);
-            this.sql.exec(`UPDATE directory SET ended_at = ?, target_id = NULL WHERE normalized = ? AND is_readonly = 1`, Date.now(), norm);
+            for (const k of keysOf(body.slug)) {
+                this.sql.exec(`UPDATE directory SET ended_at = ?, target_id = NULL WHERE normalized = ? AND is_readonly = 1`, Date.now(), k);
+            }
             return Response.json({ ok: true });
         }
 
         if (request.method === 'POST' && path === '/remove') {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug) return Response.json({ ok: false }, { status: 400 });
-            const norm = SlugService.normalizeSlug(body.slug);
             const actualSlug = body.actualSlug ? String(body.actualSlug) : null;
-            if (actualSlug) {
-                this.sql.exec(`DELETE FROM directory WHERE normalized = ? AND actual_slug = ?`, norm, actualSlug);
-            } else {
-                this.sql.exec(`DELETE FROM directory WHERE normalized = ?`, norm);
+            for (const k of keysOf(body.slug)) {
+                if (actualSlug) {
+                    this.sql.exec(`DELETE FROM directory WHERE normalized = ? AND actual_slug = ?`, k, actualSlug);
+                } else {
+                    this.sql.exec(`DELETE FROM directory WHERE normalized = ?`, k);
+                }
             }
             return Response.json({ ok: true });
         }
@@ -210,13 +230,15 @@ export class CalendarDirectory extends DurableObject {
             for (const item of items) {
                 if (!item || !item.actualSlug) continue;
                 const actualSlug = String(item.actualSlug);
-                const norm = SlugService.normalizeSlug(actualSlug);
+                const norm = key(actualSlug);
                 const isReadOnly = item.isReadOnly ? 1 : 0;
                 const targetId = item.targetId ? String(item.targetId) : actualSlug;
-                if (this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND ended_at IS NOT NULL`, norm).toArray().length) continue;   // a tombstone stays
-                if (isReadOnly && this.isEditable(norm)) { skipped.push(actualSlug); continue; }                                        // editable wins
+                const cur = this.rowAt(actualSlug);
+                if (cur && cur.ended_at) continue;                                                       // a tombstone stays
+                if (isReadOnly && cur && !cur.is_readonly) { skipped.push(actualSlug); continue; }       // editable wins
                 this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
                     norm, actualSlug, isReadOnly, targetId, now);
+                this.dropLegacyTwin(actualSlug, actualSlug);
                 inserted++;
             }
             return Response.json({ ok: true, count: inserted, skipped });
@@ -225,8 +247,10 @@ export class CalendarDirectory extends DurableObject {
         // View rows named after the calendar they open (a view link whose name is its calendar's edit name): the cheap
         // half of the collision check, SQL only. The Worker's /api/admin/directory/collisions confirms each calendar exists.
         if (request.method === 'GET' && path === '/self-named-views') {
+            // Compared by CalendarName.key in JS: SQL's lower() knows only ASCII, and never trims.
             const rows = this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at FROM directory
-                WHERE is_readonly = 1 AND ended_at IS NULL AND lower(target_id) = normalized ORDER BY normalized LIMIT 1000`).toArray();
+                WHERE is_readonly = 1 AND ended_at IS NULL AND target_id IS NOT NULL ORDER BY normalized`).toArray()
+                .filter((r) => key(r.target_id) === key(r.normalized)).slice(0, 1000);
             return Response.json({ rows });
         }
 
@@ -236,11 +260,11 @@ export class CalendarDirectory extends DurableObject {
         if (request.method === 'POST' && path === '/make-editable') {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug || !validId(String(body.calendarId || ''))) return Response.json({ ok: false, error: 'bad body' }, { status: 400 });
-            const norm = SlugService.normalizeSlug(body.slug);
             const calendarId = String(body.calendarId);
-            if (SlugService.normalizeSlug(calendarId) !== norm) return Response.json({ ok: false, error: 'not this name' }, { status: 400 });
-            const row = () => this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at, ended_at FROM directory WHERE normalized = ?`, norm).toArray()[0] || null;
-            const before = row();
+            if (key(calendarId) !== key(body.slug)) return Response.json({ ok: false, error: 'not this name' }, { status: 400 });
+            const before = this.rowAt(body.slug);
+            const norm = before ? before.normalized : key(body.slug);   // the row where it is (a legacy row is changed in place)
+            const row = () => this.sql.exec(`SELECT ${ROW} FROM directory WHERE normalized = ?`, norm).toArray()[0] || null;
             if (!before || !before.is_readonly || before.ended_at) return Response.json({ ok: false, error: 'not a view row', before }, { status: 409 });
             this.sql.exec(`UPDATE directory SET actual_slug = ?, is_readonly = 0, target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`,
                 calendarId, calendarId, norm);
@@ -253,8 +277,10 @@ export class CalendarDirectory extends DurableObject {
             if (this.env.ACCOUNTS_DEV_MODE !== '1') return Response.json({ ok: false, error: 'forbidden' }, { status: 403 });
             const b = await request.json().catch(() => null);
             if (!b || !b.actualSlug) return Response.json({ ok: false }, { status: 400 });
+            // legacy: true plants the row as the directory keyed it before Oct 2026 (lowercase only), for the re-key tests.
             this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
-                SlugService.normalizeSlug(b.actualSlug), String(b.actualSlug), b.isReadOnly ? 1 : 0, String(b.targetId || b.actualSlug), Date.now());
+                b.legacy ? legacyKey(b.actualSlug) : key(b.actualSlug), String(b.actualSlug), b.isReadOnly ? 1 : 0, String(b.targetId || b.actualSlug),
+                Number.isFinite(b.createdAt) ? b.createdAt : Date.now());
             return Response.json({ ok: true });
         }
 
@@ -266,6 +292,59 @@ export class CalendarDirectory extends DurableObject {
             const rows = this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at, ended_at FROM directory
                 WHERE normalized > ? ORDER BY normalized LIMIT ?`, after, limit).toArray();
             return Response.json({ rows, next: rows.length === limit ? rows[rows.length - 1].normalized : null });
+        }
+
+        // ---- re-key: rows stored under a key from before CalendarName.key (scripts/rekey-directory.mjs, through the
+        // Worker's /api/admin/directory/rekey, which decides each collision; Rekey.js) ----
+        // Every row whose key changes, grouped by its new key with the row already there (if any). A row whose stored key
+        // is neither its legacy nor its new key is listed as an anomaly and never touched.
+        if (request.method === 'GET' && path === '/rekey/plan') {
+            const rows = this.sql.exec(`SELECT ${ROW} FROM directory`).toArray();
+            const groups = new Map(), anomalies = [];
+            for (const r of rows) {
+                const k = key(r.actual_slug);
+                if (r.normalized === k) continue;
+                if (r.normalized !== legacyKey(r.actual_slug)) { anomalies.push(r); continue; }
+                if (!groups.has(k)) groups.set(k, []);
+                groups.get(k).push(r);
+            }
+            for (const [k, list] of groups) {
+                const there = this.sql.exec(`SELECT ${ROW} FROM directory WHERE normalized = ?`, k).toArray()[0];
+                if (there) list.unshift(there);
+            }
+            const roomsStale = this.sql.exec(`SELECT id, name_key FROM rooms`).toArray().filter((r) => r.name_key !== key(r.id)).map((r) => r.id);
+            return Response.json({ scanned: rows.length, groups: [...groups].map(([k, list]) => ({ key: k, rows: list })), anomalies, roomsStale });
+        }
+        // Apply the Worker's decisions: {drop: [row], move: [row], rooms: true}. Each row is the row as the plan saw it, and is
+        // changed only if it is still exactly that (compare-and-set on every column); a move goes to its row's own new key
+        // and only into a free key. Drops first, so a collision's winner can take the key its loser held.
+        if (request.method === 'POST' && path === '/rekey/apply') {
+            const body = await request.json().catch(() => null);
+            if (!body || !Array.isArray(body.drop) || !Array.isArray(body.move)) return Response.json({ ok: false, error: 'bad body' }, { status: 400 });
+            const same = `normalized = ? AND actual_slug = ? AND is_readonly = ? AND target_id IS ? AND created_at IS ? AND ended_at IS ?`;
+            const args = (b) => [String(b.normalized), String(b.actual_slug), b.is_readonly ? 1 : 0, b.target_id ?? null, b.created_at ?? null, b.ended_at ?? null];
+            const out = { dropped: 0, moved: 0, changed: [], taken: [], roomsRekeyed: 0 };
+            for (const b of body.drop) {
+                if (!b || typeof b.actual_slug !== 'string') continue;
+                const n = this.sql.exec(`DELETE FROM directory WHERE ${same}`, ...args(b)).rowsWritten;
+                if (n) out.dropped++; else out.changed.push(b);
+            }
+            for (const b of body.move) {
+                if (!b || typeof b.actual_slug !== 'string') continue;
+                const to = key(b.actual_slug);
+                if (to === b.normalized) continue;
+                if (this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ?`, to).toArray().length) { out.taken.push(b); continue; }
+                const n = this.sql.exec(`UPDATE directory SET normalized = ? WHERE ${same}`, to, ...args(b)).rowsWritten;
+                if (n) out.moved++; else out.changed.push(b);
+            }
+            if (body.rooms) {
+                for (const r of this.sql.exec(`SELECT id, name_key FROM rooms`).toArray()) {
+                    if (r.name_key === key(r.id)) continue;
+                    this.sql.exec(`UPDATE rooms SET name_key = ? WHERE id = ?`, key(r.id), r.id);
+                    out.roomsRekeyed++;
+                }
+            }
+            return Response.json({ ok: true, ...out });
         }
 
         if (request.method === 'GET' && path === '/stats') {
@@ -287,7 +366,7 @@ export class CalendarDirectory extends DurableObject {
             for (const id of ids) {
                 const before = this.sql.exec(`SELECT 1 FROM rooms WHERE id = ?`, id).toArray().length;
                 if (before) continue;
-                this.sql.exec(`INSERT INTO rooms (id, name_key, source, created_at) VALUES (?, ?, ?, ?)`, id, nameKey(id), source, now);
+                this.sql.exec(`INSERT INTO rooms (id, name_key, source, created_at) VALUES (?, ?, ?, ?)`, id, key(id), source, now);
                 added++;
             }
             return Response.json({ ok: true, added, known: ids.length - added });
@@ -305,10 +384,11 @@ export class CalendarDirectory extends DurableObject {
             const known = ids.filter((id) => this.sql.exec(`SELECT 1 FROM rooms WHERE id = ?`, id).toArray().length);
             return Response.json({ known });
         }
-        // The registered calendars with this name in another spelling (case, surrounding spaces): ?slug=<exact>
+        // The registered calendars with this name in another spelling (case, surrounding spaces, NFD): ?slug=<exact>.
+        // Also at the name_key before Oct 2026 (trimmed lowercase, no NFC) until /rekey recomputes it.
         if (request.method === 'GET' && path === '/rooms/variants') {
             const slug = url.searchParams.get('slug') || '';
-            const rows = this.sql.exec(`SELECT id FROM rooms WHERE name_key = ? AND id != ? LIMIT 20`, nameKey(slug), slug).toArray();
+            const rows = this.sql.exec(`SELECT id FROM rooms WHERE name_key IN (?, ?) AND id != ? LIMIT 20`, key(slug), legacyKey(slug).trim(), slug).toArray();
             return Response.json({ ids: rows.map((r) => r.id) });
         }
         // Every registered id, a page at a time in key order (keyset: ?after=<last id>), for the daily archive.

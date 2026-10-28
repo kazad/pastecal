@@ -1,7 +1,7 @@
 /**
  * Name collisions: a read-only directory row (a view link) whose name is an editable calendar's.
  *
- * The directory keeps one row per lowercase name. July 2025's custom view names were checked only against other
+ * The directory keeps one row per name key (CalendarName.key). July 2025's custom view names were checked only against other
  * view links, so a person could name a calendar's view link after the calendar itself; at the Oct 4 2026 cutover
  * the view took the row, and that calendar's edit link then forwarded to /view/<name> (45 calendars, Oct 28 2026).
  * The directory now refuses every such write (CalendarDirectory.js EDITABLE_TAKEN); this finds and repairs the old ones.
@@ -20,7 +20,7 @@
  * (repairing it keeps its view link working: index.js serves /view/<name> from a calendar whose own view id it is);
  * 'cross': the view opens ANOTHER calendar, whose view link a repair would end.
  */
-import { SlugService } from './SlugService.js';
+import CalendarName from '../../public/services/CalendarName.js';
 
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 
@@ -31,7 +31,7 @@ export async function calendarExists(env, id) {
 }
 
 function collisionOf(row) {
-    const self = SlugService.normalizeSlug(row.target_id) === row.normalized;
+    const self = CalendarName.same(row.target_id, row.normalized);
     return {
         name: row.actual_slug,
         normalized: row.normalized,

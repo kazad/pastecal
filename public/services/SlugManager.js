@@ -13,9 +13,11 @@ function trackSafely(fn, when = true) {
 
 // SlugManager static class for centralized read-only link operations
 class SlugManager {
-    // Normalize slug for consistent lookup (matches backend)
-    static normalizeSlug(slug) {
-        return slug?.toLowerCase();
+    // The exact name a NEW calendar is saved under, from the name box (CalendarName.newName: lowercase, NFC, never
+    // trimmed here -- a name from the address, "royal city ", is kept, stress A19). Not a key: whether two names are
+    // the same is CalendarName.key / CalendarName.same, the rule the server's directory uses.
+    static newCalendarName(slug) {
+        return slug == null ? slug : CalendarName.newName(slug);
     }
 
     // The calendar name a page path names, or null for the homepage / a path that cannot be one.
@@ -48,8 +50,8 @@ class SlugManager {
     // (its edit link would then open the view: the July 2025 custom names allowed it, Oct 28 2026).
     static viewNameProblem(name, current, calendarId = null) {
         const s = String(name ?? '').trim();
-        if (current && s.toLowerCase() === String(current).toLowerCase()) return 'That’s already this link’s name.';
-        if (calendarId && s.toLowerCase() === String(calendarId).toLowerCase()) return this.OWN_NAME_MESSAGE;
+        if (current && CalendarName.same(s, current)) return 'That’s already this link’s name.';
+        if (calendarId && CalendarName.same(s, calendarId)) return this.OWN_NAME_MESSAGE;
         if (!/^[a-zA-Z0-9_-]{3,50}$/.test(s)) return 'Use 3 to 50 letters, numbers, dashes or underscores.';
         return null;
     }
@@ -70,7 +72,7 @@ class SlugManager {
     // which are actually free. A trailing number counts up ("team-2" -> "team-3"); otherwise
     // the usual ways people disambiguate (-2, -<year>, -team, -calendar).
     static suggestSlugs(slug, year = new Date().getFullYear()) {
-        const base = String(slug || '').trim().toLowerCase().replace(/-+$/, '');
+        const base = CalendarName.key(slug || '').replace(/-+$/, '');
         if (!base) return [];
         const out = [];
         const counted = base.match(/^(.*)-(\d{1,3})$/);

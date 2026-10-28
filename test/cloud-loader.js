@@ -27,6 +27,7 @@ function loadTab({ WebSocket = globalThis.WebSocket, base, search = '?backend=cf
     run(`const Utils = { debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; },
                         uuidv4() { return crypto.randomUUID(); } };`, 'utils-stub');
     run(read('models/Event.js'), 'Event.js');
+    run(read('services/CalendarName.js'), 'CalendarName.js');
     run(read('services/EventStore.js'), 'EventStore.js');
     run(read('services/CalendarDataService.js'), 'CalendarDataService.js');
     run(read('services/CloudCalendarService.js'), 'CloudCalendarService.js');

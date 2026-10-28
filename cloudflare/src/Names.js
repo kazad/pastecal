@@ -33,6 +33,7 @@
  * purge reaches only the data center that made the change, so others may be up to 60 seconds behind.
  */
 import CalendarPath from '../../public/services/CalendarPath.js';
+import CalendarName from '../../public/services/CalendarName.js';
 import { sessionUserId, sameSite, UNLIMITED_TOP_LEVEL, lockForOwner } from './Accounts.js';
 import { LockClient } from './LockClient.js';
 import { SlugService, nameProblem } from './SlugService.js';
@@ -174,7 +175,7 @@ async function ownCalendar(env, userId, calendarId) {
     return mine ? null : json({ error: 'not-owner' }, 403);
 }
 const bad = (message) => json({ error: 'bad-name', message }, 400);
-const clean = (raw) => String(raw ?? '').trim().toLowerCase();
+const clean = (raw) => CalendarName.key(raw);
 
 const NAME_OPS = {
     async '/api/names/handle'(request, env, userId, body) {
@@ -340,7 +341,7 @@ export async function serveAt(request, env, url, { serveFeed }) {
     const m = AT_RE.exec(url.pathname);
     if (!m || (request.method !== 'GET' && request.method !== 'HEAD')) return notFound(env, url);
     let handle, name;
-    try { handle = decodeURIComponent(m[1]).toLowerCase(); name = m[2] ? decodeURIComponent(m[2]).toLowerCase() : null; } catch { return notFound(env, url); }
+    try { handle = CalendarName.key(decodeURIComponent(m[1])); name = m[2] ? CalendarName.key(decodeURIComponent(m[2])) : null; } catch { return notFound(env, url); }
     const ics = !!m[3];
     if (ics && !name) return null;                                         // /@x.ics: an old calendar named "@x" keeps its feed
     if (!/^[a-z0-9-]{1,40}$/.test(handle) || (name !== null && !/^[a-z0-9-]{1,40}$/.test(name))) return notFound(env, url);

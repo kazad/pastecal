@@ -1,6 +1,7 @@
 /**
  * SlugService -- slug validation, normalization, and reserved words for Cloudflare.
  */
+import CalendarName from '../../public/services/CalendarName.js';
 export const RESERVED_WORDS = new Set([
     'view', 'beta', 'nativecal', 'api', 'admin', 'administrator', 'www', 'app', 'apps', 'calendar', 'cal',
     'about', 'account', 'accounts', 'assets', 'auth', 'bin', 'billing', 'blog', 'bot',
@@ -45,7 +46,7 @@ export const RESERVED_NAME_WORDS = [
 ];
 const LOOKS = { 0: 'o', 1: 'l', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', 9: 'g', i: 'l' };
 export function namesSkeleton(raw) {
-    return String(raw ?? '').toLowerCase().normalize('NFKC').replace(/[-_.\s]/g, '')
+    return CalendarName.key(raw).normalize('NFKC').replace(/[-_.\s]/g, '')
         .replace(/rn/g, 'm').replace(/vv/g, 'w').replace(/[0-9i]/g, (c) => LOOKS[c] || c);
 }
 const RESERVED_SKELETONS = new Set(RESERVED_NAME_WORDS.map(namesSkeleton));
@@ -61,7 +62,7 @@ export function looksOfficial(raw) {
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 const LINK_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 export function nameProblem(raw, kind) {
-    const s = String(raw ?? '').trim().toLowerCase();
+    const s = CalendarName.key(raw);
     const re = kind === 'link' ? LINK_RE : NAME_RE;
     if (!re.test(s)) return kind === 'link' ? 'Use 1 to 40 letters, numbers or dashes.' : 'Use 3 to 30 letters, numbers or dashes.';
     if (kind !== 'link' && (RESERVED_WORDS.has(s) || RESERVED_CALENDAR_NAMES.has(s) || STATIC_PAGE_NAMES.has(s) || looksOfficial(s))) return 'That name is reserved. Try another.';
@@ -69,12 +70,14 @@ export function nameProblem(raw, kind) {
 }
 
 export const SlugService = {
-    // The directory's key for a name: its lowercase, and nothing else. A calendar's name is exact -- "royal city " (a
-    // trailing space) is its own calendar -- so it is never trimmed here: trimmed, its lookups answered "royal city",
-    // and the app re-opened that, a blank draft (stress A19). Typed input (a short name, a custom view name) is trimmed
-    // where it is read, before it becomes a name.
+    // The directory's key for a name: CalendarName.key (trimmed, lowercase, NFC), the one rule the pages share. Only the
+    // key is trimmed: a calendar's name stays exact ("royal city " is stored and opened as itself, stress A19).
     normalizeSlug(slug) {
-        return String(slug ?? '').toLowerCase();
+        return CalendarName.key(slug);
+    },
+    // The key a row was stored under before Oct 2026 (lowercase only): read as a fallback until it is re-keyed.
+    legacySlugKey(slug) {
+        return CalendarName.legacyKey(slug);
     },
 
     isReserved(slug) {
