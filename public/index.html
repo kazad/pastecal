@@ -184,7 +184,7 @@
             try { var forced = new URLSearchParams(location.search).get('theme'); if (forced === 'light' || forced === 'dark') mode = forced; } catch (e) { }
             var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-            if (window.pcNativeCal) document.write('<link rel="stylesheet" href="/native-calendar.css?v=1792797113">');
+            if (window.pcNativeCal) document.write('<link rel="stylesheet" href="/native-calendar.css?v=1793217747">');
             else document.write('<link id="syncfusion-theme" rel="stylesheet" type="text/css" href="/vendor/syncfusion-23.2.6/' +
                 (dark ? 'material-dark' : 'material') + '.css?v=1792797113">');
         })();
@@ -192,32 +192,32 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="/tokens.css?v=1792797113">
-    <link rel="stylesheet" href="/components.css?v=1792797113">
-    <link rel="stylesheet" href="/site.css">
-    <link rel="stylesheet" href="/style.css?v=1792797113">
+    <link rel="stylesheet" href="/tokens.css?v=1793217747">
+    <link rel="stylesheet" href="/components.css?v=1793217747">
+    <link rel="stylesheet" href="/site.css?v=1793217747">
+    <link rel="stylesheet" href="/style.css?v=1793217747">
     <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
-    <link rel="stylesheet" href="/tailwind.css?v=1792797113">
+    <link rel="stylesheet" href="/tailwind.css?v=1793217747">
 
     <!-- Third-party libraries -->
     <!-- Vue, self-hosted and pinned: it was unpkg's floating vue@3 (a third-party hop, and a new minor could ship to
          production unseen). Same-origin also lets it be cached for a year (public/_headers /vendor/*). -->
-    <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
+    <script src="/vendor/vue-3.5.44/vue.global.prod.js?v=1793217747"></script>
     <!-- Right after Vue: key modifiers skip keys pressed mid-composition (IME), and shortcut labels per platform. -->
-    <script src="/utils/keys.js?v=1792797113"></script>
+    <script src="/utils/keys.js?v=1793217747"></script>
     <!-- The calendar: Syncfusion's Schedule, or (native view links, above) pastecal's own and rrule for repeats. -->
     <script>
         if (window.pcNativeCal) document.write(''
             + '<script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"><\/script>'
-            + '<script src="/nativecal/components/ncUx.js?v=1792797113"><\/script>'
-            + '<script src="/nativecal/components/NcIcon.js?v=1792797113"><\/script>'
-            + '<script src="/nativecal/components/NativeCalendar.js?v=1792797113"><\/script>'
-            + '<script src="/nativecal/components/EventPopover.js?v=1792797113"><\/script>'
+            + '<script src="/nativecal/components/ncUx.js?v=1793217747"><\/script>'
+            + '<script src="/nativecal/components/NcIcon.js?v=1793217747"><\/script>'
+            + '<script src="/nativecal/components/NativeCalendar.js?v=1793217747"><\/script>'
+            + '<script src="/nativecal/components/EventPopover.js?v=1793217747"><\/script>'
             // Edit links: the editor and the quick box (a view link never edits, so never downloads them).
-            + (window.pcNativeEdit ? '<script src="/nativecal/components/cardKit.js?v=1792797113"><\/script>'
-                + '<script src="/nativecal/components/EventCard.js?v=1792797113"><\/script>' : ''));
+            + (window.pcNativeEdit ? '<script src="/nativecal/components/cardKit.js?v=1793217747"><\/script>'
+                + '<script src="/nativecal/components/EventCard.js?v=1793217747"><\/script>' : ''));
         // (rrule too: a series in its own zone is expanded there for classic's grid, as native draws it: ScheduleAdapter.toView.)
-        else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>'
+        else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1793217747" type="text/javascript"><\/script>'
             + '<script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"><\/script>');
     </script>
     <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
@@ -264,43 +264,43 @@
     <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "4212c72302dd4948ae468380054149b2"}'></script>
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
-    <script src="/utils/analytics.js?v=1792797113"></script>
+    <script src="/utils/analytics.js?v=1793217747"></script>
     <!-- The staging copy (preview.pastecal.com): test-mode banner and switches. Does nothing elsewhere. -->
-    <script src="/utils/preview.js?v=1792797113"></script>
-    <script src="/utils/templates.js?v=1792797113"></script>
-    <script src="/utils/utils.js?v=1792797113"></script>
-    <script src="/models/Event.js?v=1792797113"></script>
-    <script src="/services/CalendarPath.js?v=1792797113"></script>
+    <script src="/utils/preview.js?v=1793217747"></script>
+    <script src="/utils/templates.js?v=1793217747"></script>
+    <script src="/utils/utils.js?v=1793217747"></script>
+    <script src="/models/Event.js?v=1793217747"></script>
+    <script src="/services/CalendarPath.js?v=1793217747"></script>
     <!-- One rule for when two spellings are the same calendar name (also the Worker's); before SlugManager. -->
-    <script src="/services/CalendarName.js?v=1792797113"></script>
-    <script src="/services/SlugManager.js?v=1792797113"></script>
+    <script src="/services/CalendarName.js?v=1793217747"></script>
+    <script src="/services/SlugManager.js?v=1793217747"></script>
     <!-- Before CalendarDataService, which calls into it on every write. -->
-    <script src="/services/AuthorSignal.js?v=1792797113"></script>
-    <script src="/services/CalendarDataService.js?v=1792797113"></script>
-    <script src="/models/Calendar.js?v=1792797113"></script>
+    <script src="/services/AuthorSignal.js?v=1793217747"></script>
+    <script src="/services/CalendarDataService.js?v=1793217747"></script>
+    <script src="/models/Calendar.js?v=1793217747"></script>
     <!-- An event's own time zone (before EventStore and the models that read it). -->
-    <script src="/services/EventZone.js?v=1792797113"></script>
-    <script src="/services/EventStore.js?v=1792797113"></script>
+    <script src="/services/EventZone.js?v=1793217747"></script>
+    <script src="/services/EventStore.js?v=1793217747"></script>
     <!-- Settings' Import .ics: a calendar file into events, no duplicates (after EventZone and EventStore, which it uses). -->
-    <script src="/services/ICSImport.js?v=1792797113"></script>
+    <script src="/services/ICSImport.js?v=1793217747"></script>
     <!-- Picks the backend: replaces CalendarDataService with the Cloudflare one when ?backend=cf / new.pastecal.com. Flag off = no effect. -->
-    <script src="/services/EditorKeys.js?v=1792797113"></script>
-    <script src="/services/CloudCalendarService.js?v=1792797113"></script>
-    <script src="/services/ScheduleAdapter.js?v=1792797113"></script>
+    <script src="/services/EditorKeys.js?v=1793217747"></script>
+    <script src="/services/CloudCalendarService.js?v=1793217747"></script>
+    <script src="/services/ScheduleAdapter.js?v=1793217747"></script>
     <!-- The calendar interface (Syncfusion or native); app.js reaches the calendar on screen only through it. -->
-    <script src="/services/CalendarView.js?v=1792797113"></script>
-    <script src="/directives/clickOutside.js?v=1792797113"></script>
+    <script src="/services/CalendarView.js?v=1793217747"></script>
+    <script src="/directives/clickOutside.js?v=1793217747"></script>
     <!-- Components -->
-    <script src="/components/icons.js?v=1792797113"></script>
-    <script src="/components/ToastNotification.js?v=1792797113"></script>
-    <script src="/components/QuickAddButton.js?v=1792797113"></script>
-    <script src="/components/Tooltip.js?v=1792797113"></script>
-    <script src="/components/QuickAddDialog.js?v=1792797113"></script>
-    <script src="/components/CalendarTitle.js?v=1792797113"></script>
-    <script src="/components/NavigationDropdown.js?v=1792797113"></script>
-    <script src="/components/WelcomeDock.js?v=1792797113"></script>
-    <script src="/components/Pro.js?v=1792797113"></script>
-    <script src="/components/ProInsight.js?v=1792797113"></script>
+    <script src="/components/icons.js?v=1793217747"></script>
+    <script src="/components/ToastNotification.js?v=1793217747"></script>
+    <script src="/components/QuickAddButton.js?v=1793217747"></script>
+    <script src="/components/Tooltip.js?v=1793217747"></script>
+    <script src="/components/QuickAddDialog.js?v=1793217747"></script>
+    <script src="/components/CalendarTitle.js?v=1793217747"></script>
+    <script src="/components/NavigationDropdown.js?v=1793217747"></script>
+    <script src="/components/WelcomeDock.js?v=1793217747"></script>
+    <script src="/components/Pro.js?v=1793217747"></script>
+    <script src="/components/ProInsight.js?v=1793217747"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -331,7 +331,7 @@
     <script>
         if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
             const script = document.createElement('script');
-            script.src = '/selftest.js?v=1792797113';
+            script.src = '/selftest.js?v=1793217747';
             document.head.appendChild(script);
         }
     </script>
@@ -1925,7 +1925,7 @@
     </div>
 
     
-    <script src="/app.js?v=1792797113"></script>
+    <script src="/app.js?v=1793217747"></script>
 
 </body>
 
