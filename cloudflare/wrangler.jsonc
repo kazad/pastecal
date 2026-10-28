@@ -134,7 +134,8 @@
           { "name": "BACKUP_ARCHIVE", "class_name": "BackupArchive" }
         ]
       },
-      "triggers": { "crons": ["0 9 * * *"] },
+      // No daily archive on preview: it runs on the live calendars, which production already archives (owner, Oct 28 2026).
+      "triggers": { "crons": [] },
       "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
         { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
