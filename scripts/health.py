@@ -197,7 +197,7 @@ def check_archive():
             if e.code != 503: return f'health route answered HTTP {e.code}', [f'backup: the archive health check answered HTTP {e.code}']
             h = json.loads(e.read() or b'{}')
         n = h.get('newest') or {}
-        line = (f"newest {n.get('date')}: {n.get('count')} of {h.get('editable')} calendars, {n.get('ageHours')}h old, "
+        line = (f"newest {n.get('date')}: {n.get('count')} of {h.get('editable')} calendars ({n.get('absent')} names lead nowhere), {n.get('ageHours')}h old, "
                 f"{(n.get('gzBytes') or 0) / 1e6:.1f} MB" if n else 'no archive for today or yesterday')
         return line, ['backup: ' + p for p in h.get('problems', [])]
     # No secret: the newest file's age from the listing (no count check).

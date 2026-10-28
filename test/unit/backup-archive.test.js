@@ -29,7 +29,11 @@ test('health: missing, stale (over 26h), short (under 95%) and failed reads are 
     assert.equal(stale.ok, false); assert.match(stale.problems[0], /27\.0 hours old, over 26/);
     assert.equal(evaluateHealth({ newest: newest({}, 25.9), now: NOW, editable: 5000 }).ok, true);
     const short = evaluateHealth({ newest: newest({ count: '94' }), now: NOW, editable: 100 });
-    assert.match(short.problems[0], /holds 94 calendars, under 95% of the directory's 100/);
+    assert.match(short.problems[0], /holds 94 calendars \(\+0 absent names\), under 95% of the directory's 100/);
+    // Names that lead to no calendar were looked up (absent): they count toward coverage...
+    assert.equal(evaluateHealth({ newest: newest({ count: '90', absent: '6' }), now: NOW, editable: 100 }).ok, true);
+    // ...but more of them than calendars is a problem of its own (an id bug, say).
+    assert.match(evaluateHealth({ newest: newest({ count: '40', absent: '60' }), now: NOW, editable: 100 }).problems[0], /more names leading nowhere \(60\) than calendars \(40\)/);
     assert.equal(evaluateHealth({ newest: newest({ count: '95' }), now: NOW, editable: 100 }).ok, true);
     assert.match(evaluateHealth({ newest: newest({ failed: '2' }), now: NOW, editable: 5000 }).problems[0], /2 calendar\(s\) could not be read/);
     assert.match(evaluateHealth({ newest: newest({ count: undefined }), now: NOW, editable: 5 }).problems[0], /no calendar count/);

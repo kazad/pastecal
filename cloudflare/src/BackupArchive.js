@@ -25,7 +25,8 @@
  * are never pruned. firebase/ (the lead's copies of the Firebase backups) is never read, written or pruned.
  *
  * Worker side (bottom of this file): the cron handler and the admin routes (Bearer IMPORT_SECRET):
- *   POST /api/admin/backup/run[?date=YYYY-MM-DD]   start a run now (the cron runs one daily at 09:00 UTC)
+ *   POST /api/admin/backup/run                     start today's run now (the cron runs one daily at 09:00 UTC); a
+ *                                                  ?date= other than today is refused: past days are never rewritten
  *   GET  /api/admin/backup/status                  the current or last run
  *   GET  /api/admin/backup/list                    every daily file, with its metadata
  *   GET  /api/admin/backup/health                  {ok, problems[], newest, editable}; 503 when not ok
@@ -282,8 +283,9 @@ export async function handleBackupAdmin(request, env, url) {
     const m = request.method;
     try {
         if (path === '/api/admin/backup/run' && m === 'POST') {
-            const date = url.searchParams.get('date') || utcDate(Date.now());
-            if (!DATE_RE.test(date)) return Response.json({ ok: false, error: 'bad date' }, { status: 400 });
+            // Today only: a run reads the calendars as they are now, so it must never be filed under a past day.
+            const date = utcDate(Date.now()), asked = url.searchParams.get('date');
+            if (asked && asked !== date) return Response.json({ ok: false, error: 'today-only', message: `a run archives today (${date}) only` }, { status: 400 });
             return Response.json({ ok: true, job: await archiver(env).start(date) });
         }
         if (path === '/api/admin/backup/status' && m === 'GET') return Response.json({ ok: true, job: await archiver(env).status() });

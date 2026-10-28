@@ -121,6 +121,13 @@ list = (await (await admin('list')).json()).archives;
 assert.equal(list.length, 1); assert.equal(list[0].run, started.run);
 step('rerun (POST /api/admin/backup/run): a new run overwrites the same day\'s file, which now holds the later change');
 
+const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+r = await fetch(`${BASE}/api/admin/backup/run?date=${yesterday}`, { method: 'POST', headers: auth });
+assert.equal(r.status, 400); assert.equal((await r.json()).error, 'today-only');
+assert.deepEqual((await (await admin('list')).json()).archives, list);
+assert.equal((await (await admin('status')).json()).job.run, started.run, 'no run started');
+step('a run for another day (?date=yesterday) is refused (400 today-only): past days are never rewritten with today\'s calendars');
+
 // 7. Restore dry run: the right diff, nothing written.
 const archived = again.calendar;
 r = await replace(ids[0], { title: 'Damaged', events: [ev('stray', 'a stray event', 3)] });

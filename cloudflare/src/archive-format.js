@@ -33,17 +33,21 @@ export function evaluateHealth({ newest, now, editable, maxAgeHours = HEALTH.max
     const m = newest.meta || {};
     const finished = Date.parse(m.finishedAt) || new Date(newest.uploaded).getTime();
     const ageHours = (now - finished) / 3600000;
-    const count = Number(m.count), failed = Number(m.failed) || 0;
+    const count = Number(m.count), failed = Number(m.failed) || 0, absent = Number(m.absent) || 0;
     if (!(ageHours <= maxAgeHours)) problems.push(`the newest full archive (${newest.date}) is ${ageHours.toFixed(1)} hours old, over ${maxAgeHours}`);
     if (!Number.isFinite(count)) problems.push(`the newest full archive (${newest.date}) has no calendar count`);
-    else if (editable > 0 && count < minShare * editable) {
-        problems.push(`the newest full archive (${newest.date}) holds ${count} calendars, under ${Math.round(minShare * 100)}% of the directory's ${editable}`);
+    // A directory name that leads to no calendar (a stale or once-trimmed row) was looked up and counted
+    // as absent: it covers its row, so dead rows never keep the check red. Many of them is its own problem.
+    else if (editable > 0 && count + absent < minShare * editable) {
+        problems.push(`the newest full archive (${newest.date}) holds ${count} calendars (+${absent} absent names), under ${Math.round(minShare * 100)}% of the directory's ${editable}`);
+    } else if (absent > count) {
+        problems.push(`the newest full archive (${newest.date}) found more names leading nowhere (${absent}) than calendars (${count})`);
     }
     if (failed > 0) problems.push(`${failed} calendar(s) could not be read into the ${newest.date} archive`);
     return {
         ok: !problems.length, problems, editable,
         newest: { key: newest.key, date: newest.date, ageHours: Math.round(ageHours * 10) / 10, count, failed,
-            absent: Number(m.absent) || 0, dirRows: Number(m.dirRows) || 0, gzBytes: newest.size || 0 },
+            absent, dirRows: Number(m.dirRows) || 0, gzBytes: newest.size || 0 },
     };
 }
 
