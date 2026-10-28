@@ -71,10 +71,11 @@
     { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
-  // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.
+  // Off since Oct 28 2026 (owner: no rollback to Firebase; Cloudflare is the only store). Firebase keeps its last state,
+  // and its daily backups were copied into R2 under firebase/. "*" would mirror every save back again.
   "vars": {
     "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
-    "COPY_BACK": "*"
+    "COPY_BACK": ""
   },
   // NATIVE_VIEW_LINKS: "1" draws view links with pastecal's own calendar instead of Syncfusion's (src/Site.js,
   // docs/native-switch.md). Unset = classic; a browser can still pick with ?cal=native|classic.
