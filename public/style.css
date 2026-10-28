@@ -1498,10 +1498,12 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 .pc-link.pc-imp-show { padding: 0; border: 0; background: none; font: var(--pc-fw-regular) var(--pc-fs-sm)/var(--pc-lh-tight) var(--pc-font); color: var(--pc-text-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
 .pc-link.pc-imp-show:hover { color: var(--pc-text) }
 .pc-imp-show:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px; border-radius: var(--pc-radius-xs) }
-.pc-imp-list { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); column-gap: var(--pc-space-4); row-gap: var(--pc-space-2);
+/* The same columns in every section (max-content per list made New and Changes line up differently); a long range wraps. */
+.pc-imp-list { display: grid; grid-template-columns: 9.5rem 5.25rem minmax(0, 1fr); column-gap: var(--pc-space-4); row-gap: var(--pc-space-2);
   margin: 0; padding: 0; list-style: none; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight) }
 .pc-imp-row { display: contents }
 .pc-imp-date, .pc-imp-time { color: var(--pc-text-2); font-variant-numeric: tabular-nums; white-space: nowrap }
+.pc-imp-date { white-space: normal }
 .pc-imp-name { min-width: 0; color: var(--pc-text); overflow-wrap: anywhere }
 .pc-imp-row--plain .pc-imp-name { grid-column: 1 / -1 }
 .pc-imp-rep { display: inline-flex; align-items: center; gap: 3px; margin-left: var(--pc-space-2); color: var(--pc-text-muted); white-space: nowrap }
