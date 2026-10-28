@@ -30,7 +30,7 @@ if [ "$SYNC" = 1 ]; then
   rsync -az --delete --exclude node_modules --exclude .wrangler --exclude cloudflare/test-results --exclude test/native-audit/out \
     --exclude .cloudflare --exclude snapshots "$ROOT/" "omarchy:$DEST/" || { echo "rsync to omarchy failed"; exit 2; }
 fi
-ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-24}" "${BOX_SERVERS:-6}" "$MODE" "$SYNC" "${BOX_JOBS:-16}" "$@" <<'EOF'
+ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-16}" "${BOX_SERVERS:-6}" "$MODE" "$SYNC" "${BOX_JOBS:-16}" "$@" <<'EOF'
 set -u
 DEST=$1 PORT=$2 WORKERS=$3 SERVERS=$4 MODE=$5 SYNC=$6 JOBS=$7; shift 7
 cd ~/"$DEST" || exit 2
