@@ -290,7 +290,18 @@ export const ICSService = {
         return assigned;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '', calZone = null) {
+    // A backup's copy of the stored row (generateICS opts.backup): the id and every field of THE list
+    // (EventStore.FIELDS), as JSON. The standard properties above are what other calendar apps read; pastecal's import
+    // (services/ICSImport.js) reads this instead, so a backup restores exactly what was stored (the rule as the editor
+    // wrote it, skipped dates as stamps, the event's own zone, its type, an edited occurrence's own id), and a field
+    // added to the list later is carried with no change here.
+    backupRow(event) {
+        const row = { id: event.id };
+        for (const f of EventStore.FIELDS) if (f in event) row[f] = event[f];
+        return `X-PASTECAL-ROW:${this.escapeText(JSON.stringify(row))}`;
+    },
+
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '', calZone = null, backup = false) {
         if (occurrence === undefined && event.recurrenceID) {
             const stamp = this.occurrenceOriginal(event);
             const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
@@ -344,6 +355,7 @@ export const ICSService = {
             if (exdates.length) eventLines.push(`EXDATE${dateParam}:${exdates.join(',')}`);
         }
 
+        if (backup) eventLines.push(this.backupRow(event));
         eventLines.push('END:VEVENT');
         return eventLines.map(line => this.foldLine(line)).join('\r\n');
     },
@@ -354,7 +366,8 @@ export const ICSService = {
         return String(ics).split('\r\n').filter((line) => !line.startsWith('DTSTAMP:')).join('\r\n');
     },
 
-    // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock).
+    // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock). opts.backup: the Download
+    // .ics backup (index.js serveFeed ?download=1): each event also carries its stored row (backupRow).
     generateICS(calendarData, id, opts = {}) {
         const raw = calendarData?.events;
         const allEvents = Array.isArray(raw)
@@ -376,7 +389,7 @@ export const ICSService = {
 
         const events = renderable.map(event => this.createEventBlock(event, dtstamp,
             event.recurrenceID ? null : overridden.get(event.id),
-            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || '', calZone));
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || '', calZone, !!opts.backup));
         const timezones = this.timezones(renderable, calZone);
 
         const name = this.escapeText(calendarData?.title || id);

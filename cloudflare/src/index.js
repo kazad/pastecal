@@ -142,10 +142,13 @@ function withStagingHeaders(response) {
 
 // The iCalendar feed of the calendar in room `targetId`, named `actualSlug` (a view or short name keeps
 // its own name: the feed never shows an edit id). `fileName` overrides the download name.
-async function serveFeed(request, env, targetId, actualSlug, fileName = actualSlug) {
+// backup: Settings' "Download .ics" (?download=1 on an edit feed): saved as a file named for the calendar, never from
+// a cache (a backup is of now), not counted as a follow, and each event carries its stored row (ICSService.backupRow)
+// so pastecal's import restores it exactly.
+async function serveFeed(request, env, targetId, actualSlug, fileName = actualSlug, { backup = false } = {}) {
     const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
     // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
-    const hit = hitFor(request, env, 'follow');
+    const hit = backup ? null : hitFor(request, env, 'follow');
     const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
         ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
     if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
@@ -161,7 +164,18 @@ async function serveFeed(request, env, targetId, actualSlug, fileName = actualSl
     // The ETag is a hash of everything the feed says (ICSService.etagSource: all of it but DTSTAMP), so any change a
     // calendar app would show -- a renamed calendar, its zone, an event -- is sent again. (It hashed the view link and the
     // events only: after a rename, "changed?" was answered 304 and apps kept the old name, stress A11.)
-    const icsText = ICSService.generateICS(cal, actualSlug, { viewUrl });
+    const icsText = ICSService.generateICS(cal, actualSlug, backup ? { backup: true } : { viewUrl });
+    if (backup) {
+        const name = String(cal.title || '').trim() || actualSlug;
+        return new Response(icsText, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/calendar; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${name.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(name)}.ics`,
+                'Cache-Control': 'no-store'
+            }
+        });
+    }
     const etag = '"' + await sha1Hex('v3' + ICSService.etagSource(icsText)) + '"';
     if (request.headers.get('if-none-match') === etag) {
         return new Response(null, {
@@ -260,7 +274,9 @@ async function route(request, env, ctx) {
                     console.error('[Worker ICS] directory lookup error:', e);
                 }
             }
-            return serveFeed(request, env, targetId, actualSlug);
+            // ?download=1 on an edit feed: the backup (never a view link's: its rows are the calendar's whole data).
+            const backup = !icsMatch[1] && url.searchParams.get('download') === '1';
+            return serveFeed(request, env, targetId, actualSlug, actualSlug, { backup });
         }
 
         // Account page data and Pro Unlimited names: /api/account, /api/names/*
