@@ -176,12 +176,12 @@ test('a missing, failing or slow calendar leaves the page exactly as it was', as
     const cases = {
         missing: fakeEnv(),
         failing: fakeEnv({ fail: true, rooms: { choir: choir() } }),
-        slow: fakeEnv({ delayMs: PAGE_BUDGET_MS + 300, lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: choir() } }),
-        viewOfEditName: fakeEnv({ lookup: { choir: { found: true, isReadOnly: false, targetId: 'choir' } }, rooms: { choir: choir() } }),
+        slow: fakeEnv({ delayMs: PAGE_BUDGET_MS + 300, lookup: { choir: { found: true, actualSlug: 'choir', targetId: 'choir' } }, rooms: { choir: choir() } }),
+        viewOfEditName: fakeEnv({ lookup: { choir: { found: true, isReadOnly: false, actualSlug: 'choir', targetId: 'choir' } }, rooms: { choir: choir() } }),
         // Not in the directory: no room is asked (it would be created empty for every scanned path).
         notInDirectory: fakeEnv({ rooms: { choir: choir() } }),
         // A room on older code answers /preview with {v, calendar}: not mistaken for an empty calendar.
-        olderRoom: fakeEnv({ lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: { raw: true, body: { v: 3, calendar: choir() } } } }),
+        olderRoom: fakeEnv({ lookup: { choir: { found: true, actualSlug: 'choir', targetId: 'choir' } }, rooms: { choir: { raw: true, body: { v: 3, calendar: choir() } } } }),
     };
     for (const [name, env] of Object.entries(cases)) {
         const kind = name === 'viewOfEditName' ? 'view' : 'edit';
@@ -198,7 +198,7 @@ test('a missing, failing or slow calendar leaves the page exactly as it was', as
 
 test('link-preview fetchers wait longer than the page budget for the real tags (a miss is cached by them); people get the static page', async () => {
     const { previewPage, PAGE_BUDGET_MS, BOT_BUDGET_MS } = await src('page.js');
-    const env = fakeEnv({ delayMs: PAGE_BUDGET_MS + 200, lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: choir() } });
+    const env = fakeEnv({ delayMs: PAGE_BUDGET_MS + 200, lookup: { choir: { found: true, actualSlug: 'choir', targetId: 'choir' } }, rooms: { choir: choir() } });
     assert.ok(BOT_BUDGET_MS >= 1500);
     for (const ua of ['facebookexternalhit/1.1', 'Slackbot-LinkExpanding 1.0', 'Mozilla/5.0 (compatible; Discordbot/2.0)', 'WhatsApp/2.23', 'Twitterbot/1.0', 'LinkedInBot/1.0']) {
         const req = new Request('https://pastecal.com/choir', { headers: { 'User-Agent': ua } });
@@ -262,7 +262,7 @@ test('the app sends its time zone: on create (when the calendar has none) and wi
 function stubEnv(cal) {
     const calls = { directory: 0, room: 0 };
     const env = {
-        DIRECTORY: { idFromName: () => 'g', get: () => ({ fetch: async () => { calls.directory++; return Response.json({ found: true, targetId: 'room-1', isReadOnly: false }); } }) },
+        DIRECTORY: { idFromName: () => 'g', get: () => ({ fetch: async () => { calls.directory++; return Response.json({ found: true, actualSlug: 'soccer', targetId: 'room-1', isReadOnly: false }); } }) },
         CALENDARS: { idFromName: () => 'r', get: () => ({ fetch: async () => { calls.room++; return Response.json(cal); } }) },
     };
     return { env, calls };

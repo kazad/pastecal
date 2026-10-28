@@ -9,7 +9,8 @@
  *   {"t":"cal","id":"<exact id>","v":12,"locked":false,"calendar":{id, title, options, lastEditedAt, events}}
  *                                                    the same calendar the per-calendar snapshot holds (CalendarRoom.backupToR2)
  *   {"t":"failed","id":"...","error":"..."}           a calendar that could not be read (two tries)
- *   {"t":"end","count":N,"dirRows":M,"absent":A,"failed":F,"finishedAt":"..."}   last line: a cut-off file has none
+ *   {"t":"end","count":N,"dirRows":M,"rooms":R,"absent":A,"failed":F,"finishedAt":"..."}   last line: a cut-off file has none
+ *                                                    (rooms: the registry's exact ids it walked; files before Oct 28 2026 have none)
  * No editor keys, key hashes, owner ids, Pro settings, stats or history: the per-calendar snapshot keeps none either.
  */
 export const ARCHIVE_VERSION = 1;
@@ -23,13 +24,16 @@ export const dailyKey = (date) => `${DAILY_PREFIX}${date}.json.gz`;
 export const partsPrefix = (date) => `${PARTS_PREFIX}${date}/`;
 
 // Is the newest archive fresh and whole? newest: {key, date, uploaded, size, meta: customMetadata} or null;
-// editable: the directory's count of edit names (its calendars). -> {ok, problems[], newest, editable}
-export function evaluateHealth({ newest, now, editable, maxAgeHours = HEALTH.maxAgeHours, minShare = HEALTH.minShare }) {
+// editable: the directory's count of edit names; rooms: the registry's count of exact calendar ids (it has every case
+// variant, which the directory does not). The archive must hold 95% of the larger. -> {ok, problems[], newest, editable, rooms}
+export function evaluateHealth({ newest, now, editable, rooms = 0, maxAgeHours = HEALTH.maxAgeHours, minShare = HEALTH.minShare }) {
     const problems = [];
     if (!newest) {
         problems.push('no daily full archive for today or yesterday');
-        return { ok: false, problems, newest: null, editable };
+        return { ok: false, problems, newest: null, editable, rooms };
     }
+    const expected = Math.max(editable || 0, rooms || 0);
+    const of = rooms > editable ? `the registry's ${rooms} calendars` : `the directory's ${editable}`;
     const m = newest.meta || {};
     const finished = Date.parse(m.finishedAt) || new Date(newest.uploaded).getTime();
     const ageHours = (now - finished) / 3600000;
@@ -38,16 +42,16 @@ export function evaluateHealth({ newest, now, editable, maxAgeHours = HEALTH.max
     if (!Number.isFinite(count)) problems.push(`the newest full archive (${newest.date}) has no calendar count`);
     // A directory name that leads to no calendar (a stale or once-trimmed row) was looked up and counted
     // as absent: it covers its row, so dead rows never keep the check red. Many of them is its own problem.
-    else if (editable > 0 && count + absent < minShare * editable) {
-        problems.push(`the newest full archive (${newest.date}) holds ${count} calendars (+${absent} absent names), under ${Math.round(minShare * 100)}% of the directory's ${editable}`);
+    else if (expected > 0 && count + absent < minShare * expected) {
+        problems.push(`the newest full archive (${newest.date}) holds ${count} calendars (+${absent} absent names), under ${Math.round(minShare * 100)}% of ${of}`);
     } else if (absent > count) {
         problems.push(`the newest full archive (${newest.date}) found more names leading nowhere (${absent}) than calendars (${count})`);
     }
     if (failed > 0) problems.push(`${failed} calendar(s) could not be read into the ${newest.date} archive`);
     return {
-        ok: !problems.length, problems, editable,
+        ok: !problems.length, problems, editable, rooms,
         newest: { key: newest.key, date: newest.date, ageHours: Math.round(ageHours * 10) / 10, count, failed,
-            absent, dirRows: Number(m.dirRows) || 0, gzBytes: newest.size || 0 },
+            absent, dirRows: Number(m.dirRows) || 0, rooms: Number(m.rooms) || 0, gzBytes: newest.size || 0 },
     };
 }
 

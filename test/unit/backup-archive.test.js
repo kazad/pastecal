@@ -39,6 +39,17 @@ test('health: missing, stale (over 26h), short (under 95%) and failed reads are 
     assert.match(evaluateHealth({ newest: newest({ count: undefined }), now: NOW, editable: 5 }).problems[0], /no calendar count/);
 });
 
+test('health: the registry of exact ids counts when it has more calendars than the directory (case variants)', async () => {
+    const { evaluateHealth } = await load();
+    // 100 edit names, but 120 calendars in the registry: 100 archived is short of 95% of 120.
+    const short = evaluateHealth({ newest: newest({ count: '100', rooms: '120' }), now: NOW, editable: 100, rooms: 120 });
+    assert.match(short.problems[0], /holds 100 calendars \(\+0 absent names\), under 95% of the registry's 120 calendars/);
+    assert.equal(short.rooms, 120); assert.equal(short.newest.rooms, 120);
+    assert.equal(evaluateHealth({ newest: newest({ count: '115' }), now: NOW, editable: 100, rooms: 120 }).ok, true);
+    // A registry not yet backfilled (fewer than the directory) leaves the directory as the measure.
+    assert.equal(evaluateHealth({ newest: newest({ count: '95' }), now: NOW, editable: 100, rooms: 10 }).ok, true);
+});
+
 test('health: no finishedAt falls back to the upload time', async () => {
     const { evaluateHealth } = await load();
     const n = newest({}, 30); delete n.meta.finishedAt;

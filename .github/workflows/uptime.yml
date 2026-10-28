@@ -19,7 +19,7 @@ jobs:
             elif [ -n "$3" ] && ! grep -q "$3" <<<"$body"; then echo "FAIL $1: missing '$3'"; fail=1
             else echo "ok   $1"; fi
           }
-          probe home      https://pastecal.com/                    'PasteCal'
+          probe home      https://pastecal.com/                    'pastecal'
           probe vue       https://pastecal.com/vendor/vue-3.5.44/vue.global.prod.js 'Vue'
           probe app       https://pastecal.com/app.js              'Analytics'
           exit $fail
