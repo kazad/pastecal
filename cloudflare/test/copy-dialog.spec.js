@@ -79,7 +79,11 @@ for (const native of [false, true]) {
     const { ctx, page, errors } = await open(browser, id, { native });
     await openDialog(page);
     // Suggested from this calendar's name, free; events included.
-    await expect(page.getByTestId('copy-name')).toHaveValue(`${id}-2`);
+    // The first free suggestion: "<name>-<n+1>" or "<name>-2", whichever no other calendar holds yet (parallel tests create
+    // neighbors), so the check is that it is filled, new, and free.
+    const suggested = await page.getByTestId('copy-name').inputValue();
+    expect(suggested.startsWith(id.replace(/-\d+$/, '')) && suggested !== id, `suggested "${suggested}"`).toBe(true);
+    expect((await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(suggested)}`).then((r) => r.json())).found, 'the suggestion is free').toBe(false);
     await expect(page.getByTestId('copy-events')).toBeChecked();
     await expect(page.getByTestId('copy-dialog').locator('.pc-btn--primary')).toHaveCount(1);
     await expect(page.getByTestId('copy-dialog').locator('.pc-field-prefix')).toHaveText('pastecal.com/');
