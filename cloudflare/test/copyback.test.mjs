@@ -1,11 +1,14 @@
-// Copy-back to Firebase, against `wrangler dev` plus a stand-in Firebase on :9099.
+// Copy-back to Firebase, against `wrangler dev` plus a stand-in Firebase on :9099 (FIREBASE_PORT).
 // wrangler dev needs (cloudflare/.dev.vars):  FIREBASE_DB_URL=http://localhost:9099  COPY_BACK=test-cb-*
+// COPY_BACK_DELAY_MS: the server's copy-back delay when started with a shorter one (scripts/test-all.sh); the
+// fixed waits below are written for the default 3 s and scale with it.
 import assert from 'node:assert/strict';
 import { startFakeFirebase } from './fake-firebase.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:8787', SECRET = process.env.IMPORT_SECRET || 'dev-secret';
-const fb = await startFakeFirebase(9099);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fb = await startFakeFirebase(Number(process.env.FIREBASE_PORT) || 9099);
+const DELAY = Number(process.env.COPY_BACK_DELAY_MS) || 3000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms * DELAY / 3000));   // ms at the default 3 s delay
 const at = (d, h) => new Date(Date.UTC(2026, 9, d, h)).toISOString();
 let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
 const cfGet = async (id) => (await fetch(`${BASE}/cal/${id}`)).json();

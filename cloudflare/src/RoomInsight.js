@@ -347,7 +347,9 @@ export function savedAtMs(snap, obj) {
 function restoreRefusal(room, now) {
     room.sql.exec(`DELETE FROM restore_log WHERE at < ?`, now - 3600000);
     const rows = room.sql.exec(`SELECT at FROM restore_log ORDER BY at DESC`).toArray();
-    if (rows.length && now - rows[0].at < RESTORE.minGapMs) return 'too-soon';
+    // RESTORE_MIN_GAP_MS: local test servers only (scripts/test-all.sh sets it shorter); unset in production.
+    const t = Number(room.env && room.env.RESTORE_MIN_GAP_MS), gap = t > 0 && t <= RESTORE.minGapMs ? t : RESTORE.minGapMs;
+    if (rows.length && now - rows[0].at < gap) return 'too-soon';
     if (rows.length >= RESTORE.perHour) return 'too-many-restores';
     return null;
 }

@@ -1166,7 +1166,9 @@ export class CalendarRoom extends DurableObject {
     // One alarm a few seconds after the last change runs both the backup and the copy-back, so a
     // burst of saves is one of each.
     async scheduleAlarm() {
-        if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + LIMITS.copyBackDelayMs);
+        // COPY_BACK_DELAY_MS: local test servers only (scripts/test-all.sh sets it shorter); unset in production.
+        const t = Number(this.env.COPY_BACK_DELAY_MS), delay = t > 0 && t <= LIMITS.copyBackDelayMs ? t : LIMITS.copyBackDelayMs;
+        if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + delay);
     }
 
     // ---- archiving test calendars ---------------------------------------------------------
