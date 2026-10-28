@@ -155,7 +155,10 @@ export class BackupArchive extends DurableObject {
     // One calendar as its room serves it (two tries). -> {v, locked, calendar} | {absent} | {error}
     async read(id) {
         let error = '';
-        for (let attempt = 0; attempt < 2; attempt++) {
+        // A calendar's object can answer "internal error" for a moment (the first run, Oct 28 2026: 7 of ~9,600, all
+        // readable seconds later), so the retries wait: 0.2 s, 0.8 s, 3.2 s.
+        for (let attempt = 0; attempt < 4; attempt++) {
+            if (attempt) await new Promise((r) => setTimeout(r, 200 * 4 ** (attempt - 1)));
             try {
                 const res = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(id)).fetch(`http://internal/cal/${encodeURIComponent(id)}`);
                 if (res.status === 404) return { absent: true };
