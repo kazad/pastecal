@@ -182,6 +182,30 @@ test('flow: an error refuses the save, asks for the snapshot, and reports throug
     assert.equal(ws.sent.length, n, 'paused: nothing more is sent');
 });
 
+test('flow: a save bigger than one message (an Import .ics of a large backup) goes in parts, each after the last is acknowledged; the journal is kept until the last', async () => {
+    const { ws, tab, S } = open([ev('a', 'A'), ev('b', 'B', 2)]);
+    S.declareIntent(1);
+    const many = Array.from({ length: 3000 }, (_, i) => ev(`n${i}`, `Imported ${i}`, 3, { description: 'x'.repeat(200) }));
+    const cal = { id: 'room', title: 'T', options: {}, events: [ev('a', 'A'), ...many] };
+    S.debounce_sync(cal);
+    S.flush();
+    const sizes = () => ws.sent.filter((m) => m.t === 'save').map((m) => JSON.stringify(m).length);
+    for (let i = 0; i < 20 && ws.sent.at(-1).t === 'save'; i++) {
+        const m = ws.sent.at(-1);
+        assert.ok(JSON.stringify(m).length < 512 * 1024, 'every part fits the server\'s message limit');
+        const before = ws.sent.length;
+        if (i === 0) assert.ok(tab.store['pastecal_unsent:room'], 'journal kept while parts remain');
+        ws.push({ t: 'ack', id: m.id, v: 4 + i });
+        if (ws.sent.length === before) break;
+    }
+    const saves = ws.sent.filter((m) => m.t === 'save');
+    assert.ok(saves.length >= 2, `sent in ${saves.length} parts (${sizes()})`);
+    assert.equal(saves[0].commands[0].type, 'remove', 'the remove goes in the first part');
+    assert.equal(saves.flatMap((m) => m.commands).filter((c) => c.type === 'add').length, 3000, 'every event sent once');
+    assert.equal(tab.store['pastecal_unsent:room'], undefined, 'journal cleared by the last part\'s ack');
+    assert.deepEqual(S.saveSlice([]), []);
+});
+
 test('flow: an undeclared deletion is refused locally, as in the Firebase path', () => {
     const { ws, S } = open([ev('a', 'A'), ev('b', 'B', 2)]);
     let refused = null; S.onSyncRefused = (x) => { refused = x; };

@@ -111,6 +111,23 @@ class CloudCalendarService extends CalendarDataService {
     // ---- pure decisions ---------------------------------------------------------------------
 
     /** The commands a save should send: local events vs the last server copy. [] = send nothing. */
+    /**
+     * The part of a save to send now. The server refuses a save message over 512 KB (CalendarRoom LIMITS.maxMessage); a
+     * save bigger than SAVE_BYTES (an Import .ics of a large backup) goes as several, in order, the next when the last is
+     * acknowledged (_onAck's _push works out what is still unsent). Every remove goes in the first part: the delete gate
+     * (_push) counts them against the one declared intent.
+     */
+    static SAVE_BYTES = 400 * 1024;
+    static saveSlice(commands, budget = this.SAVE_BYTES) {
+        const lastRemove = commands.map((c) => c.type).lastIndexOf('remove');
+        let size = 0;
+        for (let i = 0; i < commands.length; i++) {
+            size += JSON.stringify(commands[i]).length + 1;
+            if (size > budget && i > 0 && i > lastRemove) return commands.slice(0, i);
+        }
+        return commands;
+    }
+
     static planSave(serverEvents, localEvents) {
         // A new event must carry the id the tab chose (the server refuses one without).
         const usable = (localEvents || []).filter((e) => e && !(e.id === undefined || e.id === null || e.id === ''));
@@ -437,7 +454,8 @@ class CloudCalendarService extends CalendarDataService {
         this._notifyLock(room, reason);
         this._deliver(room, true);
         if (this._blocked(room)) return;               // read-only here: the journal waits (an editor key may still land)
-        if (commands.length) this._sendSave(room, commands, { journalT: entry.t, replay: true, localEvents: null });
+        const part = this.saveSlice(commands);
+        if (commands.length) this._sendSave(room, part, { journalT: entry.t, replay: true, localEvents: null, partial: part.length < commands.length });
         else if (room.unsent || room.latest) { room.unsent = false; this._push(room); }
     }
 
@@ -476,7 +494,9 @@ class CloudCalendarService extends CalendarDataService {
             }
             return;
         }
-        if (commands.length) this._sendSave(room, commands, { journalT: opts.journalT, localEvents: local });
+        const part = this.saveSlice(commands);
+        // (A part's ack keeps the journal: what is still unsent replays from it after a reload.)
+        if (commands.length) this._sendSave(room, part, { journalT: opts.journalT, localEvents: local, partial: part.length < commands.length });
         else this._sendMeta(room, meta, opts);
     }
 
@@ -495,12 +515,12 @@ class CloudCalendarService extends CalendarDataService {
         return null;
     }
 
-    static _sendSave(room, commands, { journalT, replay = false, localEvents } = {}) {
+    static _sendSave(room, commands, { journalT, replay = false, localEvents, partial = false } = {}) {
         if (replay && this._overWriteBudget()) return;
         const id = `s${++room.seq}`;
         const author = this._authorUid();
         const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
-        room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents };
+        room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents, partial };
         const tz = this._browserTz();
         if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...(tz ? { tz } : {}) })) { room.inflight = null; room.unsent = true; }
     }
@@ -521,7 +541,7 @@ class CloudCalendarService extends CalendarDataService {
         if (outcome === 'conflict' || room.v !== f.v && outcome === 'ok') {
             // Someone else's save landed first. The server applied ours on top of theirs; its state is the truth.
             room.force = f.localEvents || null;
-            this._journalClear(room.id, f.journalT);
+            if (!f.partial) this._journalClear(room.id, f.journalT);
             this._send(room, { t: 'hello' });
             return;
         }
@@ -532,8 +552,10 @@ class CloudCalendarService extends CalendarDataService {
             // (A replay's result is remembered by _deliver below, so the app's merge baseline is the PRE-replay copy.)
             if (!f.replay) this._rememberSnapshot(this._calendar(room));
         }
-        this._journalClear(room.id, f.journalT);
+        if (!f.partial) this._journalClear(room.id, f.journalT);
         if (f.replay) this._deliver(room);   // the app is showing the pre-replay copy; give it the result
+        // The rest of a replay sent in parts: rebuilt from the journal against the next snapshot (_onSnapshot).
+        if (f.replay && f.partial) { this._send(room, { t: 'hello' }); return; }
         this._push(room);                    // anything edited while this was in flight
     }
 

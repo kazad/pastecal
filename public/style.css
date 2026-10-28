@@ -1469,6 +1469,9 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 .pc-set-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: var(--pc-space-3) }
 .pc-set-copy-hint { font-size: var(--pc-fs-sm); color: var(--pc-text-2); min-width: 0 }
 .pc-set-copy .pc-btn { flex: none }
+.pc-set-backup { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: var(--pc-space-3); font-size: var(--pc-fs-sm) }
+.pc-set-copy .pc-set-backup { margin-top: 0; flex: none }
+.pc-set-note { margin: var(--pc-space-2) 0 0 }
 .pc-view-footer .pc-link { margin-left: 8px; font-weight: var(--pc-fw-semibold); white-space: nowrap }
 
 /* While the quick box is open on an empty slot: that slot shows as a "New event" block (app.showDraftBlock),
