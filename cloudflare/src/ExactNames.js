@@ -16,7 +16,7 @@
  *                 spelling (case, surrounding spaces). Existing variants keep working; no new one is made.
  *   handleRoomsAdmin     /api/admin/rooms/* (Bearer IMPORT_SECRET, checked by index.js): the registry of exact ids.
  *     POST /api/admin/rooms/backfill {ids: [...], apply?}   dry run by default: for each id, whether it is registered
- *          and whether its calendar exists; apply registers the ones that exist. At most 500 ids a request.
+ *          and whether its calendar exists; apply registers the ones that exist. At most 300 ids a request.
  *          Script: scripts/backfill-rooms.mjs.
  *     GET  /api/admin/rooms/stats                            {rooms, editable, total}
  *     POST /api/admin/rooms/dev-forget {id}                  tests only (ACCOUNTS_DEV_MODE)
@@ -59,7 +59,7 @@ export async function nameTakenByVariant(env, dir, id) {
     return null;
 }
 
-const BACKFILL_MAX = 500;
+const BACKFILL_MAX = 300;   // one HEAD (a Durable Object subrequest) per new id: well under the per-request limit
 const CONCURRENCY = 25;
 
 export async function handleRoomsAdmin(request, env, dir, path) {

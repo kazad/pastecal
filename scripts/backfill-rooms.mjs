@@ -10,7 +10,7 @@
  *   node scripts/backfill-rooms.mjs --base https://pastecal.com ids.json --apply    # register them
  *
  * ids.json: a JSON array of calendar ids, exactly as stored ("Foo", "foo" and "2026_2027cvpilot " are three ids: never
- * trimmed or lowercased), or a JSON object whose KEYS are the ids (a Firebase export's calendars). 500 ids a request.
+ * trimmed or lowercased), or a JSON object whose KEYS are the ids (a Firebase export's calendars). 300 ids a request.
  * Registering is idempotent; only ids whose calendar exists are added.
  *
  * --base is required (no default), so production is never the accidental target. The admin secret comes from
@@ -38,7 +38,7 @@ if (!secret) {
 }
 const headers = { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' };
 
-const BATCH = 500;
+const BATCH = 300;
 const total = { asked: 0, known: 0, toAdd: 0, added: 0 };
 const missing = [], invalid = [], failed = [];
 for (let i = 0; i < ids.length; i += BATCH) {
