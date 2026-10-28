@@ -1495,8 +1495,8 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 .pc-imp-lists { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 calc(-1 * var(--pc-space-2)); padding: 0 var(--pc-space-2) }
 .pc-imp-lists > section + section { margin-top: var(--pc-space-4) }
 .pc-imp-head { display: flex; align-items: baseline; gap: var(--pc-space-2); margin: 0 0 var(--pc-space-2); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
-.pc-imp-show { padding: 0; border: 0; background: none; font: var(--pc-fw-regular) var(--pc-fs-sm)/var(--pc-lh-tight) var(--pc-font); color: var(--pc-text-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
-.pc-imp-show:hover { color: var(--pc-text) }
+.pc-link.pc-imp-show { padding: 0; border: 0; background: none; font: var(--pc-fw-regular) var(--pc-fs-sm)/var(--pc-lh-tight) var(--pc-font); color: var(--pc-text-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
+.pc-link.pc-imp-show:hover { color: var(--pc-text) }
 .pc-imp-show:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px; border-radius: var(--pc-radius-xs) }
 .pc-imp-list { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); column-gap: var(--pc-space-4); row-gap: var(--pc-space-2);
   margin: 0; padding: 0; list-style: none; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight) }

@@ -1877,8 +1877,8 @@
                         </section>
                         <section v-if="icsPlan.preview.here.total" data-testid="ics-here">
                             <div v-if="icsPlan.commands.length" class="pc-imp-head">Already in this calendar · {{ icsPlan.preview.here.total }}
-                                <button type="button" class="pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide' : 'Show' }}</button></div>
-                            <button v-else type="button" class="pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide them' : 'Show them' }}</button>
+                                <button type="button" class="pc-link pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide' : 'Show' }}</button></div>
+                            <button v-else type="button" class="pc-link pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide them' : 'Show them' }}</button>
                             <template v-if="icsHereOpen">
                                 <ul class="pc-imp-list">
                                     <li v-for="(r, i) in icsPlan.preview.here.rows" :key="i" class="pc-imp-row" data-testid="ics-row">
@@ -1890,7 +1890,7 @@
                         </section>
                         <section v-if="icsPlan.preview.skipped.total" data-testid="ics-skipped">
                             <div class="pc-imp-head">Not imported · {{ icsPlan.preview.skipped.total }}
-                                <button type="button" class="pc-imp-show" :aria-expanded="icsSkippedOpen ? 'true' : 'false'" @click="icsSkippedOpen = !icsSkippedOpen" data-testid="ics-skipped-toggle">{{ icsSkippedOpen ? 'Hide' : 'Show' }}</button></div>
+                                <button type="button" class="pc-link pc-imp-show" :aria-expanded="icsSkippedOpen ? 'true' : 'false'" @click="icsSkippedOpen = !icsSkippedOpen" data-testid="ics-skipped-toggle">{{ icsSkippedOpen ? 'Hide' : 'Show' }}</button></div>
                             <template v-if="icsSkippedOpen">
                                 <ul class="pc-imp-list">
                                     <li v-for="(r, i) in icsPlan.preview.skipped.rows" :key="i" class="pc-imp-row pc-imp-row--plain" data-testid="ics-row">
