@@ -4586,6 +4586,8 @@ const CalendarVueApp = {
                 if (!(err instanceof ICSImport.ImportError)) console.warn('[ics import]', err);
                 return;
             }
+            // A draft's first save is the whole calendar in one request, which the server caps at 1 MB (saved, it goes in parts).
+            if (!this.isExisting && plan.bytes > 900 * 1024) { this.icsNote = 'That file is big: save this calendar first, then import it.'; return; }
             this.icsPlan = { ...plan, summary: ICSImport.summary(plan) };
         },
 

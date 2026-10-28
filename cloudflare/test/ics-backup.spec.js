@@ -33,6 +33,8 @@ const FILE = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Google Inc//Google Ca
     'BEGIN:VEVENT', 'UID:def456@google.com', 'RECURRENCE-ID;TZID=America/Los_Angeles:20261019T160000', 'SUMMARY:Swim (late)',
     'DTSTART;TZID=America/Los_Angeles:20261019T180000', 'DTEND;TZID=America/Los_Angeles:20261019T190000', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:tokyo@google.com', 'SUMMARY:Call grandma', 'DTSTART;TZID=Asia/Tokyo:20261110T090000', 'DTEND;TZID=Asia/Tokyo:20261110T093000', 'END:VEVENT',
+    'BEGIN:VEVENT', 'UID:board@google.com', 'SUMMARY:Board', 'DTSTART;TZID=America/Los_Angeles:20260928T190000',
+    'DTEND;TZID=America/Los_Angeles:20260928T200000', 'RRULE:FREQ=MONTHLY;BYDAY=-1MO', 'END:VEVENT',
     'BEGIN:VEVENT', 'UID:holiday@google.com', 'SUMMARY:Thanksgiving', 'DTSTART;VALUE=DATE:20261126', 'DTEND;VALUE=DATE:20261127', 'END:VEVENT',
     'END:VCALENDAR'].join('\r\n');
 const FIXTURE = path.join(OUT, 'family.ics');
@@ -66,14 +68,14 @@ const soon = (fn) => expect.poll(fn, { timeout: 10_000, intervals: [100] });
 const titles = async (id) => (await stored(id)).map((e) => e.title).sort();
 
 /** The calendar's edit link, classic (default) or ?cal=native, in Los Angeles; Settings open. */
-async function open(browser, id, { native = false, colorScheme = 'light' } = {}) {
+async function open(browser, id, { native = false, colorScheme = 'light', query = '' } = {}) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: 'America/Los_Angeles', locale: 'en-US', colorScheme, acceptDownloads: true });
     await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
     await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto(`/${id}?backend=cf${native ? '&cal=native' : ''}`);
+    await page.goto(`/${id}?backend=cf${native ? '&cal=native' : ''}${query}`);
     await page.waitForFunction(() => { const p = document.querySelector('#app')?._vnode?.component?.proxy; return p && p.isLoading === false; }, null, { timeout: 30_000 });
     await expect(page.locator(native ? '.nc.nc-editable' : '.e-schedule .e-work-cells').first()).toBeVisible({ timeout: 20_000 });
     await page.getByTestId('settings-button-desktop').click();
@@ -82,21 +84,42 @@ async function open(browser, id, { native = false, colorScheme = 'light' } = {})
 }
 const pick = (page, file) => page.getByTestId('ics-file').setInputFiles(file);
 
+/** What the month view draws on each October day: { 5: ['Swim'], ... } (the browser is in Los Angeles). */
+async function drawnInOctober(page, native) {
+    return page.evaluate((native) => {
+        const out = {};
+        const put = (d, t) => { if (d.getMonth() === 9) (out[d.getDate()] = out[d.getDate()] || []).push(t); };
+        if (native) {
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            for (const b of document.querySelectorAll('.nc .nc-bar')) {
+                const m = new RegExp(`(${months.join('|')}) (\\d+)`).exec(b.getAttribute('aria-label') || '');
+                if (m) put(new Date(2026, months.indexOf(m[1]), +m[2]), b.getAttribute('title'));
+            }
+        } else {
+            for (const td of document.querySelectorAll('.e-month-view td.e-work-cells')) {
+                for (const a of td.querySelectorAll('.e-appointment .e-subject')) put(new Date(+td.dataset.date), a.textContent.trim());
+            }
+        }
+        for (const k of Object.keys(out)) out[k].sort();
+        return out;
+    }, native);
+}
+
 for (const native of [false, true]) {
     const where = native ? 'native' : 'classic';
     test(`${where}: import a calendar file; Undo takes it all back; the same file again adds nothing`, async ({ browser }) => {
         const id = await seed([row('trip', 'Trip', '2026-11-01T00:00:00-07:00', '2026-11-04T00:00:00-08:00', { isAllDay: true, type: 6 })]);
-        const { ctx, page, errors } = await open(browser, id, { native });
+        const { ctx, page, errors } = await open(browser, id, { native, query: '&view=month&date=2026-10-01' });
 
         await pick(page, FIXTURE);
-        await expect(page.getByTestId('ics-plan')).toContainText('Add 5 events.');
+        await expect(page.getByTestId('ics-plan')).toContainText('Add 6 events.');
         await expect.poll(async () => (await stored(id)).length, { timeout: 1000 }).toBe(1);   // nothing saved before Import
         if (!native) {
             await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-plan-light.png') });
         }
         await page.getByTestId('ics-confirm').click();
-        await expect(page.getByTestId('ics-note')).toContainText('Added 5 events.');
-        await soon(() => titles(id)).toEqual(['Call grandma', 'Dentist', 'Swim', 'Swim (late)', 'Thanksgiving', 'Trip']);
+        await expect(page.getByTestId('ics-note')).toContainText('Added 6 events.');
+        await soon(() => titles(id)).toEqual(['Board', 'Call grandma', 'Dentist', 'Swim', 'Swim (late)', 'Thanksgiving', 'Trip']);
         let events = await stored(id);
         const swim = events.find((e) => e.title === 'Swim'), late = events.find((e) => e.title === 'Swim (late)');
         expect(late.recurrenceID).toBe(swim.id);
@@ -104,6 +127,9 @@ for (const native of [false, true]) {
         expect(events.find((e) => e.title === 'Call grandma').tz).toBe('Asia/Tokyo');
         expect(events.find((e) => e.title === 'Dentist').description).toBe('Main St, Suite 4');
         expect(events.find((e) => e.title === 'Thanksgiving')).toMatchObject({ isAllDay: true, start: '2026-11-26T08:00:00.000Z', end: '2026-11-27T08:00:00.000Z' });
+        // Drawn, not only stored: Swim on the Mondays but the skipped Oct 12, the late one on Oct 19, Board on the last Monday.
+        await expect.poll(() => drawnInOctober(page, native)).toMatchObject({ 5: ['Swim'], 19: ['Swim (late)'], 26: ['Board', 'Swim'] });
+        expect((await drawnInOctober(page, native))[12]).toBeUndefined();
         if (!native) await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-result-light.png') });
 
         // Undo: the whole import, in one step.
@@ -113,10 +139,10 @@ for (const native of [false, true]) {
         // Again, then the same file once more: nothing to add.
         await pick(page, FIXTURE);
         await page.getByTestId('ics-confirm').click();
-        await soon(async () => (await stored(id)).length).toBe(6);
+        await soon(async () => (await stored(id)).length).toBe(7);
         events = await stored(id);
         await pick(page, FIXTURE);
-        await expect(page.getByTestId('ics-plan')).toContainText('All 5 already here.');
+        await expect(page.getByTestId('ics-plan')).toContainText('All 6 already here.');
         await expect(page.getByTestId('ics-confirm')).toHaveCount(0);
         await page.getByTestId('ics-cancel').click();
         await expect(page.getByTestId('ics-plan')).toHaveCount(0);
@@ -166,8 +192,31 @@ test('a file that is not a calendar says so on the page; dark mode', async ({ br
     await expect(page.getByTestId('ics-plan')).toHaveCount(0);
     await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-error-dark.png') });
     await pick(page, FIXTURE);
-    await expect(page.getByTestId('ics-plan')).toContainText('Add 5 events.');
+    await expect(page.getByTestId('ics-plan')).toContainText('Add 6 events.');
     await expect(page.getByTestId('ics-note')).toHaveCount(0);
     await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-plan-dark.png') });
+    await ctx.close();
+});
+
+test('a big backup (2,500 events, over one save message) is saved in full', async ({ browser }) => {
+    test.setTimeout(120_000);
+    const big = Array.from({ length: 2500 }, (_, i) => row(`big-${i}`, `Shift ${i}`, Date.UTC(2026, 9, 1 + (i % 28), 15 + (i % 5)), Date.UTC(2026, 9, 1 + (i % 28), 16 + (i % 5)),
+        { description: `Notes for shift ${i}: `.padEnd(300, 'x'), type: 1 + (i % 8) }));
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0'];
+    for (const e of big) lines.push('BEGIN:VEVENT', `UID:${e.id}`, `DTSTART:${e.start.replace(/[-:]|\.\d+/g, '')}`, `DTEND:${e.end.replace(/[-:]|\.\d+/g, '')}`,
+        `SUMMARY:${e.title}`, `DESCRIPTION:${e.description}`, `X-PASTECAL-TYPE:${e.type}`, 'END:VEVENT');
+    lines.push('END:VCALENDAR');
+    const file = path.join(OUT, 'big.ics');
+    fs.writeFileSync(file, lines.join('\r\n'));
+    const id = await seed([]);
+    const { ctx, page, errors } = await open(browser, id);
+    await pick(page, file);
+    await expect(page.getByTestId('ics-plan')).toContainText('Add 2500 events.');
+    await page.getByTestId('ics-confirm').click();
+    await expect.poll(async () => (await stored(id)).length, { timeout: 30_000, intervals: [500] }).toBe(2500);
+    const back = await stored(id);
+    expect(back.find((e) => e.title === 'Shift 2499')).toMatchObject({ description: big[2499].description, type: big[2499].type, start: big[2499].start });
+    await expect(page.locator('.pc-toast')).toHaveCount(0);
+    expect(errors).toEqual([]);
     await ctx.close();
 });

@@ -33,7 +33,8 @@
 
     const MAX_BYTES = 2 * 1024 * 1024;
     const MAX_EVENTS = 5000;          // the server's own limit for a whole calendar (CalendarRoom LIMITS.maxEvents)
-    const MAX_TITLE = 2000, MAX_TEXT = 20000;   // CalendarRoom LIMITS.maxTitle / maxField
+    const MAX_TITLE = 2000, MAX_TEXT = 20000, MAX_ID = 200;   // CalendarRoom LIMITS.maxTitle / maxField / maxId
+    const MAX_CALENDAR = 2 * 1024 * 1024;   // CalendarRoom LIMITS.maxCalendar: the whole calendar's JSON
     const DAY_MS = 86400000;
 
     class ImportError extends Error {
@@ -210,6 +211,15 @@
     }
 
     /**
+     * "The last Monday" as the editor writes it (BYDAY=MO;BYSETPOS=-1), which both calendars expand, from the form other
+     * apps write (BYDAY=-1MO; ICSService.plainPositions writes the feed that way). One weekday with a position only.
+     */
+    function editorPositions(rule) {
+        if (!/(^|;)FREQ=(MONTHLY|YEARLY)(;|$)/i.test(rule) || /(^|;)BYSETPOS=/i.test(rule)) return rule;
+        return rule.replace(/(^|;)BYDAY=([+-]?[1-5])(MO|TU|WE|TH|FR|SA|SU)(?=;|$)/i, (all, sep, n, d) => `${sep}BYDAY=${d.toUpperCase()};BYSETPOS=${+n}`);
+    }
+
+    /**
      * A standard VEVENT as a pastecal row (no id yet) plus how to find it again: { row, uid, rid (the RECURRENCE-ID's
      * stamp, for an override), cancelled, why (unreadable) }. ctx: { calZone, localZone, floatZone }.
      */
@@ -254,6 +264,7 @@
         if (rr) {
             rule = rr.value.trim().replace(/^RRULE:/i, '');
             if (start.utc) rule = utcDaysTo(rule, startMs, zone);
+            rule = editorPositions(rule);
             if (EventStore.unsafeRecurrence(rule)) return { uid, why: 'repeats too often' };
         }
         // A skipped date, or an override's original start, as the editor stores it (ScheduleAdapter EditOccurrence):
@@ -302,6 +313,7 @@
             const row = EventStore.normalize(raw);
             if (row.id === null || row.id === undefined || row.id === '') return null;
             if (typeof row.id !== 'string' && typeof row.id !== 'number') return null;
+            if (String(row.id).length > MAX_ID || String(row.recurrenceID ?? '').length > MAX_ID) return null;
             if (!('tz' in raw)) delete row.tz;
             row.title = row.title.slice(0, MAX_TITLE);
             row.description = row.description.slice(0, MAX_TEXT);
@@ -494,13 +506,16 @@
         }
 
         if (rows.length + adds.size > MAX_EVENTS) throw new ImportError('too_many', `That would put more than ${MAX_EVENTS} events in this calendar.`);
+        // What the calendar's events would weigh (the server refuses a calendar over 2 MB); bytes: for a draft's first save.
+        const bytes = JSON.stringify(rows).length + JSON.stringify([...adds.values()]).length;
+        if (bytes > MAX_CALENDAR) throw new ImportError('too_big', 'That would make this calendar larger than 2 MB.');
         const commands = [];
         for (const row of adds.values()) commands.push({ type: 'add', event: row });
         for (const [key, u] of updates) {
             const changes = EventStore.diff(EventStore.normalize(u.target), EventStore.normalize(u.row));
             if (Object.keys(changes).length) commands.push({ type: 'update', key, changes });
         }
-        return { commands, add: adds.size, update: commands.length - adds.size, skip, unreadable, name: file.name };
+        return { commands, add: adds.size, update: commands.length - adds.size, skip, unreadable, name: file.name, bytes };
     }
 
     /** "Add 12 events, update 2, skip 30 already here." The plan in one line. */
