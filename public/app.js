@@ -352,7 +352,9 @@ const CalendarVueApp = {
             showShare: false,
             showSearch: false,
             showSettings: false,
-            undoEntries: [],   // changes this calendar can undo (read from /history)
+            showYou: false,            // the You tab: your name (editors) and this device's preferences
+            myName: typeof YourName !== 'undefined' ? YourName.get() : '',    // "Edited by <name>" in Activity; this browser only (services/YourName.js)
+            undoEntries: [],  // changes this calendar can undo (read from /history)
             undoLoadFailed: false,   // the last read of /history failed: Activity says so instead of "Nothing has changed"
             // Offline (offlineNotice): the browser says so, or this tab's connection to the calendar has been down 2 s.
             browserOffline: typeof navigator !== 'undefined' && navigator.onLine === false,
@@ -532,6 +534,7 @@ const CalendarVueApp = {
             if (this.showNotes) return 'notes';
             if (this.showShare) return 'share';
             if (this.showSettings) return 'settings';
+            if (this.showYou) return 'you';
             if (this.showPlus) return 'plus';
             if (this.showSearch) return 'search';
             if (this.showHelp) return 'help';
@@ -545,7 +548,8 @@ const CalendarVueApp = {
         // time under a plain title. Always the same five in the same order, so people learn
         // where things are: on a draft, Share, Activity and Stats say what they will hold once
         // it is saved. Plus: what an upgrade adds, or the owner's plan, editors and billing.
-        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling.
+        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling. You (your name and this
+        // device's preferences) is a small circle just before it: your initials once you give a name.
         sideTabs() {
             if (this.isReadOnly) return [];
             return [
@@ -554,6 +558,7 @@ const CalendarVueApp = {
                 { id: 'changes', label: 'Activity' },
                 { id: 'stats', label: 'Stats' },
                 { id: 'plus', label: 'Plus' },
+                { id: 'you', label: 'You', you: true },
                 { id: 'settings', label: 'Settings', icon: 'settings' },
             ];
         },
@@ -566,7 +571,11 @@ const CalendarVueApp = {
         },
         // Shown in the bar when there is no tab row, for the views without a heading of their own.
         sideTitle() {
-            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', you: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
+        },
+        /** The You tab's circle: "SL" for Sam Lee, '' (a person icon) before a name is given. */
+        myInitials() {
+            return typeof YourName !== 'undefined' ? YourName.initials(this.myName) : '';
         },
         /** Why this tab can't edit a locked or paused calendar (toasts). */
         lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
@@ -1361,6 +1370,7 @@ const CalendarVueApp = {
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
             if (this.showClaimDialog) { this.showClaimDialog = false; return; }
             if (this.showSettings) { this.showSettings = false; return; }
+            if (this.showYou) { this.showYou = false; return; }
             if (this.showSearch) { this.showSearch = false; return; }
             if (this.showShare) { this.showShare = false; return; }
             if (this.showHelp) { this.showHelp = false; }
@@ -5116,6 +5126,7 @@ const CalendarVueApp = {
             if (id === 'notes') this.toggleNotes();
             else if (id === 'share') this.toggleShare();
             else if (id === 'settings') this.toggleSettings();
+            else if (id === 'you') this.toggleYou();
             else if (id === 'changes') this.openRecentChanges();
             else if (id === 'stats') this.openStats();
             else if (id === 'plus') this.openPlusTab('share');
@@ -5355,6 +5366,7 @@ const CalendarVueApp = {
             }
 
             // Activity, Stats and History share the panel, so opening anything closes them too.
+            this.showYou = false;
             this.showRecentChanges = false;
             this.showProStats = false;
             this.showProHistory = false;
@@ -5457,6 +5469,8 @@ const CalendarVueApp = {
         },
 
         toggleSettings() {
+            // Settings is this calendar's; someone who can't change it (a view link) gets their own preferences.
+            if (!this.canEdit) { this.toggleYou(); return; }
             if (this.showSettings) {
                 this.showSettings = false;
             } else {
@@ -5590,6 +5604,8 @@ const CalendarVueApp = {
                         // Which browser wrote it (null on entries from before writers
                         // were recorded). Collapsing and Cmd+Z both go by it.
                         writer: r.writer || null,
+                        // The name its writer gave in the You tab ("Edited by Sam"); none, nothing is said.
+                        name: typeof r.name === 'string' && r.name ? r.name : null,
                         keys,
                         lost,
                         edited,
@@ -6323,13 +6339,30 @@ const CalendarVueApp = {
             }
         },
 
-        /** e: the change event of a Settings field (a person's change, counted as settings:<field>); none for the
+        /** The You tab, opened from its circle (or, for a viewer, the header's gear). */
+        toggleYou() {
+            if (this.showYou) { this.showYou = false; return; }
+            this.closeAllPanels();
+            this.showYou = true;
+        },
+        /** Your name (the You tab), on change: kept in this browser and sent with every save from now on. */
+        saveMyName(e) {
+            const typed = e && e.target ? e.target.value : this.myName;
+            const name = typeof YourName !== 'undefined' ? YourName.set(typed) : '';
+            this.myName = name;
+            if (e && e.target) e.target.value = name;
+            track(a => a.featureUsed('you:name'));
+        },
+
+        /** e: the change event of a Settings field (a person's change, counted as settings:<field>, or you:<field> in the
+         *  You tab); none for the
          *  first visit's automatic import, which used to count every new visitor as a Settings use. */
         saveGlobalSettings(e) {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
                 const field = e && e.target && String(e.target.id || e.target.getAttribute('aria-label') || '').replace(/^set-/, '').replace(/\W+/g, '_').toLowerCase();
-                if (field) track(a => a.featureUsed(`settings:${field}`));
+                const tab = e && e.target && e.target.closest && e.target.closest('[data-testid="you"]') ? 'you' : 'settings';
+                if (field) track(a => a.featureUsed(`${tab}:${field}`));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);

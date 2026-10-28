@@ -999,6 +999,13 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-tabs { flex: 1 }
 .pc-side-tab--icon { display: grid; place-items: center; width: 40px; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
+/* You: a small circle just before the gear, your initials once you give a name (else a person outline). */
+.pc-side-tab--you { display: grid; place-items: center; width: 40px; margin-left: auto }
+.pc-side-tab--you + .pc-side-tab--icon { margin-left: 0 }
+.pc-you-dot { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%;
+  font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); letter-spacing: 0; line-height: 1 }
+.pc-you-dot svg { width: 15px; height: 15px }
+.pc-you-name + .pc-set-pane { padding-top: 14px; border-top: 1px solid var(--pc-line) }
 .pc-side-title { flex: 1; min-width: 0; margin: 0; padding-left: 12px; align-self: center; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold); color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-side-close { align-self: center }   /* + .pc-btn--ghost.pc-btn--icon */
 .pc-side-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 20px 22px }
@@ -1022,7 +1029,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* Docked between 1100 and 1279px the column is narrower: tighter tabs, still no scrolling. */
 @media (min-width: 1100px) and (max-width: 1279px) {
   .pc-side-tabs .pc-tab { padding: 0 5px; font-size: var(--pc-fs-sm) }
-  .pc-side-tab--icon { width: 34px }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 34px }
   .pc-side-close { width: 30px }
 }
 @media (max-width: 1099px) {
@@ -1038,14 +1045,15 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
   .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: var(--pc-radius-pill); background: var(--pc-line) }
   .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
-  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 6px; font-size: var(--pc-fs-lg) }
+  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 4px; font-size: var(--pc-fs-lg) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 34px }   /* seven tabs and the close button fit a 390px phone */
   .pc-side-body { padding: 16px 16px 24px }
   .pc-side-notes-input { font-size: var(--pc-fs-lg) }   /* iOS zooms into smaller fields */
 }
 /* The narrowest phones (360px and under): one size smaller, so the six tabs still fit without scrolling. */
 @media (max-width: 380px) {
-  .pc-side-tabs .pc-tab { padding: 0 5px; font-size: var(--pc-fs-md) }
-  .pc-side-tab--icon { width: 34px }
+  .pc-side-tabs .pc-tab { padding: 0 4px; font-size: var(--pc-fs-md) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 32px }
 }
 @media (prefers-reduced-motion: no-preference) {
   @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease) } }

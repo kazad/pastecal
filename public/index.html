@@ -283,6 +283,8 @@
     <script src="/services/EventStore.js?v=1793217747"></script>
     <!-- Settings' Import .ics: a calendar file into events, no duplicates (after EventZone and EventStore, which it uses). -->
     <script src="/services/ICSImport.js?v=1793217747"></script>
+    <!-- The You tab's name, sent with saves (Activity: "Edited by <name>"); the server cleans it the same way. -->
+    <script src="/services/YourName.js?v=1793217747"></script>
     <!-- Picks the backend: replaces CalendarDataService with the Cloudflare one when ?backend=cf / new.pastecal.com. Flag off = no effect. -->
     <script src="/services/EditorKeys.js?v=1793217747"></script>
     <script src="/services/CloudCalendarService.js?v=1793217747"></script>
@@ -614,7 +616,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></svg>
                         <span>{{ lastEditLabel }}</span>
                     </button>
-                    <button v-on:click="viaPanel('header'); toggleSettings()" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn pc-hdr-icon" title="Settings">
+                    <button v-on:click="viaPanel('header'); toggleSettings()" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings || (showYou && !canEdit) }" class="pc-hdr-btn pc-hdr-icon" title="Settings">
                         <icon name="settings"></icon>
                     </button>
                 </div>
@@ -922,9 +924,9 @@
                 <div class="pc-side-bar">
                     <div v-if="sideShowsTabs" class="pc-tabs pc-side-tabs" role="tablist" aria-label="Calendar panel">
                         <button v-for="t in sideTabs" :key="t.id" type="button" role="tab" class="pc-tab pc-side-tab"
-                            :class="{ 'pc-side-tab--icon': t.icon }" :aria-label="t.icon ? t.label : null" :title="t.icon ? t.label : null"
+                            :class="{ 'pc-side-tab--icon': t.icon, 'pc-side-tab--you': t.you }" :aria-label="t.icon || t.you ? t.label : null" :title="t.icon || t.you ? (t.you && myName ? myName : t.label) : null"
                             :aria-selected="sideSelectedTab === t.id ? 'true' : 'false'" :data-testid="'side-tab-' + t.id"
-                            @click="viaPanel('tabs'); openSideTab(t.id)"><icon v-if="t.icon" :name="t.icon"></icon><template v-else>{{ t.label }}</template></button>
+                            @click="viaPanel('tabs'); openSideTab(t.id)"><icon v-if="t.icon" :name="t.icon"></icon><span v-else-if="t.you" class="pc-you-dot" aria-hidden="true"><template v-if="myInitials">{{ myInitials }}</template><icon v-else name="person"></icon></span><template v-else>{{ t.label }}</template></button>
                     </div>
                     <h2 v-else class="pc-side-title" data-testid="side-title">{{ sideTitle }}</h2>
                     <button id="closeAllPanels" type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-side-close" data-testid="side-close"
@@ -1262,10 +1264,8 @@
                             @names="onProNames($event)" @editor-link="editorLinkStored = $event"></pro-panel>
                     </div>
 
-                    <!-- Settings: two sub-tabs so neither scrolls. "This calendar" is what everyone with
-                         the link gets; "Just me" stays on this device, for every calendar. Same bindings
-                         as before; only the layout changed. Viewers can't change the calendar, so they
-                         get only their own settings. -->
+                    <!-- Settings: this calendar, what everyone with the link gets. Your own preferences are in the You tab
+                         (below). Backup is last. Viewers can't change the calendar: their gear opens You. -->
                     <div v-if="showSettings" class="pc-set" data-testid="settings" v-cloak>
 
 
@@ -1360,9 +1360,18 @@
                                 <button v-if="icsUndo" type="button" class="pc-link" @click="icsUndoImport" data-testid="ics-undo">Undo</button></p>
                         </div>
 
-                        <!-- Just me: this device, any calendar -->
+                    </div>
+
+                    <!-- You: your name (sent with your saves, so Activity says who) and this device's preferences, for every
+                         calendar. Viewers don't save, so they get only the preferences (and open them from the gear). -->
+                    <div v-if="showYou" class="pc-set" data-testid="you" v-cloak>
+                        <div v-if="canEdit" class="pc-set-field pc-you-name" data-testid="you-name">
+                            <label class="pc-set-label" for="set-my-name">Your name (optional)</label>
+                            <input id="set-my-name" type="text" class="pc-field pc-field--sm" maxlength="40" autocomplete="name" spellcheck="false"
+                                :value="myName" @change="saveMyName" @keydown.enter.prevent="$event.target.blur()">
+                            <p class="pc-set-copy-hint pc-set-note">Shown to people who can edit this calendar.</p>
+                        </div>
                         <div class="pc-set-pane" data-testid="settings-me">
-                            <h3 class="pc-set-h">Only me <span>this device</span></h3>
                             <div class="pc-set-grid">
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-first-day">First day of week</label>
@@ -1470,7 +1479,7 @@
                                     <template v-if="entry.lost.length === 1">{{ entry.lost[0].when }} · </template>
                                     <template v-else-if="!entry.lost.length && (entry.edited || []).length === 1">{{ entry.edited[0].change }} · </template>
                                     <template v-else-if="!entry.lost.length && !(entry.edited || []).length && entry.added && entry.added.length === 1">{{ entry.added[0].when }} · </template>
-                                    <span :title="entry.whenExact">{{ entry.atTime }}</span>
+                                    <span :title="entry.whenExact">{{ entry.atTime }}</span><span v-if="entry.name" class="pc-act-by" data-testid="activity-by"> · Edited by {{ entry.name }}</span>
                                 </div>
                                 <!-- Several events in one change: each on its own short line. -->
                                 <ul v-if="entry.lost.length > 1" class="pc-act-list">
