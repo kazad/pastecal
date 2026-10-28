@@ -3898,7 +3898,10 @@ const CalendarVueApp = {
                     track(a => a.featureUsed(`copy_made_${d.from}`, d.events ? 'events' : 'style'));
                     this.recentManager.add(name, copy.title, true);
                     this.recentCalendars = this.recentManager.getAll();
-                    window.location.href = CalendarPath.of(name);
+                    // In the same calendar it was made from (?cal=native stays native).
+                    let keep = '';
+                    try { const q = new URLSearchParams(window.location.search); const k = new URLSearchParams(); for (const p of ['cal', 'backend']) if (q.has(p)) k.set(p, q.get(p)); keep = k.toString() ? `?${k}` : ''; } catch (e) { /* none */ }
+                    window.location.href = CalendarPath.of(name) + keep;
                 }, { onError: ({ status, offline } = {}) => {
                     if (this.copyDialog !== d) return;
                     d.busy = false;
