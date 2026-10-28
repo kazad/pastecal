@@ -59,7 +59,8 @@ record() {
         FAIL) NFAIL=$((NFAIL + 1)) ;;
         NOT-DEPLOYED) NND=$((NND + 1)) ;;
     esac
-    printf '%s\t%s\t%s\n' "$res" "$2" "$3" >> "$ROWS"
+    # One row per check: a detail quoting a response body can hold line breaks and tabs (the report would split it).
+    printf '%s\t%s\t%s\n' "$res" "$2" "$(printf '%s' "$3" | tr '\t\r\n' '   ')" >> "$ROWS"
 }
 
 # req METHOD PATH [extra curl args...]  -> sets CODE, CTYPE; body in $TMP/body
@@ -194,7 +195,7 @@ echo "pastecal Pro smoke test: $BASE  ($(date -u '+%Y-%m-%d %H:%M UTC'))"
 echo
 python3 - "$ROWS" <<'PY'
 import sys
-rows = [l.rstrip("\n").split("\t", 2) for l in open(sys.argv[1]) if l.strip()]
+rows = [(l.rstrip("\n").split("\t", 2) + ["", ""])[:3] for l in open(sys.argv[1]) if l.strip()]
 w1 = max([6] + [len(r[0]) for r in rows]); w2 = max([5] + [len(r[1]) for r in rows])
 print(f"{'RESULT':<{w1}}  {'CHECK':<{w2}}  DETAIL")
 print(f"{'-'*w1}  {'-'*w2}  {'-'*6}")
