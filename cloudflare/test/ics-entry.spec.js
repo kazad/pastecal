@@ -139,7 +139,9 @@ async function plan(t, how, file) {
   else if (how === 'quickadd') await viaQuickAdd(t.page, file);
   else await drop(t.page, t.native, file);
   const where = how === 'settings' ? t.page.getByTestId('settings') : t.page.getByTestId('ics-dialog');
-  await expect(where.getByTestId('ics-plan')).toBeVisible();
+  // Reading and planning the file is quick, but a classic calendar on a fully loaded test box (24 browsers) has taken over
+  // 5 s to show it (passes 16/16 at 4 workers): wait longer here rather than call it flaky.
+  await expect(where.getByTestId('ics-plan')).toBeVisible({ timeout: 15_000 });
   const line = how === 'settings' ? where.getByTestId('ics-plan').locator('.pc-set-copy-hint') : where.getByTestId('ics-plan');
   return (await line.textContent()).trim();
 }
