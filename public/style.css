@@ -997,10 +997,10 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-bar { flex: none; display: flex; align-items: stretch; gap: 4px; min-height: 48px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--pc-line); background: var(--pc-soft) }
 /* The tabs (.pc-tabs .pc-tab): five labeled tabs (Notes, Share, Activity, Stats, Plus) fit the column; Settings is a gear at the end. */
 .pc-side-tabs { flex: 1 }
-.pc-side-tab--icon { display: grid; place-items: center; width: 36px; margin-left: auto }
+.pc-side-tab--icon { display: grid; place-items: center; width: 34px; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
 /* You: a small circle just before the gear, your initials once you give a name (else a person outline). */
-.pc-side-tab--you { display: grid; place-items: center; width: 36px; margin-left: auto }
+.pc-side-tab--you { display: grid; place-items: center; width: 34px; margin-left: auto }
 .pc-side-tab--you + .pc-side-tab--icon { margin-left: 0 }
 .pc-you-dot { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%;
   font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); letter-spacing: 0; line-height: 1 }
@@ -1029,7 +1029,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* Docked between 1100 and 1279px the column is narrower: tighter tabs, still no scrolling. */
 @media (min-width: 1100px) and (max-width: 1279px) {
   .pc-side-tabs { gap: 0 }
-  .pc-side-tabs .pc-tab { padding: 0 4px; font-size: var(--pc-fs-sm) }
+  .pc-side-tabs .pc-tab { padding: 0 3px; font-size: var(--pc-fs-sm) }
   .pc-side-tab--icon, .pc-side-tab--you { width: 30px }
   .pc-side-close { width: 30px }
 }
