@@ -6706,6 +6706,8 @@ const CalendarVueApp = {
             const out = (this.lock.locked || this.lock.paused) && !this.lock.canEdit;
             if (out !== this.lockedOut) {
                 this.lockedOut = out;
+                // An edit link that opens read-only is the "my link turned view-only" report (Oct 27 2026): count it.
+                if (out && !this.viewRoute) track(a => a.track('edit_link_readonly', { reason: this.lock.paused ? 'paused' : 'locked' }));
                 this.setIsReadOnly(out || this.viewRoute);
                 if (out) this.editTitle = false;
                 try {
