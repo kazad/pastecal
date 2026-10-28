@@ -298,3 +298,19 @@ test(`edit a whole series after editing one occurrence, "${answer}" to resetting
     }
 });
 }
+
+// Oct 28 2026: the same .ics imported in two browsers at once. Its rows' ids come from the file's UIDs, so both send
+// the same new rows; the second save was refused whole ("restore: already there") and its page rolled back with a
+// "Recovered 0 events" toast. The same row, every field equal, is now nothing to do; a different row still refuses.
+test('restoring a row that is already there, identical, changes nothing; a different row under that key still refuses', () => {
+    const row = ev('ics-abc', 'Practice', 3);
+    const list = [row];
+    const r = EventStore.apply(list, { type: 'batch', commands: [{ type: 'add', event: { ...row }, restoreId: true }, { type: 'add', event: ev('ics-def', 'Game', 4), restoreId: true }] });
+    assert.deepEqual(r.events.map((e) => e.id), ['ics-abc', 'ics-def']);
+    assert.equal(r.added.length, 1, 'only the new row counts as added');
+    assert.equal(r.inverse.commands.length, 1, 'undo takes back only the new row');
+    const none = EventStore.apply(list, { type: 'add', event: { ...row }, restoreId: true });
+    assert.equal(none.events.length, 1);
+    assert.equal(none.inverse, null);
+    assert.throws(() => EventStore.apply(list, { type: 'add', event: { ...row, title: 'Practice (moved)' }, restoreId: true }), /already there/);
+});

@@ -352,7 +352,9 @@ const CalendarVueApp = {
             showShare: false,
             showSearch: false,
             showSettings: false,
-            undoEntries: [],   // changes this calendar can undo (read from /history)
+            showYou: false,            // the You tab: your name (editors) and this device's preferences
+            myName: typeof YourName !== 'undefined' ? YourName.get() : '',    // "Edited by <name>" in Activity; this browser only (services/YourName.js)
+            undoEntries: [],  // changes this calendar can undo (read from /history)
             undoLoadFailed: false,   // the last read of /history failed: Activity says so instead of "Nothing has changed"
             // Offline (offlineNotice): the browser says so, or this tab's connection to the calendar has been down 2 s.
             browserOffline: typeof navigator !== 'undefined' && navigator.onLine === false,
@@ -476,6 +478,12 @@ const CalendarVueApp = {
             icsPlan: null,
             icsNote: '',
             icsUndo: false,
+            // Where that file came from: 'settings' (shown in the Backup row) or 'dialog' (quick add's link, or a file
+            // dropped on the page: the same lines in a small dialog). icsDragging: a file is over the page right now.
+            icsFrom: 'settings',
+            icsDragging: false,
+            // Make a copy's dialog (openCopyDialog): { name, events, checking, taken, error, busy }, or null.
+            copyDialog: null,
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
             // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
@@ -532,6 +540,7 @@ const CalendarVueApp = {
             if (this.showNotes) return 'notes';
             if (this.showShare) return 'share';
             if (this.showSettings) return 'settings';
+            if (this.showYou) return 'you';
             if (this.showPlus) return 'plus';
             if (this.showSearch) return 'search';
             if (this.showHelp) return 'help';
@@ -545,7 +554,8 @@ const CalendarVueApp = {
         // time under a plain title. Always the same five in the same order, so people learn
         // where things are: on a draft, Share, Activity and Stats say what they will hold once
         // it is saved. Plus: what an upgrade adds, or the owner's plan, editors and billing.
-        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling.
+        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling. You (your name and this
+        // device's preferences) is a small circle just before it: your initials once you give a name.
         sideTabs() {
             if (this.isReadOnly) return [];
             return [
@@ -554,6 +564,7 @@ const CalendarVueApp = {
                 { id: 'changes', label: 'Activity' },
                 { id: 'stats', label: 'Stats' },
                 { id: 'plus', label: 'Plus' },
+                { id: 'you', label: 'You', you: true },
                 { id: 'settings', label: 'Settings', icon: 'settings' },
             ];
         },
@@ -566,7 +577,15 @@ const CalendarVueApp = {
         },
         // Shown in the bar when there is no tab row, for the views without a heading of their own.
         sideTitle() {
-            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', you: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
+        },
+        /** The import's small dialog: a file from quick add or a drop, while it has something to say. */
+        icsDialogOpen() {
+            return this.icsFrom === 'dialog' && !!(this.icsPlan || this.icsNote);
+        },
+        /** The You tab's circle: "SL" for Sam Lee, '' (a person icon) before a name is given. */
+        myInitials() {
+            return typeof YourName !== 'undefined' ? YourName.initials(this.myName) : '';
         },
         /** Why this tab can't edit a locked or paused calendar (toasts). */
         lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
@@ -1351,6 +1370,9 @@ const CalendarVueApp = {
         // in the order the user entered.
         this._escapeHandler = (e) => {
             if (!pcKeys.is(e, 'Escape')) return;
+            // The small dialogs over everything: Make a copy, and an import from quick add or a dropped file.
+            if (this.copyDialog) { this.copyDialog = null; return; }
+            if (this.icsDialogOpen) { this.icsDialogClose(); return; }
             // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
             if (this.nativeAsk) { this.nativeAnswer(null); return; }
             if (this.nativeEditor) { this.closeNativeEditor(); return; }
@@ -1361,11 +1383,46 @@ const CalendarVueApp = {
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
             if (this.showClaimDialog) { this.showClaimDialog = false; return; }
             if (this.showSettings) { this.showSettings = false; return; }
+            if (this.showYou) { this.showYou = false; return; }
             if (this.showSearch) { this.showSearch = false; return; }
             if (this.showShare) { this.showShare = false; return; }
             if (this.showHelp) { this.showHelp = false; }
         };
         window.addEventListener('keydown', this._escapeHandler);
+
+        // A .ics file dragged over the page: "Drop to add these events" while it is over, and the import's dialog after
+        // the drop (icsLoad). Only a drag that carries files, so dragging an event in either calendar is untouched; a
+        // file dropped anywhere else (or on a page that can't edit) is never opened by the browser in place of the page.
+        const carriesFiles = (e) => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+        this._icsDragDepth = 0;
+        this._icsDragHandlers = {
+            dragenter: (e) => {
+                if (!carriesFiles(e) || !this.canEdit || this.isLoading) return;
+                this._icsDragDepth++;
+                this.icsDragging = true;
+            },
+            dragleave: (e) => {
+                if (!carriesFiles(e)) return;
+                this._icsDragDepth = Math.max(0, this._icsDragDepth - 1);
+                if (!this._icsDragDepth) this.icsDragging = false;
+            },
+            dragover: (e) => {
+                if (!carriesFiles(e)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = this.canEdit && !this.isLoading ? 'copy' : 'none';
+            },
+            drop: (e) => {
+                if (!carriesFiles(e)) return;
+                e.preventDefault();
+                this._icsDragDepth = 0;
+                this.icsDragging = false;
+                const file = e.dataTransfer.files && e.dataTransfer.files[0];
+                if (!file || !this.canEdit || this.isLoading) return;
+                track(a => a.featureUsed('ics_drop'));
+                this.icsLoad(file, 'dialog');
+            },
+        };
+        for (const [type, fn] of Object.entries(this._icsDragHandlers)) window.addEventListener(type, fn);
 
         // Whether the side panel docks (style.css uses the same 1100px line).
         if (typeof window.matchMedia === 'function') {
@@ -3742,6 +3799,9 @@ const CalendarVueApp = {
         // Also from Settings ("Make a copy", for next season or your own use), and, as 'style', from the
         // "Make one like this" line under a calendar you didn't make: same colors and type names, no events.
         makeOwnCopy(mode = 'full', from = 'locked') {
+            // A whole copy (Settings' "Make a copy", a locked calendar's "Make your own copy") is named and made in its
+            // own dialog (openCopyDialog) since Oct 28 2026; only "Make one like this" still starts a homepage draft.
+            if (mode !== 'style') { this.openCopyDialog(from); return; }
             const src = JSON.parse(JSON.stringify(this.calendar));
             const o = src.options || {};
             const copy = mode === 'style'
@@ -3764,6 +3824,96 @@ const CalendarVueApp = {
             }
             track(a => a.featureUsed && a.featureUsed(from === 'locked' ? 'locked_copy' : `copy_${mode}_${from}`));
             (window.top || window).location.href = '/?from=' + encodeURIComponent(from);
+        },
+
+        /**
+         * Make a copy: a dialog with the copy's name (pastecal.com/[name], suggested from this one: SlugManager's
+         * alternatives, the first that is free) and "Include events". Make copy creates it through the normal create
+         * path (CalendarDataService.createWithId: the server's name rules and directory) and opens it in this tab.
+         * This calendar is never touched.
+         */
+        openCopyDialog(from = 'settings') {
+            const base = this.calendar && this.calendar.id ? String(this.calendar.id) : (this.suggestedSlug() || '');
+            const options = SlugManager.suggestSlugs(base);
+            this.copyDialog = { from, name: options[0] || '', events: true, taken: null, error: '', busy: false };
+            this.closeSidePanel();
+            this.$nextTick(() => { const el = this.$refs.copyInput; if (el) { el.focus(); el.select(); } });
+            // The first suggestion that is actually free, while the dialog is up (unless they typed meanwhile).
+            const dialog = this.copyDialog;
+            const tryAt = (i) => {
+                if (i >= options.length || this.copyDialog !== dialog || dialog.name !== options[i]) return;
+                CalendarDataService.checkExists(options[i], () => {
+                    if (this.copyDialog === dialog && dialog.name === options[i] && options[i + 1]) { dialog.name = options[i + 1]; tryAt(i + 1); }
+                }, () => {}, () => {});
+            };
+            tryAt(0);
+            track(a => a.featureUsed(`copy_dialog_${from}`));
+        },
+        /** Typing in the copy's name: whatever was said about the last name no longer applies. */
+        copyNameEdited() {
+            if (!this.copyDialog) return;
+            this.copyDialog.taken = null;
+            this.copyDialog.error = '';
+        },
+        /** "Make copy": checked, created, opened. A taken name is said in the dialog, with free names to pick. */
+        makeCopy(pick) {
+            const d = this.copyDialog;
+            if (!d || d.busy) return;
+            if (typeof pick === 'string') d.name = pick;
+            const name = SlugManager.newCalendarName(String(d.name || '').trim());
+            d.taken = null; d.error = '';
+            const problem = SlugManager.nameProblem(name);
+            if (problem) { d.error = problem; return; }
+            d.busy = true;
+            const src = JSON.parse(JSON.stringify(this.calendar));
+            const o = src.options || {};
+            // New ids, so the copy's events are its own (a subscriber's calendar app never sees two calendars share an
+            // event's UID); an edited occurrence still points at its series.
+            const ids = new Map();
+            const idOf = (id) => {
+                if (id === null || id === undefined || id === '') return id;
+                const k = String(id);
+                if (!ids.has(k)) ids.set(k, Utils.uuidv4());
+                return ids.get(k);
+            };
+            const events = d.events ? (src.events || []).map((e) => {
+                const out = { ...e, id: idOf(e.id), recurrenceID: e.recurrenceID === null || e.recurrenceID === undefined || e.recurrenceID === '' ? e.recurrenceID : idOf(e.recurrenceID) };
+                delete out.secret;
+                return out;
+            }) : [];
+            const { publicViewId, ...options } = o;
+            const copy = { title: src.title, options, events };
+            CalendarDataService.checkExists(name, () => {
+                if (this.copyDialog !== d) return;
+                d.busy = false;
+                d.taken = { slug: name, options: [] };
+                // Free alternatives, as the first save offers them (offerSlugAlternatives).
+                const candidates = SlugManager.suggestSlugs(name);
+                const free = [];
+                let pending = candidates.length;
+                const settle = () => { if (--pending === 0 && this.copyDialog === d && d.taken && d.taken.slug === name) d.taken.options = candidates.filter((c) => free.includes(c)).slice(0, 3); };
+                candidates.forEach((c) => CalendarDataService.checkExists(c, settle, () => { free.push(c); settle(); }, settle));
+            }, () => {
+                CalendarDataService.createWithId(name, copy, () => {
+                    track(a => a.featureUsed(`copy_made_${d.from}`, d.events ? 'events' : 'style'));
+                    this.recentManager.add(name, copy.title, true);
+                    this.recentCalendars = this.recentManager.getAll();
+                    // In the same calendar it was made from (?cal=native stays native).
+                    let keep = '';
+                    try { const q = new URLSearchParams(window.location.search); const k = new URLSearchParams(); for (const p of ['cal', 'backend']) if (q.has(p)) k.set(p, q.get(p)); keep = k.toString() ? `?${k}` : ''; } catch (e) { /* none */ }
+                    window.location.href = CalendarPath.of(name) + keep;
+                }, { onError: ({ status, offline } = {}) => {
+                    if (this.copyDialog !== d) return;
+                    d.busy = false;
+                    if (status === 409) { d.taken = { slug: name, options: [] }; return; }
+                    d.error = offline ? 'Not made: you’re offline. Try again when you’re connected.'
+                        : status === 400 ? 'That name won’t work. Try another.' : 'Not made: pastecal had a problem. Try again in a moment.';
+                } });
+            }, () => {
+                if (this.copyDialog !== d) return;
+                d.busy = false;
+                d.error = 'Couldn’t reach pastecal to check that name. Check your connection and try again.';
+            });
         },
 
         saveLocalStorage() {
@@ -4579,6 +4729,21 @@ const CalendarVueApp = {
         async icsPicked(e) {
             const input = e && e.target, file = input && input.files && input.files[0];
             if (input) input.value = '';   // the same file can be picked again
+            // Settings' own input shows the plan in its Backup row; the page's (quick add's link) in a small dialog.
+            return this.icsLoad(file, input && input.dataset && input.dataset.from === 'dialog' ? 'dialog' : 'settings');
+        },
+        /** Quick add's "or import a .ics file": the file picker, from the click itself (a browser opens it only then). */
+        openIcsPicker() {
+            const input = this.$refs.icsFileAny;
+            if (input) input.click();
+        },
+        /** The import dialog (a file from quick add or dropped on the page) is up. */
+        icsDialogClose() {
+            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false; this._icsUndo = null;
+        },
+        /** A .ics file from any of the three ways in (Settings, quick add, a drop): what importing it would do. */
+        async icsLoad(file, from = 'settings') {
+            this.icsFrom = from;
             this.icsPlan = null; this.icsNote = ''; this.icsUndo = false;
             if (!file) return;
             if (file.size > ICSImport.MAX_BYTES) { this.icsNote = 'That file is over 2 MB.'; return; }
@@ -5116,6 +5281,7 @@ const CalendarVueApp = {
             if (id === 'notes') this.toggleNotes();
             else if (id === 'share') this.toggleShare();
             else if (id === 'settings') this.toggleSettings();
+            else if (id === 'you') this.toggleYou();
             else if (id === 'changes') this.openRecentChanges();
             else if (id === 'stats') this.openStats();
             else if (id === 'plus') this.openPlusTab('share');
@@ -5355,6 +5521,7 @@ const CalendarVueApp = {
             }
 
             // Activity, Stats and History share the panel, so opening anything closes them too.
+            this.showYou = false;
             this.showRecentChanges = false;
             this.showProStats = false;
             this.showProHistory = false;
@@ -5457,6 +5624,8 @@ const CalendarVueApp = {
         },
 
         toggleSettings() {
+            // Settings is this calendar's; someone who can't change it (a view link) gets their own preferences.
+            if (!this.canEdit) { this.toggleYou(); return; }
             if (this.showSettings) {
                 this.showSettings = false;
             } else {
@@ -5590,6 +5759,8 @@ const CalendarVueApp = {
                         // Which browser wrote it (null on entries from before writers
                         // were recorded). Collapsing and Cmd+Z both go by it.
                         writer: r.writer || null,
+                        // The name its writer gave in the You tab ("Edited by Sam"); none, nothing is said.
+                        name: typeof r.name === 'string' && r.name ? r.name : null,
                         keys,
                         lost,
                         edited,
@@ -6323,13 +6494,30 @@ const CalendarVueApp = {
             }
         },
 
-        /** e: the change event of a Settings field (a person's change, counted as settings:<field>); none for the
+        /** The You tab, opened from its circle (or, for a viewer, the header's gear). */
+        toggleYou() {
+            if (this.showYou) { this.showYou = false; return; }
+            this.closeAllPanels();
+            this.showYou = true;
+        },
+        /** Your name (the You tab), on change: kept in this browser and sent with every save from now on. */
+        saveMyName(e) {
+            const typed = e && e.target ? e.target.value : this.myName;
+            const name = typeof YourName !== 'undefined' ? YourName.set(typed) : '';
+            this.myName = name;
+            if (e && e.target) e.target.value = name;
+            track(a => a.featureUsed('you:name'));
+        },
+
+        /** e: the change event of a Settings field (a person's change, counted as settings:<field>, or you:<field> in the
+         *  You tab); none for the
          *  first visit's automatic import, which used to count every new visitor as a Settings use. */
         saveGlobalSettings(e) {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
                 const field = e && e.target && String(e.target.id || e.target.getAttribute('aria-label') || '').replace(/^set-/, '').replace(/\W+/g, '_').toLowerCase();
-                if (field) track(a => a.featureUsed(`settings:${field}`));
+                const tab = e && e.target && e.target.closest && e.target.closest('[data-testid="you"]') ? 'you' : 'settings';
+                if (field) track(a => a.featureUsed(`${tab}:${field}`));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);

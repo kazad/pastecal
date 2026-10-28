@@ -256,7 +256,7 @@ for (const device of ['desk', 'phone']) {
       await b.page.locator('input[type=search]:visible').first().fill('practice');
       await b.page.waitForTimeout(400);
       await shot(b.page, `search-series-${tag}`);
-      await app("openSideTab('settings')");
+      await app("openSideTab('you')");
       await b.page.locator('#set-start-hour').scrollIntoViewIfNeeded();
       await b.page.waitForTimeout(300);
       await shot(b.page, `settings-24h-${tag}`);

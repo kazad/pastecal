@@ -78,6 +78,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
 import CalendarName from '../../public/services/CalendarName.js';
+import YourName from '../../public/services/YourName.js';
 import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
 import { planName } from './Plans.js';
 import { validZone } from './preview/time.js';
@@ -722,7 +723,7 @@ export class CalendarRoom extends DurableObject {
         this.state.events = events;
     }
 
-    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, kind: kindOverride, label, countsOnly } = {}) {
+    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, name, kind: kindOverride, label, countsOnly } = {}) {
         const s = this.state;
         s.v += 1;
         s.lastEditedAt = Date.now();
@@ -772,6 +773,10 @@ export class CalendarRoom extends DurableObject {
             writer: writer || null,
         };
         if (label) entry.label = label;
+        // The writer's name from the You tab (Activity: "Edited by Sam"), cleaned like the browser does (YourName.clean:
+        // 40 characters, no control characters). Public, like the rest of history; absent when none was given.
+        const who = YourName.clean(name);
+        if (who) entry.name = who;
         // A whole-calendar replace (restore) keeps counts only: two full event lists in one row could
         // pass SQLite's 2 MB row limit. Its undo is the R2 restore point (RoomInsight.restoreVersion).
         if (countsOnly) { entry.removedEvents = []; entry.changedEvents = []; entry.addedEvents = []; }
@@ -1359,7 +1364,7 @@ export class CalendarRoom extends DurableObject {
                 this.state.options = { ...(this.state.options || {}), tz };
                 this.setMeta('options', this.state.options);
             }
-            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null, name: m.name });   // never the author uid: history is public, the uid proves who made it
             this.healTrimmedName();
             this.registerRoomOnce();
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
@@ -1387,7 +1392,7 @@ export class CalendarRoom extends DurableObject {
             if (why) return refuse('too_big', why);
             if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
-            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null, name: m.name });   // never the author uid: history is public, the uid proves who made it
             this.healTrimmedName();
             this.registerRoomOnce();
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));

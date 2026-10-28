@@ -351,6 +351,7 @@ test('A14 [settings] nit: with 24-hour time chosen, Settings still offers "Start
   const { id } = await seed([]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { settings: { timeFormat: '24' }, locale: 'de-DE' });
   await page.locator('[data-testid=settings-button-desktop]').click();
+  await page.getByTestId('side-tab-you').click();   // your own preferences: the You tab
   await expect(page.locator('#set-time-format')).toHaveValue('24');
   await shot(page, 'A14-start-hour-12h');
   expect(await page.locator('#set-start-hour option').allInnerTexts()).toEqual(['00:00', '05:00', '06:00', '07:00', '08:00', '09:00']);

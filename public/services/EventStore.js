@@ -283,9 +283,14 @@
 
     // Undo of a remove puts the row back with its ORIGINAL id, so anything that pointed at
     // it (an occurrence's recurrenceID, a shared link) still does.
+    // The same row already there, every field equal, is nothing to do rather than an error: two browsers that save the
+    // same new row (the same .ics imported in both at once: its ids come from the file's UIDs, ICSImport.idFor) must
+    // both land, not have the second refused and its page rolled back. A different row under that key still refuses.
     function restore(events, event) {
         const e = stored(normalize(event));
-        if (events.some((x) => keyOf(x) === keyOf(e))) throw new CommandError('restore: already there', { type: 'add', event }, 'already_there');
+        const here = events.find((x) => keyOf(x) === keyOf(e));
+        if (here && same(here, e)) return { events, inverse: null, added: [], changed: [], removed: [] };
+        if (here) throw new CommandError('restore: already there', { type: 'add', event }, 'already_there');
         return { events: [...events, e], inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
     }
 
