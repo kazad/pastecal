@@ -44,13 +44,17 @@ class SlugManager {
     }
 
     // Why a view-only link can't be renamed to this, in words, or null. The server's rule (SlugService.validateSlug):
-    // 3 to 50 letters, numbers, dashes or underscores.
-    static viewNameProblem(name, current) {
+    // 3 to 50 letters, numbers, dashes or underscores, and never a calendar's name -- this calendar's own least of all
+    // (its edit link would then open the view: the July 2025 custom names allowed it, Oct 28 2026).
+    static viewNameProblem(name, current, calendarId = null) {
         const s = String(name ?? '').trim();
         if (current && s.toLowerCase() === String(current).toLowerCase()) return 'That’s already this link’s name.';
+        if (calendarId && s.toLowerCase() === String(calendarId).toLowerCase()) return this.OWN_NAME_MESSAGE;
         if (!/^[a-zA-Z0-9_-]{3,50}$/.test(s)) return 'Use 3 to 50 letters, numbers, dashes or underscores.';
         return null;
     }
+
+    static OWN_NAME_MESSAGE = 'That’s this calendar’s edit link name. Pick a different one, so the view link can’t be used to edit.';
 
     // What a failed view-link request says to a person (createPublicLink's error: .code from the server).
     static linkErrorMessage(error) {

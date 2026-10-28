@@ -47,6 +47,7 @@ db-archive|plain+persist + --test-scheduled, ARCHIVE_CHUNK=3
 copyback|copyback (fake Firebase on 9099, started by the test)
 lock|lock (UNSAFE_DEV_SESSION_HEADER)
 permissions|pro (UNSAFE_DEV_SESSION_HEADER + ACCOUNTS_DEV_MODE)
+name-collision|pro (ACCOUNTS_DEV_MODE: the directory's dev-plant hook)
 stats|pro+persist
 restore|pro+persist
 accounts|billing (fake Stripe vars + LOCK_API_BASE)
@@ -234,7 +235,7 @@ run_one() {
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $LOCK_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
-    permissions|stats|restore)
+    permissions|stats|restore|name-collision)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PRO_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;

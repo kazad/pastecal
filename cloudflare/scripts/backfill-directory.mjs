@@ -15,13 +15,12 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const KEY_PATH = path.join(__dirname, '../../internal/keys/pastecal-web-firebase-adminsdk-scf60-24fc54f2df.json');
 const BASE = process.argv[2] || 'https://new.pastecal.com';
 const SECRET = process.env.IMPORT_SECRET;
-if (!SECRET) { console.error('Set IMPORT_SECRET in the environment (never commit it).'); process.exit(1); }
 const DB = 'https://pastecal-web-default-rtdb.firebaseio.com';
 
 // Generate Google OAuth2 access token from service account key
@@ -52,7 +51,37 @@ async function getAccessToken(sa) {
     return out.access_token;
 }
 
+/**
+ * The directory rows to upload, normalized name -> {actualSlug, isReadOnly, targetId}, from Firebase's editable
+ * calendars (calKeys), slug_mappings and read-only views ([{key, targetId}]). Editable always wins: a view link named
+ * like a calendar (July 2025's custom view names allowed it) never takes that calendar's row -- the Oct 4 2026 run let
+ * it, and 45 edit links forwarded to their view (CalendarDirectory refuses it too now). Those views are `collisions`.
+ * Pure, for cloudflare/test/name-collision.test.mjs.
+ */
+export function buildDirectoryEntries({ calKeys = [], slugMappings = {}, views = [] }) {
+    const entries = new Map();
+    for (const k of calKeys) {
+        if (!k || typeof k !== 'string') continue;
+        entries.set(k.toLowerCase(), { actualSlug: k, isReadOnly: false, targetId: k });
+    }
+    // Overlay slug_mappings for editable calendars (preserves case resolution)
+    for (const [norm, data] of Object.entries(slugMappings || {})) {
+        if (!data || data.notFound) continue;
+        if (!data.isReadOnly && data.actualSlug) entries.set(norm.toLowerCase(), { actualSlug: data.actualSlug, isReadOnly: false, targetId: data.actualSlug });
+    }
+    const collisions = [];
+    for (const { key, targetId } of views) {
+        if (!key || typeof targetId !== 'string' || !targetId) continue;
+        const held = entries.get(key.toLowerCase());
+        if (held && !held.isReadOnly) { collisions.push({ name: key, calendar: held.actualSlug, viewOpens: targetId.trim() }); continue; }
+        entries.set(key.toLowerCase(), { actualSlug: key, isReadOnly: true, targetId: targetId.trim() });
+    }
+    return { entries, collisions };
+}
+
 async function run() {
+    if (!SECRET) { console.error('Set IMPORT_SECRET in the environment (never commit it).'); process.exit(1); }
+
     console.log(`Starting CalendarDirectory backfill to ${BASE}...`);
     const sa = JSON.parse(readFileSync(KEY_PATH, 'utf8'));
     const token = await getAccessToken(sa);
@@ -85,36 +114,10 @@ async function run() {
     const roKeys = Object.keys((await roRes.json()) || {});
     console.log(`Received ${roKeys.length} read-only view keys.`);
 
-    // Build the master map of normalized -> entry
-    const entries = new Map();
-
-    // First: editable calendars from shallow keys
-    for (const k of calKeys) {
-        if (!k || typeof k !== 'string') continue;
-        entries.set(k.toLowerCase(), {
-            actualSlug: k,
-            isReadOnly: false,
-            targetId: k
-        });
-    }
-
-    // Overlay slug_mappings for editable calendars (preserves case resolution)
-    for (const [norm, data] of Object.entries(slugMappings)) {
-        if (!data || data.notFound) continue;
-        if (!data.isReadOnly && data.actualSlug) {
-            entries.set(norm.toLowerCase(), {
-                actualSlug: data.actualSlug,
-                isReadOnly: false,
-                targetId: data.actualSlug
-            });
-        }
-    }
-
-    console.log(`Mapped ${entries.size} editable calendars.`);
-
     // Next: fetch target IDs for read-only views in concurrent pools
     console.log(`Fetching target IDs for ${roKeys.length} read-only views...`);
     const CONCURRENCY = 60;
+    const views = [];
     let fetched = 0;
     const t0 = Date.now();
 
@@ -127,13 +130,7 @@ async function run() {
                 });
                 if (res.ok) {
                     const targetId = await res.json();
-                    if (targetId && typeof targetId === 'string') {
-                        entries.set(key.toLowerCase(), {
-                            actualSlug: key,
-                            isReadOnly: true,
-                            targetId: targetId.trim()
-                        });
-                    }
+                    if (targetId && typeof targetId === 'string') views.push({ key, targetId });
                 }
             } catch (err) {
                 console.warn(`Failed to fetch targetId for view ${key}:`, err.message);
@@ -146,6 +143,11 @@ async function run() {
         }
     }
 
+    const { entries, collisions } = buildDirectoryEntries({ calKeys, slugMappings, views });
+    if (collisions.length) {
+        console.log(`${collisions.length} view link(s) named like an editable calendar, skipped (the calendar keeps its name):`);
+        for (const c of collisions) console.log(`  ${c.name}: calendar ${c.calendar}; the view opens ${c.viewOpens}`);
+    }
     console.log(`Total directory items to upload: ${entries.size}`);
 
     // Post to Cloudflare /api/directory/backfill in batches of 500
@@ -167,6 +169,8 @@ async function run() {
             const txt = await res.text();
             throw new Error(`Upload batch failed HTTP ${res.status}: ${txt}`);
         }
+        const out = await res.json().catch(() => ({}));
+        if (out.skipped && out.skipped.length) console.log(`\nThe directory kept the editable row for: ${out.skipped.join(', ')}`);
         uploaded += chunk.length;
         process.stdout.write(`Uploaded ${uploaded}/${allItems.length}\r`);
     }
@@ -177,7 +181,10 @@ async function run() {
     console.log('Live CalendarDirectory stats:', stats);
 }
 
-run().catch((err) => {
-    console.error('Backfill failed:', err);
-    process.exit(1);
-});
+// Run only as a script (the test imports buildDirectoryEntries).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    run().catch((err) => {
+        console.error('Backfill failed:', err);
+        process.exit(1);
+    });
+}

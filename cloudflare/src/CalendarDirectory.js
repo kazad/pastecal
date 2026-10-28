@@ -4,6 +4,11 @@ import { SlugService } from './SlugService.js';
 // Same as index.js: any name a calendar can have ("TEAM NUÑEZ", "d&d8", "sign-up!x"), not only [A-Za-z0-9_-].
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 
+// Editable always wins. One row per lowercase name, and an edit name is somebody's calendar: no write may turn it
+// into a view row. A view link named after a calendar (July 2025's custom view names checked only other views) took
+// the row at the Oct 4 2026 cutover, and 45 calendars' edit links then forwarded to /view/<name> (Oct 28 2026).
+const EDITABLE_TAKEN = { ok: false, conflict: true, editable: true, error: 'already-exists', reason: 'calendar', message: 'That is a calendar’s name' };
+
 export class CalendarDirectory extends DurableObject {
     constructor(ctx, env) {
         super(ctx, env);
@@ -23,6 +28,11 @@ export class CalendarDirectory extends DurableObject {
             const cols = this.sql.exec(`PRAGMA table_info(directory)`).toArray().map((c) => c.name);
             if (!cols.includes('ended_at')) this.sql.exec(`ALTER TABLE directory ADD COLUMN ended_at INTEGER`);
         });
+    }
+
+    // The row at this lowercase name is an editable calendar's.
+    isEditable(norm) {
+        return this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND is_readonly = 0`, norm).toArray().length > 0;
     }
 
     async fetch(request) {
@@ -68,6 +78,7 @@ export class CalendarDirectory extends DurableObject {
                     return Response.json({ ok: false, error: 'invalid-argument', message: 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.' }, { status: 400 });
                 }
                 const norm = SlugService.normalizeSlug(customSlug);
+                if (norm === SlugService.normalizeSlug(sourceCalendarId)) return Response.json(EDITABLE_TAKEN, { status: 409 });   // its own edit name
                 const existing = this.sql.exec(`SELECT actual_slug FROM directory WHERE normalized = ?`, norm).toArray();
                 if (existing.length) {
                     return Response.json({ ok: false, error: 'already-exists', message: 'Slug is already taken' }, { status: 409 });
@@ -106,6 +117,7 @@ export class CalendarDirectory extends DurableObject {
             // Check if existing mapping exists
             const existing = this.sql.exec(`SELECT actual_slug, is_readonly, ended_at FROM directory WHERE normalized = ?`, norm).toArray();
             if (existing.length && existing[0].ended_at) return Response.json({ ok: false, conflict: true, ended: true });
+            if (isReadOnly && existing.length && !existing[0].is_readonly) return Response.json(EDITABLE_TAKEN);   // even forced
             if (existing.length && existing[0].actual_slug !== actualSlug) {
                 // If the incumbent is read-only and incoming is editable (or vice versa), don't silently overwrite unless specified
                 if (!body.force && body.hasData === false) {
@@ -128,12 +140,13 @@ export class CalendarDirectory extends DurableObject {
                 return Response.json({ ok: false, error: 'invalid-argument', message: 'Invalid slug or reserved word' }, { status: 400 });
             }
             const norm = SlugService.normalizeSlug(slug);
+            const isReadOnly = body.isReadOnly ? 1 : 0;
+            const targetId = String(body.targetId);   // a calendar's name: exact
+            if (isReadOnly && norm === SlugService.normalizeSlug(targetId)) return Response.json(EDITABLE_TAKEN, { status: 409 });
             const existing = this.sql.exec(`SELECT actual_slug FROM directory WHERE normalized = ?`, norm).toArray();
             if (existing.length) {
                 return Response.json({ ok: false, error: 'already-exists', message: 'Slug is already taken' }, { status: 409 });
             }
-            const isReadOnly = body.isReadOnly ? 1 : 0;
-            const targetId = String(body.targetId);   // a calendar's name: exact
             const now = Date.now();
 
             this.sql.exec(`INSERT INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -177,6 +190,7 @@ export class CalendarDirectory extends DurableObject {
             const items = await request.json().catch(() => []);
             if (!Array.isArray(items)) return Response.json({ ok: false }, { status: 400 });
             let inserted = 0;
+            const skipped = [];   // view rows refused because the name is an editable calendar's
             const now = Date.now();
             for (const item of items) {
                 if (!item || !item.actualSlug) continue;
@@ -185,11 +199,48 @@ export class CalendarDirectory extends DurableObject {
                 const isReadOnly = item.isReadOnly ? 1 : 0;
                 const targetId = item.targetId ? String(item.targetId) : actualSlug;
                 if (this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND ended_at IS NOT NULL`, norm).toArray().length) continue;   // a tombstone stays
+                if (isReadOnly && this.isEditable(norm)) { skipped.push(actualSlug); continue; }                                        // editable wins
                 this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
                     norm, actualSlug, isReadOnly, targetId, now);
                 inserted++;
             }
-            return Response.json({ ok: true, count: inserted });
+            return Response.json({ ok: true, count: inserted, skipped });
+        }
+
+        // View rows named after the calendar they open (a view link whose name is its calendar's edit name): the cheap
+        // half of the collision check, SQL only. The Worker's /api/admin/directory/collisions confirms each calendar exists.
+        if (request.method === 'GET' && path === '/self-named-views') {
+            const rows = this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at FROM directory
+                WHERE is_readonly = 1 AND ended_at IS NULL AND lower(target_id) = normalized ORDER BY normalized LIMIT 1000`).toArray();
+            return Response.json({ rows });
+        }
+
+        // The repair for a collision (scripts/fix-name-collisions.mjs, through the Worker's admin route, which first checks
+        // that the calendar exists): this name's row becomes the editable calendar's. Only a live view row changes; the
+        // row before and after are returned (the script keeps them for undo).
+        if (request.method === 'POST' && path === '/make-editable') {
+            const body = await request.json().catch(() => null);
+            if (!body || !body.slug || !validId(String(body.calendarId || ''))) return Response.json({ ok: false, error: 'bad body' }, { status: 400 });
+            const norm = SlugService.normalizeSlug(body.slug);
+            const calendarId = String(body.calendarId);
+            if (SlugService.normalizeSlug(calendarId) !== norm) return Response.json({ ok: false, error: 'not this name' }, { status: 400 });
+            const row = () => this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at, ended_at FROM directory WHERE normalized = ?`, norm).toArray()[0] || null;
+            const before = row();
+            if (!before || !before.is_readonly || before.ended_at) return Response.json({ ok: false, error: 'not a view row', before }, { status: 409 });
+            this.sql.exec(`UPDATE directory SET actual_slug = ?, is_readonly = 0, target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`,
+                calendarId, calendarId, norm);
+            return Response.json({ ok: true, before, after: row() });
+        }
+
+        // Test hook (ACCOUNTS_DEV_MODE only; the Worker also requires the admin secret): write a row as the pre-fix
+        // directory could, so the collision check and its repair can be tested. Every real path refuses this now.
+        if (request.method === 'POST' && path === '/dev-plant') {
+            if (this.env.ACCOUNTS_DEV_MODE !== '1') return Response.json({ ok: false, error: 'forbidden' }, { status: 403 });
+            const b = await request.json().catch(() => null);
+            if (!b || !b.actualSlug) return Response.json({ ok: false }, { status: 400 });
+            this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
+                SlugService.normalizeSlug(b.actualSlug), String(b.actualSlug), b.isReadOnly ? 1 : 0, String(b.targetId || b.actualSlug), Date.now());
+            return Response.json({ ok: true });
         }
 
         // Every row, a page at a time in key order (keyset: ?after=<last normalized>), for the daily

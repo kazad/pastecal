@@ -615,6 +615,9 @@ export class CalendarRoom extends DurableObject {
 
     async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
+        // A view id that is this calendar's own name (July 2025 allowed it) is never registered: the name is the edit
+        // link's, and the directory refuses a view row over an editable one anyway (CalendarDirectory.js EDITABLE_TAKEN).
+        if (isReadOnly && targetId && String(actualSlug).toLowerCase() === String(targetId).toLowerCase()) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
             // Never re-point a name that leads to another live calendar. Registering is an upsert, so

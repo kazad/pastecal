@@ -287,6 +287,24 @@ class CalendarDataService {
         // - Validate event formats
     }
 
+    // An edit link whose name is a view link only: report it and go to the view. Analytics queues a report when the page
+    // is next idle and sends the queue on pagehide, so the forward waits for idle too (idle callbacks run in order),
+    // or the report would be lost with the page.
+    static _forwardToView(viewSlug) {
+        if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
+        const go = () => { window.location.href = CalendarPath.view(viewSlug); };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 500 }); else setTimeout(go, 50);
+    }
+
+    // Does /view/<slug> open a calendar even though the directory says the name is an edit link? (Cloudflare only:
+    // a view link named after its own calendar, CloudCalendarService.viewLinkExists.)
+    static async viewLinkExists(slug) { return false; }
+
+    // The calendar stored under exactly this name, or null (none, or Firebase could not be read).
+    static async _editableAt(slug) {
+        try { return (await this.db.child(slug).once('value')).val() ? slug : null; } catch (e) { return null; }
+    }
+
     // find calendar (with redirect logic) and subscribe
     static async findAndSubscribe(slug, callback) {
         if (!slug) {
@@ -306,8 +324,15 @@ class CalendarDataService {
             if (result.data?.ended) { window.location.replace('/link-ended/' + encodeURIComponent(slug)); return; }
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
-                    // Found as read-only calendar - redirect to view URL
-                    window.location.href = CalendarPath.view(result.data.actualSlug);
+                    // A view row at an editable calendar's name (a view link named after a calendar): stay and edit it.
+                    // Only a name with no calendar behind it is a view link - redirect to view URL.
+                    const here = await this._editableAt(slug);
+                    if (here) {
+                        if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_name_collision', {}));
+                        this._subscribeExact(here, callback);
+                        return;
+                    }
+                    this._forwardToView(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case

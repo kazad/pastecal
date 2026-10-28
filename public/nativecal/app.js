@@ -403,7 +403,10 @@ const CalendarVueApp = {
                     // Couldn't ask (offline, a server error): not the same as "not found".
                     if (result.error) { this.isLoading = false; this.notifyLoadError('Couldn’t load this calendar. Check your connection and reload the page.'); return; }
 
-                    if (result.data.found && result.data.isReadOnly) {
+                    // A view link named after its own calendar: the name's row is the calendar's (editable wins), and its
+                    // view is still served (CloudCalendarService.viewLinkExists).
+                    const ownName = result.data.found && !result.data.isReadOnly && await CalendarDataService.viewLinkExists(requestedSlug);
+                    if (result.data.found && (result.data.isReadOnly || ownName)) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
                         console.log('Found read-only calendar with slug:', actualSlug);
@@ -1440,7 +1443,7 @@ const CalendarVueApp = {
         async customizeExistingLink() {
             const name = this.readOnlySlugInput.trim();
             if (!name) return;
-            const problem = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar));
+            const problem = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar), this.calendar.id);
             if (problem) { this.showToast(problem, 'error'); return; }
             try {
                 await SlugManager.customizeReadOnlyLink(this.calendar, name);

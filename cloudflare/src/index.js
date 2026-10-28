@@ -26,6 +26,8 @@
  *                                 fill time, 5 an hour per IP)
  *   GET  /api/admin/messages      Contact messages, newest first (Bearer IMPORT_SECRET)
  *   /api/admin/backup/{run,status,list,health,restore}   The daily full archive (BackupArchive.js; Bearer IMPORT_SECRET)
+ *   GET  /api/admin/directory/collisions, POST .../make-editable   View rows named like an editable calendar, and
+ *                                 their repair (NameCollisions.js; Bearer IMPORT_SECRET)
  *   scheduled()                   Cron (wrangler.jsonc triggers): starts the daily full archive
  */
 import CalendarPath from '../../public/services/CalendarPath.js';
@@ -47,6 +49,7 @@ import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
 import { timingSafeEqual } from './Stripe.js';
+import { handleCollisionAdmin } from './NameCollisions.js';
 import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL, NATIVE_CAL_META, nativeViewLinks } from './Site.js';
 
 // Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
@@ -404,9 +407,13 @@ async function route(request, env, ctx) {
             }
             if (access.paused) return fail(403, { ok: false, error: 'paused', message: 'Editing is paused by the owner.' });   // after Pro ended
             if (customSlug) {
+                // Never a calendar's name, its own included: a view row there would take the name's lookups, and that
+                // calendar's edit link would forward to the view (CalendarDirectory.js EDITABLE_TAKEN).
                 const typed = String(customSlug).trim();
+                const isCalendar = { ok: false, error: 'already-exists', reason: 'calendar', message: 'That is a calendar’s name' };
+                if (typed.toLowerCase() === sourceCalendarId.toLowerCase()) return fail(409, isCalendar);
                 for (const name of new Set([typed, typed.toLowerCase()])) {
-                    if (await hasCalendar(name)) return fail(409, { ok: false, error: 'already-exists', message: 'Slug is already taken' });
+                    if (await hasCalendar(name)) return fail(409, isCalendar);
                 }
             }
 
@@ -465,6 +472,16 @@ async function route(request, env, ctx) {
             return dir.fetch(new Request('http://internal/backfill', request));
         }
 
+        // Name collisions (a view row named like an editable calendar) and their repair: NameCollisions.js.
+        if (path.startsWith('/api/admin/directory/')) {
+            if (!env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
+                return new Response('forbidden', { status: 403 });
+            }
+            const dir = getDirectory(env);
+            if (!dir || !env.CALENDARS) return Response.json({ ok: false }, { status: 500 });
+            return handleCollisionAdmin(request, env, dir, path, url);
+        }
+
         if (path === '/api/directory/stats') {
             const dir = getDirectory(env);
             if (!dir) return withCors(Response.json({ total: 0 }));
@@ -489,6 +506,12 @@ async function route(request, env, ctx) {
                 if (lookup.ended) return withCors(new Response('This link has ended', { status: 410 }));
                 if (lookup.found && lookup.isReadOnly) {
                     targetId = lookup.targetId;
+                } else if (lookup.found && lookup.actualSlug) {
+                    // A view link named after its own calendar (July 2025 allowed it): its row is the edit name's now
+                    // (editable wins, NameCollisions.js), so its view is served from that calendar's own view id.
+                    const r = await env.CALENDARS.get(env.CALENDARS.idFromName(lookup.actualSlug)).fetch(`http://internal/cal/${encodeURIComponent(lookup.actualSlug)}`);
+                    const own = r.ok ? (await r.json().catch(() => null))?.calendar?.options?.publicViewId : null;
+                    if (typeof own === 'string' && own.toLowerCase() === viewId.toLowerCase()) targetId = lookup.actualSlug;
                 }
             }
             if (!targetId) return new Response('not found', { status: 404 });
