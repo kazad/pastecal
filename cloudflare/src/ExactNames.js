@@ -3,7 +3,7 @@
  *
  * Firebase stored calendars by their exact key and its lookup read that key first, so "Foo" and "foo" were two
  * calendars, both reachable. Here each calendar's data is kept by its exact id too (a room per idFromName(id)), but the
- * directory keeps ONE row per lowercase name. The edit page followed that row, so the owner of "foo" was taken to
+ * directory keeps ONE row per name key (CalendarName.key: case, surrounding spaces, NFC). The edit page followed that row, so the owner of "foo" was taken to
  * "Foo" (91 calendars, 904 events, Oct 28 2026: they saw and could edit someone else's calendar).
  *
  *   exactLookup   a lookup for an edit name: when a calendar exists at exactly the requested name, that is the answer
@@ -43,8 +43,9 @@ export async function exactLookup(env, dir, slug) {
     return { found: true, actualSlug: slug, isReadOnly: false, targetId: slug, exact: row.isReadOnly ? 'view' : 'case' };
 }
 
-// Another calendar with this name in another spelling, or null. The directory row (lowercase key, and the trimmed
-// name's) catches the variants made before the registry; the registry catches the rest. A name whose row or entry
+// Another calendar with this name in another spelling, or null. The directory row (CalendarName.key; also its old
+// lowercase-only key until the re-key, so the exact and the trimmed spelling are both asked) catches the variants
+// made before the registry; the registry catches the rest. A name whose row or entry
 // leads to no calendar any more (a stale row) does not block.
 export async function nameTakenByVariant(env, dir, id) {
     const candidates = new Set();

@@ -6,6 +6,7 @@
  */
 import { escapeHtml, clip, clean } from './text.js';
 import { RESERVED_CALENDAR_NAMES } from '../SlugService.js';
+import CalendarName from '../../../public/services/CalendarName.js';
 
 export const META_START = '<!-- preview:meta -->';
 export const META_END = '<!-- /preview:meta -->';
@@ -35,7 +36,7 @@ export function calendarTarget(pathname, search = '') {
     let id;
     try { id = decodeURIComponent(raw); } catch { return null; }
     if (!validId(id)) return null;                     // also: anything with a dot (files)
-    if (kind === 'edit' && (RESERVED_CALENDAR_NAMES.has(id.toLowerCase()) || SITE_PAGES.has(id.toLowerCase()))) return null;
+    if (kind === 'edit' && (RESERVED_CALENDAR_NAMES.has(CalendarName.key(id)) || SITE_PAGES.has(CalendarName.key(id)))) return null;
     return { kind, id };
 }
 

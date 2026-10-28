@@ -14,6 +14,7 @@
  */
 import { CONTACT_TYPES } from './Waitlist.js';
 import { RESERVED_CALENDAR_NAMES } from './SlugService.js';
+import CalendarName from '../../public/services/CalendarName.js';
 import { sameSite } from './Accounts.js';
 
 export const MAX_BODY_BYTES = 16 * 1024;           // 2000 characters of emoji is 8 KB
@@ -31,7 +32,7 @@ export function calendarPath(link) {
     let name;
     try { name = decodeURIComponent(m[2]); } catch { return null; }
     if (name.length > 200 || /[.#$\[\]\/\u0000-\u001f\u007f]/.test(name)) return null;
-    if (!m[1] && RESERVED_CALENDAR_NAMES.has(name.toLowerCase())) return null;
+    if (!m[1] && RESERVED_CALENDAR_NAMES.has(CalendarName.key(name))) return null;
     return (m[1] ? 'view/' : '') + m[2];
 }
 

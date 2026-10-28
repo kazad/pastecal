@@ -130,7 +130,7 @@ declare const CalendarDataService: {
  * Global SlugManager
  */
 declare const SlugManager: {
-    normalizeSlug(slug: string): string;
+    newCalendarName(slug: string): string;
     getReadOnlyICSURL(calendar: any): string;
     createReadOnlyLink(calendar: any): Promise<any>;
     customizeReadOnlyLink(calendar: any, slug: string): Promise<any>;

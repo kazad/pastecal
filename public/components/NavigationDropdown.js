@@ -234,16 +234,16 @@ const NavigationDropdown = {
             }
             return me.plan ? planName(me.plan) : 'Your account';
         },
-        // Calendars this account pays for, lowercased id -> /api/me row.
+        // Calendars this account pays for, name key (CalendarName.key) -> /api/me row.
         proById() {
             const map = new Map();
             const cals = (this.acct.status === 'in' && this.acct.me && this.acct.me.calendars) || [];
-            for (const c of cals) if (c && c.id) map.set(String(c.id).toLowerCase(), c);
+            for (const c of cals) if (c && c.id) map.set(CalendarName.key(c.id), c);
             return map;
         },
         proCalendars() {
             const titles = new Map((this.recentCalendars || []).filter(r => !r.view && !/ \(View Only\)$/.test(r.title || ''))
-                .map(r => [String(r.id).toLowerCase(), RecentCalendars.display(r).title]));
+                .map(r => [CalendarName.key(r.id), RecentCalendars.display(r).title]));
             const now = Date.now();
             const out = [];
             for (const c of this.proById.values()) {
@@ -255,7 +255,7 @@ const NavigationDropdown = {
                 else if (c.status === 'active' || c.status === 'trialing') label = date ? `${c.status === 'trialing' ? name + ' trial · ends' : c.cancelAtPeriodEnd ? name + ' · ends' : name + ' · renews'} ${date}` : name;
                 else if (end > now) label = `${name} · ends ${date}`;
                 else continue;     // ended: no longer upgraded
-                out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,
+                out.push({ id: c.id, title: titles.get(CalendarName.key(c.id)) || c.id,
                     path: '/' + encodeURIComponent(c.id), label, problem: c.status === 'past_due' });
             }
             return out;
@@ -265,7 +265,7 @@ const NavigationDropdown = {
         groups() {
             const all = (this.recentCalendars || []).map(item => {
                 const shown = { ...item, ...RecentCalendars.display(item) };
-                const sub = !shown.view && this.proById.get(String(item.id).toLowerCase());
+                const sub = !shown.view && this.proById.get(CalendarName.key(item.id));
                 return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)), planName: planName(sub && sub.plan) };
             });
             return [

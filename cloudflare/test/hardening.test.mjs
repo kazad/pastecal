@@ -266,7 +266,9 @@ function tab(id) {
         const byName = await soon(async () => { const r = await lookup(name); return r.found ? r : null; });
         assert.deepEqual(byName && { actualSlug: byName.actualSlug, isReadOnly: byName.isReadOnly }, { actualSlug: name, isReadOnly: false }, `${JSON.stringify(name)}: looked up as itself`);
         if (name !== name.toLowerCase()) assert.equal((await lookup(name.toLowerCase())).actualSlug, name, `${JSON.stringify(name)}: its lowercase finds it`);
-        if (name !== name.trim()) assert.notEqual((await lookup(name.trim())).actualSlug, name, `${JSON.stringify(name)}: the trimmed name is another name`);
+        // The trimmed spelling is the same NAME (CalendarName.key, Oct 2026), so it follows to this calendar; the calendar
+        // itself is still stored and opened under its exact name (above), never the trimmed one.
+        if (name !== name.trim()) assert.equal((await lookup(name.trim())).actualSlug, name, `${JSON.stringify(name)}: the trimmed spelling follows to it`);
         const out = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: h, body: JSON.stringify({ sourceCalendarId: name }) })).json();
         assert.ok(out.publicViewId, JSON.stringify(out));
         const byView = await soon(async () => { const r = await lookup(out.publicViewId); return r.found ? r : null; });
@@ -280,7 +282,7 @@ function tab(id) {
             assert.ok(text.includes('SUMMARY:Bake sale') && text.includes(`X-WR-CALNAME:Cal ${i}`), `${JSON.stringify(name)}: ${feedPath} is this calendar's feed`);
         }
     }
-    step('names with a leading or trailing space, %, ?, NUÑEZ, !, & or Korean come back exactly from create, lookup, the view link and both feeds');
+    step('names with a leading or trailing space, %, ?, NUÑEZ, !, & or Korean come back exactly from create, lookup (the trimmed spelling too), the view link and both feeds');
 
     // ...and one registered before the fix (its view id stored as leading to the trimmed name) is healed by its next save.
     {

@@ -9,6 +9,7 @@ const vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '../../public/services/SlugManager.js'), 'utf8');
 const ctx = {};
 vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../../public/services/CalendarName.js'), 'utf8'), ctx);   // as the pages load it
 vm.runInContext(src + '\nthis.SlugManager = SlugManager;', ctx);
 const { SlugManager } = ctx;
 

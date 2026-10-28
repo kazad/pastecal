@@ -687,8 +687,8 @@ const CalendarVueApp = {
                 && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
         },
         isMineCalendar() {
-            const id = String((this.calendar && this.calendar.id) || '').toLowerCase();
-            return !!id && (this.recentCalendars || []).some(r => r && r.mine && String(r.id).toLowerCase() === id);
+            const id = (this.calendar && this.calendar.id) || '';
+            return !!id && (this.recentCalendars || []).some(r => r && r.mine && CalendarName.same(r.id, id));
         },
 
 
@@ -4143,7 +4143,7 @@ const CalendarVueApp = {
             // normalize. A name typed here is trimmed (once, now: from then on the name is exact everywhere); one that
             // came from the address ("/royal%20city%20", a draft saved where it was opened) is kept as it is.
             if (this.userHasEditedSlug && slug.trim()) slug = slug.trim();
-            slug = SlugManager.normalizeSlug(slug);
+            slug = SlugManager.newCalendarName(slug);
             this.calendar.id = slug;
             this.slugTaken = null;
             this.slugProblem = '';
@@ -6814,7 +6814,7 @@ const CalendarVueApp = {
         /** The logo menu's "Stats" beside a Pro calendar: here, or on that calendar's page. */
         openStatsFor(id) {
             this.showRecents = false;
-            if (this.calendar && String(this.calendar.id).toLowerCase() === String(id).toLowerCase()) {
+            if (this.calendar && CalendarName.same(this.calendar.id, id)) {
                 this.openInsight('stats', 'logo_menu');
                 return;
             }

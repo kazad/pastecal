@@ -112,11 +112,14 @@ for (const id of [FOO, `${Foo} `, `xFoO${T}`, Sp.trim(), `XSP${T}  `, Vbar.toUpp
     assert.equal((await r.json()).error, 'name taken');
     assert.equal((await fetch(url(id), { method: 'HEAD' })).status, 404, `${JSON.stringify(id)} was not created`);
 }
-// A spaced calendar with no directory row for its trimmed name, and none in this case: the registry alone knows it.
+// A spaced calendar with no directory row at all: the registry alone knows it.
 const Lone = `YLone${T} `;
 assert.equal((await put(Lone, '/import', { events: [ev('l', 'lone')] })).status, 200);
 await sleep(400);
-assert.equal((await lookup(Lone.trim().toLowerCase())).found, false, 'no row for the trimmed lowercase name');
+// (Until Oct 2026 the directory's key kept the space, so the trimmed name had no row; the key is trimmed now, CalendarName.)
+assert.equal((await lookup(Lone.trim().toLowerCase())).actualSlug, Lone, 'the trimmed lowercase name is the same name: it follows to it');
+assert.equal((await post('/api/admin/directory/dev/remove', { slug: Lone })).status, 200);
+assert.equal((await lookup(Lone.trim().toLowerCase())).found, false, 'its row removed (a calendar the directory never had)');
 r = await create(Lone.trim().toLowerCase());
 assert.equal(r.status, 409, 'refused through the registry');
 r = await create(`free${T}`, { events: [ev('f', 'free')] });

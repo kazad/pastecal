@@ -639,7 +639,7 @@ class CloudCalendarService extends CalendarDataService {
      * server could not be asked (offline, a 5xx); without it that counts as taken, never as free.
      */
     static async checkExists(id, callback_yes, callback_no, callback_failed = null) {
-        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(CalendarName.key(id || '')) || String(id || '').trim().startsWith('@')) { callback_yes(); return; }
         try {
             const lookup = await this.lookupCalendar(id);
             if (lookup.data?.found) { callback_yes(); return; }

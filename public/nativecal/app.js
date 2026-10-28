@@ -1339,7 +1339,7 @@ const CalendarVueApp = {
             }
 
             // normalize
-            slug = SlugManager.normalizeSlug(slug);
+            slug = SlugManager.newCalendarName(slug);
             this.calendar.id = slug;
 
             // check for existing
