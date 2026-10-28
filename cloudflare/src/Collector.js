@@ -33,7 +33,8 @@ export function toDataPoints(body, country = '') {
             indexes: [name],
             blobs: [
                 name,
-                path.startsWith('/nativecal') ? 'native' : 'classic',
+                // The new calendar on any calendar link (the "Try the new calendar" opt-in) says so in renderer.
+                p.renderer === 'native' || path.startsWith('/nativecal') ? 'native' : 'classic',
                 str(p.browser, 12),
                 str(p.device, 12),
                 str(country, 4),

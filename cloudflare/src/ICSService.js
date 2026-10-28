@@ -185,6 +185,23 @@ export const ICSService = {
         });
     },
 
+    // The editor writes "the last Monday" as BYDAY=MO;BYSETPOS=-1 (and ends rules with ';'). RFC 5545 means the same by
+    // BYDAY=-1MO, the form every calendar app reads; BYSETPOS is the one some read wrongly (issue #48: a yearly "last
+    // Monday of October" subscribed elsewhere showed in 2026 and never again). One weekday plus one position becomes the
+    // plain form; anything else (several weekdays, several positions) is left as it is.
+    plainPositions(rule) {
+        let parts = String(rule).split(';').filter(Boolean);
+        const get = (k) => parts.find((x) => x.toUpperCase().startsWith(`${k}=`));
+        const pos = get('BYSETPOS'), day = get('BYDAY'), freq = get('FREQ');
+        if (pos && day && /^FREQ=(MONTHLY|YEARLY)$/i.test(freq || '')) {
+            const n = pos.split('=')[1], d = day.split('=')[1];
+            if (/^-?[1-5]$/.test(n) && /^(MO|TU|WE|TH|FR|SA|SU)$/i.test(d)) {
+                parts = parts.filter((x) => x !== pos).map((x) => (x === day ? `BYDAY=${n}${d.toUpperCase()}` : x));
+            }
+        }
+        return parts.join(';');
+    },
+
     // No zone at all (no options.tz, no all-day events to guess from): the series is written in UTC, as before, but a
     // weekly BYDAY names the creator's LOCAL weekdays. A start west of UTC falls on the next UTC day (Tue 5:30 PM in LA is
     // Wed 00:30Z), east of it on the day before, so the rule repeated on the wrong day in every calendar app (Oct 26
@@ -286,7 +303,7 @@ export const ICSService = {
         const allDay = !!event.isAllDay;
         const tz = this.zoneOf(event, calZone);
         const rule = event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)
-            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), allDay, tz, !!EventStore.validZone(event.tz), this.toMs(event.start))) : null;
+            ? this.safeRule(this.seriesRule(this.plainPositions(String(event.recurrencerule).trim()), allDay, tz, !!EventStore.validZone(event.tz), this.toMs(event.start))) : null;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
         let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
         const dateParam = allDay ? ';VALUE=DATE' : tz ? `;TZID=${tz}` : '';

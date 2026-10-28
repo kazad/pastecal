@@ -29,6 +29,9 @@ assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be
 
 // native vs classic from the path
 assert.equal(toDataPoints({ events: [ev('x', {}, '/nativecal/foo')] })[0].blobs[1], 'native');
+// The opt-in new calendar on an ordinary calendar link: the page says renderer native (analytics.js baseParams).
+assert.equal(toDataPoints({ events: [ev('event_added', { renderer: 'native' }, '/my-team')] })[0].blobs[1], 'native');
+assert.equal(toDataPoints({ events: [ev('event_added', {}, '/my-team')] })[0].blobs[1], 'classic');
 
 // first_event_seconds + detail
 const b = toDataPoints({ events: [ev('event_added', { first_event_seconds: 12, source: 'grid' })] })[0];

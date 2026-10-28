@@ -245,3 +245,21 @@ test('no zone at all: a weekly series lands on its local weekdays in a calendar 
         assert.deepEqual([...seen].sort(), [...want].sort(), `${zone} ${byday}: ${ics.match(/RRULE:.*/)[0]}`);
     }
 });
+
+// Issue #48, still failing for the reporter after the site was fixed: the feed sent "the last Monday of October" as
+// BYDAY=MO;BYSETPOS=-1, a form some calendar apps get wrong. It now sends BYDAY=-1MO, and the dates are the same ones.
+test('feed: a yearly "last Monday of October" is written as BYDAY=-1MO and expands to the last Monday every year', async () => {
+    const rrule = (await import('../../cloudflare/src/vendor/rrule-2.8.1.esm.js')).default;
+    const { ICSService } = await import('../../cloudflare/src/ICSService.js');
+    const events = [{ id: 'board', title: 'Board', type: 1, start: '2026-10-26T17:00:00.000Z', end: '2026-10-26T18:00:00.000Z',
+        recurrencerule: 'FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;' }];
+    const ics = ICSService.generateICS({ id: 'c', title: 'Board', options: { tz: 'America/Los_Angeles' }, events }, 'c');
+    const line = ics.split('BEGIN:VEVENT')[1].split(/\r?\n/).find((l) => l.startsWith('RRULE:'));
+    assert.equal(line, 'RRULE:FREQ=YEARLY;BYDAY=-1MO;BYMONTH=10;INTERVAL=1');
+    const r = rrule.rrulestr(`DTSTART:20261026T100000\n${line}`);
+    const days = r.between(new Date(Date.UTC(2027, 0, 1)), new Date(Date.UTC(2032, 0, 1))).map((d) => d.toISOString().slice(0, 10));
+    assert.deepEqual(days, ['2027-10-25', '2028-10-30', '2029-10-29', '2030-10-28', '2031-10-27']);
+    // Several weekdays with a position stay as they are (no single-day form says that).
+    assert.equal(ICSService.plainPositions('FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1'), 'FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1');
+    assert.equal(ICSService.plainPositions('FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;'), 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1');
+});

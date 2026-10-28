@@ -247,6 +247,7 @@ test('F03b [card] drag a new event, press Enter without a title: it is added as 
   const c = await slot(page, '2026-10-29', 14);
   await page.mouse.click(c.x, c.y + 6);
   await expect(card(page)).toBeVisible();
+  await page.waitForTimeout(300);   // past the card's entrance, as a person would be
   await page.mouse.click(5, 5);
   await expect(card(page)).toBeHidden();
   await page.waitForTimeout(1200);
@@ -302,6 +303,23 @@ test('F03d [card] the next new event starts with the type the last one was added
   await page.waitForTimeout(1200);
   const rows = await stored(id);
   expect(rows.map((e) => [e.title, Number(e.type)]).sort(), 'Review has Standup\'s type; the empty one is not added').toEqual([['Review', Number(first.type)], ['Standup', Number(first.type)]]);
+  await ctx.close();
+});
+
+test('F03e [grid] back-to-back events read as two (a gap between them) and a strip on the right of the day stays free to add another at the same time', async ({ browser }) => {
+  const id = await seed([timed('a', 'First', '2026-10-27T13:30:00-07:00', '2026-10-27T14:30:00-07:00'),
+    timed('b', 'Second', '2026-10-27T14:30:00-07:00', '2026-10-27T15:30:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27', { colorScheme: 'dark' });
+  await ev(page, 'a').scrollIntoViewIfNeeded();
+  const a = await ev(page, 'a').boundingBox(), b = await ev(page, 'b').boundingBox();
+  await shot(page, 'F03e-gap-and-gutter');
+  expect(b.y - (a.y + a.height), 'a visible gap between back-to-back events').toBeGreaterThanOrEqual(2);
+  const col = await page.evaluate(({ x, y }) => { const el = document.elementsFromPoint(x, y).find((e) => e.matches && e.matches('.nc-col, [class*="nc-day-col"], .nc-time-col')); const r = el && el.getBoundingClientRect(); return r ? { x: r.x, width: r.width } : null; }, { x: a.x + 2, y: a.y + 2 });
+  const right = col ? col.x + col.width : a.x + a.width + 20;
+  expect(right - (a.x + a.width), 'a free strip on the right of the day').toBeGreaterThanOrEqual(10);
+  await page.mouse.click(right - 4, a.y + a.height / 2);
+  await expect(card(page)).toBeVisible();
+  await expect(card(page)).toHaveAttribute('aria-label', 'New event');
   await ctx.close();
 });
 
