@@ -279,6 +279,8 @@
     <!-- An event's own time zone (before EventStore and the models that read it). -->
     <script src="/services/EventZone.js?v=1792797113"></script>
     <script src="/services/EventStore.js?v=1792797113"></script>
+    <!-- Settings' Import .ics: a calendar file into events, no duplicates (after EventZone and EventStore, which it uses). -->
+    <script src="/services/ICSImport.js?v=1792797113"></script>
     <!-- Picks the backend: replaces CalendarDataService with the Cloudflare one when ?backend=cf / new.pastecal.com. Flag off = no effect. -->
     <script src="/services/EditorKeys.js?v=1792797113"></script>
     <script src="/services/CloudCalendarService.js?v=1792797113"></script>
@@ -1335,6 +1337,25 @@
                                 <span class="pc-set-copy-hint">A new calendar with these events and colors, for next season or your own use.</span>
                                 <button type="button" class="pc-btn pc-btn--sm" @click="makeOwnCopy('full', 'settings')" data-testid="settings-copy-btn">Make a copy</button>
                             </div>
+                            <!-- Backup: this calendar as a file (the edit feed with each event's stored row), and a file's
+                                 events back in, never twice (services/ICSImport.js). Nothing is saved until Import. -->
+                            <div class="pc-set-backup" data-testid="settings-backup">
+                                <span class="pc-set-copy-hint">Backup:</span>
+                                <a v-if="icsDownloadURL()" :href="icsDownloadURL()" download class="pc-link" data-testid="ics-download"
+                                    @click="icsDownloaded">Download .ics</a>
+                                <span v-if="icsDownloadURL()" class="pc-set-copy-hint" aria-hidden="true">·</span>
+                                <button type="button" class="pc-link" @click="$refs.icsFile.click()" data-testid="ics-import">Import .ics</button>
+                                <input ref="icsFile" type="file" accept=".ics,text/calendar" hidden @change="icsPicked" data-testid="ics-file">
+                            </div>
+                            <div v-if="icsPlan" class="pc-set-copy" data-testid="ics-plan">
+                                <span class="pc-set-copy-hint">{{ icsPlan.summary }}</span>
+                                <span class="pc-set-backup">
+                                    <button type="button" class="pc-link" @click="icsPlan = null" data-testid="ics-cancel">Cancel</button>
+                                    <button v-if="icsPlan.commands.length" type="button" class="pc-btn pc-btn--sm" @click="icsImportConfirm" data-testid="ics-confirm">Import</button>
+                                </span>
+                            </div>
+                            <p v-if="icsNote" class="pc-set-copy-hint pc-set-note" role="status" data-testid="ics-note">{{ icsNote }}
+                                <button v-if="icsUndo" type="button" class="pc-link" @click="icsUndoImport" data-testid="ics-undo">Undo</button></p>
                         </div>
 
                         <!-- Just me: this device, any calendar -->

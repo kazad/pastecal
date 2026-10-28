@@ -54,9 +54,13 @@
       { "name": "CALENDARS", "class_name": "CalendarRoom" },
       { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
       { "name": "WAITLIST", "class_name": "Waitlist" },
-      { "name": "ACCOUNTS", "class_name": "Accounts" }   // Pro owners, sessions, subscriptions (one global instance)
+      { "name": "ACCOUNTS", "class_name": "Accounts" },   // Pro owners, sessions, subscriptions (one global instance)
+      { "name": "BACKUP_ARCHIVE", "class_name": "BackupArchive" }   // the daily full archive job (BackupArchive.js)
     ]
   },
+  // 09:00 UTC daily: the full archive of every calendar to R2 archive/daily/<date>.json.gz, kept forever
+  // (BackupArchive.js). Checked by GET /api/admin/backup/health (scripts/health.py).
+  "triggers": { "crons": ["0 9 * * *"] },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
   // Telemetry (POST /api/collect): 60 batches a minute per IP. Its own limiter, not CREATE_LIMITER: 10 a
   // minute would drop real telemetry from a school or office sharing one IP.
@@ -68,18 +72,21 @@
     { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
     { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
-    { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
+    { "tag": "v4", "new_sqlite_classes": ["Accounts"] },
+    { "tag": "v5", "new_sqlite_classes": ["BackupArchive"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
-  // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.
+  // Off since Oct 28 2026 (owner: no rollback to Firebase; Cloudflare is the only store). Firebase keeps its last state,
+  // and its daily backups were copied into R2 under firebase/. "*" would mirror every save back again.
   "vars": {
     "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
-    "COPY_BACK": "*"
+    "COPY_BACK": ""
   },
   // NATIVE_VIEW_LINKS: "1" draws view links with pastecal's own calendar instead of Syncfusion's (src/Site.js,
   // docs/native-switch.md). Unset = classic; a browser can still pick with ?cal=native|classic.
   // First-party event collector (POST /api/collect). Query with scripts/stats.sh ux.
-  // Backups: each calendar writes its own snapshot here after a change (CalendarRoom.backupToR2).
+  // Backups: each calendar writes its own snapshot here after a change (CalendarRoom.backupToR2), and the
+  // daily full archive goes to archive/daily/ (BackupArchive.js). firebase/ holds copies of the Firebase backups.
   "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups" }],
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events" }],
   // Sign-in links for Pro owners (Cloudflare Email Service). pastecal.com must be onboarded for sending.
@@ -121,14 +128,20 @@
           { "name": "CALENDARS", "class_name": "CalendarRoom", "script_name": "pastecal-sync" },
           { "name": "DIRECTORY", "class_name": "CalendarDirectory", "script_name": "pastecal-sync" },
           { "name": "WAITLIST", "class_name": "Waitlist" },
-          { "name": "ACCOUNTS", "class_name": "Accounts" }
+          { "name": "ACCOUNTS", "class_name": "Accounts" },
+          // Its own archive job, so it writes to pastecal-backups-staging. It reads the live calendars
+          // (CALENDARS/DIRECTORY above), so that bucket gets a second copy of real calendars.
+          { "name": "BACKUP_ARCHIVE", "class_name": "BackupArchive" }
         ]
       },
+      // No daily archive on preview: it runs on the live calendars, which production already archives (owner, Oct 28 2026).
+      "triggers": { "crons": [] },
       "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
         { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
         { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
-        { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
+        { "tag": "v4", "new_sqlite_classes": ["Accounts"] },
+        { "tag": "v5", "new_sqlite_classes": ["BackupArchive"] }
       ],
       // Its own namespace, so staging traffic never spends production's per-IP budget.
       "ratelimits": [

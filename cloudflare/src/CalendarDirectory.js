@@ -192,6 +192,16 @@ export class CalendarDirectory extends DurableObject {
             return Response.json({ ok: true, count: inserted });
         }
 
+        // Every row, a page at a time in key order (keyset: ?after=<last normalized>), for the daily
+        // full archive (BackupArchive.js). Rows hold no secrets: names, where they lead, and when.
+        if (request.method === 'GET' && path === '/list') {
+            const after = url.searchParams.get('after') || '';
+            const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 500, 1), 1000);
+            const rows = this.sql.exec(`SELECT normalized, actual_slug, is_readonly, target_id, created_at, ended_at FROM directory
+                WHERE normalized > ? ORDER BY normalized LIMIT ?`, after, limit).toArray();
+            return Response.json({ rows, next: rows.length === limit ? rows[rows.length - 1].normalized : null });
+        }
+
         if (request.method === 'GET' && path === '/stats') {
             const total = this.sql.exec(`SELECT count(*) as c FROM directory`).toArray()[0]?.c || 0;
             const readOnly = this.sql.exec(`SELECT count(*) as c FROM directory WHERE is_readonly = 1`).toArray()[0]?.c || 0;

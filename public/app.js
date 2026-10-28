@@ -469,6 +469,11 @@ const CalendarVueApp = {
             // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
             template: null,
             templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
+            // Settings' Backup row (icsPicked): the plan for a picked .ics file awaiting Import / Cancel, and the one line after
+            // (a result, or why a file can't be imported) with Undo while the import is still the last change.
+            icsPlan: null,
+            icsNote: '',
+            icsUndo: false,
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
             // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
@@ -4553,6 +4558,67 @@ const CalendarVueApp = {
             return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
+        // Settings' "Download .ics": the edit feed as a backup file (the Worker's ?download=1: each event's stored row
+        // too, so Import brings it back exactly). Only for a saved calendar: a draft has no feed yet.
+        icsDownloadURL() {
+            const feed = this.getEditableICSURL();
+            return feed && this.isExisting ? `${feed}?download=1` : null;
+        },
+
+        icsDownloaded() { track(a => a.featureUsed('ics_download')); },
+
+        /**
+         * Settings' "Import .ics": a file picked -> what importing it would do (services/ICSImport.js), shown for Import /
+         * Cancel. Nothing is saved yet. A file that can't be imported says why on the same line.
+         */
+        async icsPicked(e) {
+            const input = e && e.target, file = input && input.files && input.files[0];
+            if (input) input.value = '';   // the same file can be picked again
+            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false;
+            if (!file) return;
+            if (file.size > ICSImport.MAX_BYTES) { this.icsNote = 'That file is over 2 MB.'; return; }
+            let plan;
+            try {
+                plan = ICSImport.plan(this.calendar.events || [], await file.text(),
+                    { calZone: this.calendarZone, localZone: EventZone.localZone() });
+            } catch (err) {
+                this.icsNote = err instanceof ICSImport.ImportError ? err.message : 'That file couldn’t be read.';
+                if (!(err instanceof ICSImport.ImportError)) console.warn('[ics import]', err);
+                return;
+            }
+            // A draft's first save is the whole calendar in one request, which the server caps at 1 MB (saved, it goes in parts).
+            if (!this.isExisting && plan.bytes > 900 * 1024) { this.icsNote = 'That file is big: save this calendar first, then import it.'; return; }
+            this.icsPlan = { ...plan, summary: ICSImport.summary(plan) };
+        },
+
+        /** Import: the plan's changes as one store change (saved and synced like any edit, one Undo). */
+        icsImportConfirm() {
+            const plan = this.icsPlan;
+            this.icsPlan = null;
+            if (!plan || !plan.commands.length) return;
+            const label = plan.add ? `Imported ${plan.add === 1 ? '1 event' : `${plan.add} events`}` : 'Imported changes';
+            const r = this.store().dispatch({ type: 'batch', commands: plan.commands, label }, { label });
+            // (A refused change has already said why in a toast: EventStore's onError.)
+            if (!r.ok) { this.icsNote = 'Nothing was imported.'; return; }
+            if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+            // (The entry itself kept off the reactive data: a proxy of it never equals the stack's own.)
+            const stack = this.store().undoStack;
+            this._icsUndo = stack[stack.length - 1] || null;
+            this.icsUndo = !!this._icsUndo;
+            this.icsNote = [plan.add && `Added ${plan.add === 1 ? '1 event' : `${plan.add} events`}`, plan.update && `updated ${plan.update}`]
+                .filter(Boolean).join(', ').replace(/^u/, 'U') + '.';
+            track(a => a.featureUsed('ics_import', `${plan.add}+${plan.update}`));
+        },
+
+        /** The result line's Undo: only while the import is still this tab's last change. */
+        icsUndoImport() {
+            const stack = this.store().undoStack;
+            if (this._icsUndo && stack[stack.length - 1] === this._icsUndo) this.undoLastLocal();
+            this._icsUndo = null;
+            this.icsUndo = false;
+            this.icsNote = '';
+        },
+
         getReadOnlyICSURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyICSURL(this.calendar);
@@ -6706,6 +6772,8 @@ const CalendarVueApp = {
             const out = (this.lock.locked || this.lock.paused) && !this.lock.canEdit;
             if (out !== this.lockedOut) {
                 this.lockedOut = out;
+                // An edit link that opens read-only is the "my link turned view-only" report (Oct 27 2026): count it.
+                if (out && !this.viewRoute) track(a => a.track('edit_link_readonly', { reason: this.lock.paused ? 'paused' : 'locked' }));
                 this.setIsReadOnly(out || this.viewRoute);
                 if (out) this.editTitle = false;
                 try {

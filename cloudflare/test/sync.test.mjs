@@ -99,6 +99,20 @@ zev = (await zsave('z4', [{ type: 'add', event: { id: 'mars-1', title: 'Mars', s
 assert.ok(!('tz' in zev), JSON.stringify(zev));
 step('an event time zone is stored, kept through a rename, written to the feed with TZID, removed with null; an unknown zone is never stored');
 
+// 5b. Download .ics (Settings): the edit feed with ?download=1 is a file named for the calendar, never cached, each event
+// carrying its stored row (ICSService.backupRow); the subscribed feed and a view link's feed carry no rows.
+const dl = await fetch(`${BASE}/${id}.ics?download=1`);
+assert.equal(dl.status, 200);
+assert.match(dl.headers.get('content-disposition') || '', /^attachment; filename="T\.ics"; filename\*=UTF-8''T\.ics$/);
+assert.equal(dl.headers.get('cache-control'), 'no-store');
+const dlText = (await dl.text()).replace(/\r\n[ \t]/g, '');
+const row = dlText.split('\r\n').find((l) => l.startsWith('X-PASTECAL-ROW:') && l.includes('tokyo-1'));
+assert.ok(row, dlText.slice(0, 1500));
+assert.equal(JSON.parse(row.slice(15).replace(/\\([nN,;\\])/g, (m, c) => (/n/i.test(c) ? '\n' : c))).title, 'Tokyo standup (renamed)');
+assert.ok(!/X-PASTECAL-ROW/.test(ics), 'the subscribed feed has no rows');
+assert.ok(!/X-PASTECAL-ROW/.test(await (await fetch(`${BASE}/view/${id}.ics?download=1`)).text()), 'a view link\'s feed is never the backup');
+step('Download .ics: an attachment named for the calendar, not cached, with each event\'s stored row; feeds carry none');
+
 // 6. A save loop is refused by the server, not just discouraged in the browser.
 const loopStart = Date.now();
 for (let i = 0; i < 100; i++) A.send({ t: 'save', id: `loop${i}`, v: 0, commands: [{ type: 'update', key: soccer, changes: { description: `loop ${i}` } }] });

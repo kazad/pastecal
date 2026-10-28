@@ -34,6 +34,14 @@ assert.equal(count(ics, 'END:VEVENT'), 4);
 assert.equal(lines(ics).filter((l) => l === 'SUMMARY:x').length, 0, 'no injected SUMMARY line');
 step('CR/LF in id, recurrenceID, rule, title, description and calendar title cannot start a new line or VEVENT');
 
+// 1b. The same in a backup (Download .ics): each event's stored row is one escaped line, whatever it holds.
+const backup = ICSService.generateICS(cal, 'team', { backup: true });
+wellFormed(backup);
+assert.equal(count(backup, 'BEGIN:VEVENT'), 4);
+assert.equal(lines(backup).filter((l) => l.startsWith('X-PASTECAL-ROW:')).length, 4, 'one row line per event');
+assert.equal(lines(backup).filter((l) => l === 'SUMMARY:x').length, 0, 'no injected SUMMARY line');
+step('a backup\'s stored-row lines cannot start a new line or VEVENT either');
+
 // 2. A rule with anything outside the rule alphabet is dropped: the event is published once.
 const standup = unfold(ics).split('BEGIN:VEVENT').find((b) => b.includes('SUMMARY:Standup'));
 assert.ok(!/RRULE/.test(standup), 'an unsafe rule must be dropped, not emitted');

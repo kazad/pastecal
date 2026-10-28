@@ -213,15 +213,15 @@ if step 3 "Dry run" "Bundles launch-prep for $WORKER without uploading, and chec
     rm -rf "$out"
     grep -E 'env\.|Total Upload' <<<"$dry"
     [ $rc -eq 0 ] || { tail -20 <<<"$dry"; die "dry run failed"; }
-    for b in 'env.CALENDARS (CalendarRoom)' 'env.DIRECTORY (CalendarDirectory)' 'env.WAITLIST (Waitlist)' 'env.ACCOUNTS (Accounts)' \
+    for b in 'env.CALENDARS (CalendarRoom)' 'env.DIRECTORY (CalendarDirectory)' 'env.BACKUP_ARCHIVE (BackupArchive)' 'env.WAITLIST (Waitlist)' 'env.ACCOUNTS (Accounts)' \
              'env.EMAIL' 'env.BACKUPS (pastecal-backups)' 'env.EVENTS (pastecal_events)' 'env.CREATE_LIMITER' 'env.COLLECT_LIMITER' \
-             'env.ASSETS' 'env.FIREBASE_DB_URL ("https://pastecal-web-default-rtdb' 'env.COPY_BACK ("*")'; do
+             'env.ASSETS' 'env.FIREBASE_DB_URL ("https://pastecal-web-default-rtdb' 'env.COPY_BACK ("")'; do   # the Firebase mirror is off (Oct 28 2026)
         grep -qF "$b" <<<"$dry" || die "binding missing from the dry run: $b"
     done
     for b in BETA_REAL_DATA BILLING_TEST_MODE ACCOUNTS_DEV_MODE SITE_URL staging; do
         grep -q "$b" <<<"$(grep 'env\.' <<<"$dry")" && die "the production bundle carries $b"
     done
-    ok "bindings: live's nine (CALENDARS DIRECTORY WAITLIST BACKUPS EVENTS CREATE_LIMITER ASSETS FIREBASE_DB_URL COPY_BACK) + ACCOUNTS, EMAIL, COLLECT_LIMITER; no staging/dev vars"
+    ok "bindings: live's nine (CALENDARS DIRECTORY WAITLIST BACKUPS EVENTS CREATE_LIMITER ASSETS FIREBASE_DB_URL COPY_BACK off) + ACCOUNTS, EMAIL, COLLECT_LIMITER; no staging/dev vars"
     say "  New on this deploy: Durable Object class Accounts (migration v4, ONE-WAY: no wrangler rollback across it)."
     yes_no "Bindings look right?" || die "stopped at the dry run"
 fi
