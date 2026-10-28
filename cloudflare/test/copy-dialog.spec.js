@@ -183,6 +183,25 @@ for (const native of [false, true]) {
   });
 }
 
+// A locked calendar's "Make your own copy" (LockBadge emits copy, which calls makeOwnCopy() with no arguments) opens the
+// same dialog: a calendar of your own, the original untouched. ("Make one like this", makeOwnCopy('style'), still starts
+// a homepage draft: app-polish.spec.js.)
+test('"Make your own copy" (makeOwnCopy(), as a locked calendar\'s badge calls it) opens the dialog and makes the copy', async ({ browser }) => {
+  const id = await seed();
+  const before = await calOf(id);
+  const { ctx, page } = await open(browser, id);
+  await page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.makeOwnCopy());
+  await expect(page.getByTestId('copy-dialog')).toBeVisible();
+  await expect(page.getByTestId('copy-events')).toBeChecked();
+  const name = `${id}-mine`;
+  await page.getByTestId('copy-name').fill(name);
+  await page.getByTestId('copy-make').click();
+  await page.waitForURL((u) => decodeURIComponent(u.pathname) === `/${name}`);
+  expect((await calOf(name)).events).toHaveLength(3);
+  expect(await calOf(id)).toEqual(before);
+  await ctx.close();
+});
+
 test('phone: the dialog fits and works, light and dark', async ({ browser }) => {
   const id = await seed();
   for (const colorScheme of ['light', 'dark']) {

@@ -101,6 +101,15 @@ for (const native of [false, true]) {
     await expect(you.getByLabel('My default view')).toHaveValue('Week');
     await expect(you.getByLabel('Theme')).toHaveValue('dark');
     expect(await vm(page, 'p.globalSettings.timeFormat')).toBe('24');
+    // Date format: the pattern the calendar's dates are written in. Start hour: where the day starts.
+    expect(await vm(page, 'p.resolveDateFormat()')).toBe('yyyy-MM-dd');
+    if (!native) expect(await page.evaluate(() => window.scheduleObj.startHour)).toBe('07:00');
+    // My default view: opened with no view in the address (and none chosen for everyone), it is Week.
+    await page.goto(`/${id}?backend=cf${native ? '&cal=native' : ''}`);
+    await loaded(page, native);
+    if (native) await expect(page.getByRole('tab', { name: 'Week', exact: true })).toHaveAttribute('aria-selected', 'true');
+    else await expect.poll(() => page.evaluate(() => window.scheduleObj.currentView)).toBe('Week');
+    await vm(page, "p.openSideTab('you')");
     await you.getByLabel('Theme').selectOption('light');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     expect(errors).toEqual([]);
@@ -122,6 +131,16 @@ for (const native of [false, true]) {
     await expect(page.getByTestId('settings-copy-btn')).toHaveText('Make a copy');
     await expect(page.getByTestId('ics-download')).toHaveText('Download .ics');
     await expect(page.getByTestId('ics-import')).toHaveText('Import .ics');
+    // The ones that show only when they apply: Reset colors once a color is changed, the custom length with Custom.
+    await expect(settings.getByRole('button', { name: 'Reset colors' })).toHaveCount(0);
+    await settings.locator('#color-picker-0').evaluate((el) => { el.value = '#2e7d32'; el.dispatchEvent(new Event('change', { bubbles: true })); });
+    await expect(settings.getByRole('button', { name: 'Reset colors' })).toBeVisible();
+    await settings.getByRole('button', { name: 'Reset colors' }).click();
+    await expect(settings.getByLabel('Custom view length')).toHaveCount(0);
+    await settings.getByLabel('Default view for everyone').selectOption('Custom');
+    await expect(settings.getByLabel('Custom view length')).toBeVisible();
+    await expect(settings.getByLabel('Custom view unit')).toBeVisible();
+    await settings.getByLabel('Default view for everyone').selectOption({ index: 0 });
     // ...and none of yours.
     for (const label of ['First day of week', 'Time format', 'Date format', 'Start hour', 'My default view', 'Theme', 'Your name (optional)']) {
       await expect(settings.getByLabel(label, { exact: true }), label).toHaveCount(0);
