@@ -47,7 +47,8 @@ async function plantCollision() {
   const imp = await fetch(`${BASE}/cal/${name}/import`, { method: 'PUT', headers: admin, body: JSON.stringify({ id: name, title: 'Kept editable', options: {}, events: [ev('e1', 'Practice')] }) });
   expect(imp.status).toBe(200);
   await new Promise((r) => setTimeout(r, 300));   // its directory registration (refused: the name leads to a live calendar)
-  expect((await lookup(name)).isReadOnly, 'planted: the directory says it is a view').toBe(true);
+  // The lookup answers the calendar of exactly this name over the view row, and says so (exact: 'view', ExactNames.js).
+  expect(await lookup(name), 'planted: the directory says it is a view').toEqual({ found: true, actualSlug: name, isReadOnly: false, targetId: name, exact: 'view' });
   return name;
 }
 

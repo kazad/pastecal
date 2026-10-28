@@ -200,4 +200,4 @@ assert.doesNotMatch(txt, new RegExp(SECRET));
 rmSync(f, { force: true });
 step('scripts/backfill-rooms.mjs: dry run and --apply against this server (an array, and an export object\'s keys); the secret is never printed');
 
-console.log(`\nexact-names: ${n} checks passed`);
+console.log(`\n${n} checks passed`);

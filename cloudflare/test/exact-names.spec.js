@@ -97,10 +97,18 @@ test('two spellings: /xfoo opens xfoo and saves to it (edit_case_variant), /XFoo
   await page.goto(`/${big}?backend=cf`);
   await loaded(page);
   await expect.poll(() => shown(page), { timeout: 15_000 }).toEqual({ id: big, title: 'Big calendar', events: ['Big one', 'Big three', 'Big two'] });
+  // A spelling with no calendar of its own: its (empty) room answers first, then the row is followed. Nothing is
+  // made at that spelling: no save, no recents entry.
+  const posts = [];
+  page.on('request', (r) => { if (r.method() !== 'GET' && r.method() !== 'HEAD' && r.url().includes('/cal/')) posts.push(`${r.method()} ${r.url()}`); });
   await page.goto(`/${third}?backend=cf`);
   await loaded(page);
   await expect.poll(() => shown(page), { timeout: 15_000 }).toEqual({ id: big, title: 'Big calendar', events: ['Big one', 'Big three', 'Big two'] });
+  await settled(page);
   await shot(page, 'third-follows-row');
+  expect(posts).toEqual([]);
+  expect(await page.evaluate(() => new RecentCalendars().getAll().map((r) => r.id)), 'recents').not.toContain(third);
+  expect((await fetch(`${BASE}/cal/${enc(third)}`, { method: 'HEAD' })).status, 'nothing at the third spelling').toBe(404);
   expect({ errors, dialogs }).toEqual({ errors: [], dialogs: [] });
   await ctx.close();
 });
