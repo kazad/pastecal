@@ -238,8 +238,7 @@ class CloudCalendarService extends CalendarDataService {
                             // calendar stays editable here. Only a name with no calendar behind it forwards to its view.
                             const here = await this._editableAt(slug, lookup.data.actualSlug);
                             if (!here) {
-                                if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
-                                window.location.href = CalendarPath.view(lookup.data.actualSlug);
+                                this._forwardToView(lookup.data.actualSlug);
                                 return;
                             }
                             if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_name_collision', {}));
@@ -760,6 +759,12 @@ class CloudCalendarService extends CalendarDataService {
 
     /** { data: { found, ... } }. When the lookup itself failed (offline, a server error) `error` says so: that is not
      *  "no such calendar", and a caller that shows anything must tell the two apart. */
+    /** A view link named after its own calendar (July 2025 allowed it): the directory row is the edit name's (editable
+     *  wins), and the Worker still serves /cal/view/<slug> from the calendar whose own view id it is. HEAD: 200 = it does. */
+    static async viewLinkExists(slug) {
+        try { return (await fetch(`${this._base()}/cal/view/${encodeURIComponent(slug)}`, { method: 'HEAD' })).status === 200; } catch (e) { return false; }
+    }
+
     static async lookupCalendar(slug) {
         if (!slug) return { data: { found: false } };
         try {
@@ -788,7 +793,6 @@ class CloudCalendarService extends CalendarDataService {
         if (!res.ok || !out.ok) {
             const err = new Error(out.message || 'Failed to create read-only link');
             err.code = out.error || 'internal';
-            if (out.reason) err.reason = out.reason;   // 'calendar': the name is a calendar's (SlugManager.linkErrorMessage)
             throw err;
         }
         return { data: { publicViewId: out.publicViewId } };

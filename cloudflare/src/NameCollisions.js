@@ -15,6 +15,7 @@
  *   POST /api/admin/directory/make-editable {name, calendarId}   the repair: the row becomes calendarId's edit row
  *                                                          (calendarId must exist and be this name in any case)
  *   POST /api/admin/directory/dev-plant {actualSlug, isReadOnly, targetId}   tests only (ACCOUNTS_DEV_MODE)
+ *   POST /api/admin/directory/dev/{register,claim,remove}   tests only (ACCOUNTS_DEV_MODE): the directory's own routes
  * A collision: {name, normalized, kind, calendarId, row}. kind 'self': the view opens the calendar of that name
  * (repairing it keeps its view link working: index.js serves /view/<name> from a calendar whose own view id it is);
  * 'cross': the view opens ANOTHER calendar, whose view link a repair would end.
@@ -70,6 +71,13 @@ export async function handleCollisionAdmin(request, env, dir, path, url) {
         if (!body || !body.name || !validId(calendarId)) return Response.json({ ok: false, error: 'name and calendarId are required' }, { status: 400 });
         if (!(await calendarExists(env, calendarId))) return Response.json({ ok: false, error: 'no such calendar' }, { status: 404 });
         return dir.fetch('http://internal/make-editable', { method: 'POST', body: JSON.stringify({ slug: String(body.name), calendarId }) });
+    }
+    // Tests only (ACCOUNTS_DEV_MODE): the directory's own write routes, called as the rooms and Names.js call them, so
+    // each guard is tested by itself (the callers refuse most of these before they reach it).
+    const dev = path.match(/^\/api\/admin\/directory\/dev\/(register|claim|remove)$/);
+    if (dev && request.method === 'POST') {
+        if (env.ACCOUNTS_DEV_MODE !== '1') return new Response('not found', { status: 404 });
+        return dir.fetch(`http://internal/${dev[1]}`, { method: 'POST', body: await request.text() });
     }
     if (path === '/api/admin/directory/dev-plant' && request.method === 'POST') {
         return dir.fetch('http://internal/dev-plant', { method: 'POST', body: await request.text() });

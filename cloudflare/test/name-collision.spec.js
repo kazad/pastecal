@@ -4,7 +4,8 @@
  * name was a view link (a view named like a calendar, July 2025; the Oct 4 cutover gave the view the row).
  *   - a calendar whose directory row says "view" still opens for editing at its name, an edit saves, and the page
  *     reports edit_name_collision; a real view-only name still forwards to /view/ (edit_link_forwarded);
- *   - Share's Rename refuses a calendar's name (its own, or another's) with a message beside the name box.
+ *   - Share's Rename: this calendar's own name is refused before any request, with the owner's words beside the name
+ *     box; another calendar's name is refused by the server ("taken"); a free name works as before.
  * The collision is planted the way production got it: a view row first (backfill), then the calendar (import), whose
  * own registration never re-points a name that leads to another live calendar. The Worker half: name-collision.test.mjs.
  * Run with scripts/test-on-box.sh name-collision.
@@ -109,25 +110,78 @@ test('a real view-only name opened as an edit link still forwards to /view/<name
   await ctx.close();
 });
 
-test('Share\'s Rename refuses a calendar\'s name for the view-only link (its own, or another\'s), said beside the name box', async ({ browser }) => {
+// After the repair (scripts/fix-name-collisions.mjs) a view link named after its own calendar has an editable row: the
+// same state as a calendar imported with its own name as its view id (the room no longer registers that view id).
+for (const cal of ['classic', 'native']) {
+  test(`a view link named after its own calendar still opens read-only once its row is editable (${cal})`, async ({ browser }) => {
+    const name = `nc-own-${rand()}`;
+    const imp = await fetch(`${BASE}/cal/${name}/import`, { method: 'PUT', headers: admin, body: JSON.stringify({ id: name, title: 'Own name view', options: { publicViewId: name }, events: [ev('e1', 'Practice')] }) });
+    expect(imp.status).toBe(200);
+    await expect.poll(() => lookup(name).then((l) => l.found && l.isReadOnly === false)).toBe(true);
+    const { ctx, page, errors, dialogs } = await browserFor(browser);
+    await page.goto(`/view/${name}?backend=cf${cal === 'native' ? '&cal=native' : ''}`);
+    await loaded(page);
+    await expect.poll(() => page.evaluate(() => { const p = document.querySelector('#app')._vnode.component.proxy; return (p.calendar.events || []).map((e) => e.title); })).toEqual(['Practice']);
+    const state = await page.evaluate(() => { const p = document.querySelector('#app')._vnode.component.proxy; return { readOnly: p.isReadOnly, problem: p.viewProblem || null, title: p.calendar.title }; });
+    expect(state).toEqual({ readOnly: true, problem: null, title: 'Own name view' });
+    expect(new URL(page.url()).pathname).toBe(`/view/${name}`);
+    await settled(page);
+    await shot(page, `own-name-view-${cal}`);
+    expect({ errors, dialogs }).toEqual({ errors: [], dialogs: [] });
+    await ctx.close();
+  });
+}
+
+async function openRename(browser, id) {
+  const b = await browserFor(browser);
+  const sent = [];
+  b.page.on('request', (r) => { if (r.url().includes('/api/create-view')) sent.push(r.postData()); });
+  await b.page.goto(`/${id}?backend=cf`);
+  await loaded(b.page);
+  await settled(b.page);
+  await b.page.getByTestId('share-pill-more').click();
+  await b.page.getByTestId('share-group').getByRole('button', { name: 'Rename' }).click();
+  return { ...b, sent, box: b.page.getByLabel('New name for the view-only link') };
+}
+
+test('Rename view link to this calendar\'s own name (any case): the in-page message, nothing sent or saved', async ({ browser }) => {
+  const { id, viewId } = await seed({ view: true });
+  const { ctx, page, errors, dialogs, sent, box } = await openRename(browser, id);
+  for (const own of [id, id.toUpperCase()]) {
+    await box.fill(own);
+    await box.press('Enter');
+    await expect(page.getByTestId('view-rename-error')).toHaveText('That’s this calendar’s edit link name. Pick a different one, so the view link can’t be used to edit.');
+  }
+  await shot(page, 'rename-own-name');
+  await page.waitForTimeout(500);
+  expect(sent, 'no request was sent').toEqual([]);
+  expect((await calOf(id)).options.publicViewId, 'the view link is unchanged').toBe(viewId);
+  expect(await lookup(id)).toEqual({ found: true, actualSlug: id, isReadOnly: false, targetId: id });
+  expect({ errors, dialogs }).toEqual({ errors: [], dialogs: [] });
+  await ctx.close();
+});
+
+test('Rename view link to ANOTHER calendar\'s name is refused ("taken"), directory unchanged; a free name works as before', async ({ browser }) => {
   const { id, viewId } = await seed({ view: true });
   const other = await seed();
-  const { ctx, page, errors, dialogs } = await browserFor(browser);
-  await page.goto(`/${id}?backend=cf`);
-  await loaded(page);
-  await settled(page);
-  await page.getByTestId('share-pill-more').click();
-  await page.getByTestId('share-group').getByRole('button', { name: 'Rename' }).click();
-  const box = page.getByLabel('New name for the view-only link');
-  for (const taken of [other.id, id.toUpperCase()]) {
-    await box.fill(taken);
-    await box.press('Enter');
-    await expect(page.getByTestId('view-rename-error')).toContainText('That’s a calendar’s edit link, so it can’t be a view-only link. Try another name.');
-    await shot(page, `rename-refused-${taken === other.id ? 'other' : 'own'}`);
-  }
-  expect((await calOf(id)).options.publicViewId, 'the view link is unchanged').toBe(viewId);
-  expect((await lookup(other.id)).isReadOnly, 'the other calendar keeps its name').toBe(false);
-  expect((await lookup(id)).isReadOnly).toBe(false);
+  const { ctx, page, errors, dialogs, sent, box } = await openRename(browser, id);
+  await box.fill(other.id);
+  await box.press('Enter');
+  await expect(page.getByTestId('view-rename-error')).toHaveText('That name is taken. Try another.');
+  await shot(page, 'rename-other-calendar');
+  expect(sent.length, 'the server was asked, and refused').toBe(1);
+  expect(await lookup(other.id), 'the other calendar keeps its name').toEqual({ found: true, actualSlug: other.id, isReadOnly: false, targetId: other.id });
+  expect((await calOf(id)).options.publicViewId).toBe(viewId);
+  // A free name: renamed, and the new view link opens the calendar read-only.
+  const fresh = `nc-free-${rand()}`;
+  await box.fill(fresh);
+  await box.press('Enter');
+  await expect.poll(async () => (await calOf(id)).options.publicViewId, { timeout: 10_000 }).toBe(fresh);
+  await expect(page.getByTestId('view-rename-error')).toHaveCount(0);
+  expect((await lookup(fresh)).isReadOnly).toBe(true);
+  const v = await fetch(`${BASE}/cal/view/${fresh}`);
+  expect(v.status).toBe(200);
+  expect((await v.json()).calendar.title).toBe('Name collision');
   expect({ errors, dialogs }).toEqual({ errors: [], dialogs: [] });
   await ctx.close();
 });

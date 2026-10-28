@@ -403,7 +403,10 @@ const CalendarVueApp = {
                     // Couldn't ask (offline, a server error): not the same as "not found".
                     if (result.error) { this.isLoading = false; this.notifyLoadError('Couldn’t load this calendar. Check your connection and reload the page.'); return; }
 
-                    if (result.data.found && result.data.isReadOnly) {
+                    // A view link named after its own calendar: the name's row is the calendar's (editable wins), and its
+                    // view is still served (CloudCalendarService.viewLinkExists).
+                    const ownName = result.data.found && !result.data.isReadOnly && await CalendarDataService.viewLinkExists(requestedSlug);
+                    if (result.data.found && (result.data.isReadOnly || ownName)) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
                         console.log('Found read-only calendar with slug:', actualSlug);

@@ -975,7 +975,10 @@ const CalendarVueApp = {
 
                     // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
                     if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
-                    if (result.data.found && result.data.isReadOnly) {
+                    // A view link named after its own calendar: the name's row is the calendar's (editable wins), and its
+                    // view is still served (CloudCalendarService.viewLinkExists).
+                    const ownName = result.data.found && !result.data.isReadOnly && await CalendarDataService.viewLinkExists(requestedSlug);
+                    if (result.data.found && (result.data.isReadOnly || ownName)) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
                         console.log('Found read-only calendar with slug:', actualSlug);

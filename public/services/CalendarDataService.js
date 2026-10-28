@@ -287,6 +287,19 @@ class CalendarDataService {
         // - Validate event formats
     }
 
+    // An edit link whose name is a view link only: report it and go to the view. Analytics queues a report when the page
+    // is next idle and sends the queue on pagehide, so the forward waits for idle too (idle callbacks run in order),
+    // or the report would be lost with the page.
+    static _forwardToView(viewSlug) {
+        if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
+        const go = () => { window.location.href = CalendarPath.view(viewSlug); };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 500 }); else setTimeout(go, 50);
+    }
+
+    // Does /view/<slug> open a calendar even though the directory says the name is an edit link? (Cloudflare only:
+    // a view link named after its own calendar, CloudCalendarService.viewLinkExists.)
+    static async viewLinkExists(slug) { return false; }
+
     // The calendar stored under exactly this name, or null (none, or Firebase could not be read).
     static async _editableAt(slug) {
         try { return (await this.db.child(slug).once('value')).val() ? slug : null; } catch (e) { return null; }
@@ -319,8 +332,7 @@ class CalendarDataService {
                         this._subscribeExact(here, callback);
                         return;
                     }
-                    if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
-                    window.location.href = CalendarPath.view(result.data.actualSlug);
+                    this._forwardToView(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case
