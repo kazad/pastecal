@@ -114,6 +114,9 @@ assert.equal((await get(`/api/pro/versions/preview?calendar=${enc(id)}&date=../.
 assert.equal((await get(`/api/pro/versions/preview?calendar=${enc(id)}&date=${PRELOCK}`, owner.cookie)).status, 404, 'saved before the lock: hidden');
 r = await post('/api/pro/versions/restore', { calendarId: id, date: PRELOCK }, { cookie: owner.cookie });
 assert.equal(r.status, 404); assert.equal((await r.json()).error, 'no-such-version');
+// The admin archive restore passes a calendar inline (fromArchive); the Pro route never forwards one.
+r = await post('/api/pro/versions/restore', { calendarId: id, date: PRELOCK, fromArchive: { calendar: { title: 'x', events: [] } }, calendar: { title: 'x', events: [] } }, { cookie: owner.cookie });
+assert.equal(r.status, 404); assert.equal((await r.json()).error, 'no-such-version');
 step('preview returns the snapshot calendar; an unknown date is 404, a malformed one 400; a version saved before the lock is 404 (list, preview, restore)');
 
 // 4. Only the owner, and restore needs CSRF headers.

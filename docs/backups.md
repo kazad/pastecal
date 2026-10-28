@@ -1,5 +1,42 @@
 # Backups
 
+## Cloudflare (current): daily full archive, kept forever
+
+Every calendar (free and Pro) goes into one file a day in the R2 bucket `pastecal-backups` (staging:
+`pastecal-backups-staging`), written by `cloudflare/src/BackupArchive.js` from a cron at 09:00 UTC:
+
+| | |
+|---|---|
+| File | `archive/daily/YYYY-MM-DD.json.gz` -- one gzip stream of JSON lines (format: `cloudflare/src/archive-format.js`) |
+| Contents | every calendar `{id, v, locked, calendar}` (as the per-calendar snapshot), every directory row (view links, short names, tombstones) |
+| Not in it | editor keys / key hashes, owner ids, Pro settings, stats, history, accounts (emails, @handles) |
+| Metadata | customMetadata `version, date, count, dirRows, absent, failed, bytes, gzBytes, parts, startedAt, finishedAt` |
+| Retention | forever (never pruned) |
+| Size | ~4 MB gzipped a day, ~1.5 GB a year |
+
+How it runs: a singleton Durable Object takes one small step per alarm (one directory page, one page of the
+snapshot list, or 200 calendars), writes it as a part under `archive/parts/`, and joins the parts at the end.
+The old one-run backup (94ad206) never completed; this one finishes at any size. Rerunning a day overwrites it.
+`firebase/` holds copies of the Firebase backups below; nothing here writes or prunes it.
+
+Admin (Bearer IMPORT_SECRET): `POST /api/admin/backup/run`, `GET /api/admin/backup/{status,list,health}`.
+Health is part of `./scripts/stats.sh health`: missing, over 26 hours old, or under 95% of the directory's
+calendars shows under ATTENTION. Logs: `[backup:archive]` in Workers observability.
+
+Restore one calendar (dry run first; `--apply` goes through the normal restore, so the replaced state is saved
+as a restore point and Recent changes shows "Restored the full backup from <date>"):
+
+```bash
+node scripts/restore-from-archive.mjs --base https://pastecal.com --list
+node scripts/restore-from-archive.mjs --base https://pastecal.com "<calendar id>" 2026-10-29
+node scripts/restore-from-archive.mjs --base https://pastecal.com "<calendar id>" 2026-10-29 --apply
+```
+
+Per-calendar snapshots (`snapshots/<id>/<date>.json`, CalendarRoom.backupToR2) still run on every change; Pro
+"restore an earlier version" reads those.
+
+## Firebase (before Cloudflare)
+
 Realtime Database is backed up daily by Firebase's built-in backup feature (Blaze only).
 This file exists because that configuration lives in the Firebase console, not in the repo,
 so the only way to know it existed was to go looking for the bucket.
