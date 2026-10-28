@@ -17,7 +17,7 @@
 # empty unless the suite is the copy-back test, so nothing reaches Firebase, Stripe or pastecal.com.
 # Every wrangler this script starts is killed on exit, and the unit-test node_modules symlinks are
 # removed again. Logs: /tmp/pastecal-test-all-<timestamp>/. Exits nonzero if any suite failed.
-# Works with macOS bash 3.2 and Linux. Status: complete; last full run 2026-10-23 (Linux, Node 22), all 25 run suites passed in 246s.
+# Works with macOS bash 3.2 and Linux. Status: complete; last full run 2026-10-28 (omarchy, Node 22, -j 16): all 34 run suites passed in 47s (322s one at a time).
 
 set -u
 
