@@ -13,6 +13,8 @@ Answers "is anything wrong right now?" from the places the truth lives:
      /api/admin/backup/health (Bearer IMPORT_SECRET, from the env or the Keychain item pastecal-import-secret,
      never printed) -- missing, over 26h old, or under 95% of the directory's calendars is ATTENTION. Without
      the secret, only the newest file's age is checked (from the R2 listing).
+  4. name collisions: GET /api/admin/directory/collisions?scope=self (same secret) -- a view link named after its own
+     calendar, whose edit link then forwards to the view, is ATTENTION (repair: scripts/fix-name-collisions.mjs).
 
 Anything that needs a person is printed first, under ATTENTION. deploy.sh runs this after
 every hosting deploy, because a bad release shows up here within minutes (Sep 26: a series
@@ -214,6 +216,33 @@ except Exception as e:
     backup, backup_flags = f'unavailable ({type(e).__name__})', [f'backup: the archive check failed ({type(e).__name__})']
 for f in backup_flags: flag(f)
 
+# ---------------------------------------------------------------- 5. name collisions (Cloudflare directory)
+# A view row named after its own calendar takes that calendar's edit link (it forwards to /view/<name>; 45 calendars,
+# Oct 28 2026). GET /api/admin/directory/collisions?scope=self: SQL, then one HEAD per candidate. The full scan (a view
+# named after ANOTHER calendar) reads every row: scripts/fix-name-collisions.mjs, not here.
+def check_collisions():
+    secret = import_secret()
+    if not secret: return 'not checked (no IMPORT_SECRET)', []
+    req = urllib.request.Request(f'{SITE}/api/admin/directory/collisions?scope=self', headers={'User-Agent': 'pastecal-health', 'Authorization': f'Bearer {secret}'})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            found = json.loads(r.read()).get('collisions', [])
+    except ValueError:
+        return 'not checked (this deploy has no collision route)', []    # a page, not JSON
+    except urllib.error.HTTPError as e:
+        if e.code == 404: return 'not checked (this deploy has no collision route)', []
+        return f'route answered HTTP {e.code}', [f'names: the collision check answered HTTP {e.code}']
+    if not found: return 'none (no view link holds its own calendar\'s name)', []
+    names = ', '.join(c['name'] for c in found[:5]) + (' ...' if len(found) > 5 else '')
+    return (f'{len(found)} edit link(s) forward to their view: {names}',
+            [f'names: {len(found)} calendar(s) whose edit link opens the view (run: node scripts/fix-name-collisions.mjs --base {SITE})'])
+
+try:
+    names, names_flags = check_collisions()
+except Exception as e:
+    names, names_flags = f'unavailable ({type(e).__name__})', [f'names: the collision check failed ({type(e).__name__})']
+for f in names_flags: flag(f)
+
 # ---------------------------------------------------------------- report
 print('pastecal health --', time.strftime('%Y-%m-%d %H:%M %Z'))
 print()
@@ -242,6 +271,7 @@ if errors:
         kind, msg, where = d
         print(f"   {m[0]:>4}x {m[1]:>3} people  {kind or '-':<16} {(msg or '(no message)')[:70]:<70}  {where[:40]}")
 print(f"BACKUP         {backup}")
+print(f"NAMES          {names}")
 print('ACTIVE         (complete days, through yesterday)')
 if people:
     print(f'   people      DAU {people[0]:>5}   WAU {people[1]:>5}   MAU {people[2]:>5}   (stickiness DAU/MAU {people[0] / max(people[2], 1):.0%})')
@@ -249,5 +279,5 @@ print(f"   calendars   viewed:  DAC {viewed['day'][0]:>5}   WAC {viewed['week'][
 print(f"               shared (2+ people):  {viewed['day'][1]:>5}         {viewed['week'][1]:>5}         {viewed['month'][1]:>5}")
 print(f"               edited:  {edited['day']:>9}   {edited['week']:>9}   {edited['month']:>9}   (R2 backups, since Oct 22)")
 print()
-print('Read-only. Sources: Cloudflare (R2 backup listing via cf, GET /cal, /api/admin/backup/health), GA4 (stats.sh).')
+print('Read-only. Sources: Cloudflare (R2 backup listing via cf, GET /cal, /api/admin/backup/health, /api/admin/directory/collisions), GA4 (stats.sh).')
 sys.exit(1 if attention else 0)
