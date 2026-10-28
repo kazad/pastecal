@@ -36,7 +36,9 @@ async function rawLookup(dir, slug) {
 export async function exactLookup(env, dir, slug) {
     const row = await rawLookup(dir, slug);
     if (!row || !row.found || typeof slug !== 'string') return row;
-    if (row.actualSlug === slug && !row.isReadOnly) return row;
+    // Only a name spelled differently from its row can be another calendar. (A view row in the same spelling is the
+    // edit page's own check, HEAD /cal/<name>; checking it here would wake an empty room on every view-page load.)
+    if (row.actualSlug === slug) return row;
     if (!(await calendarAt(env, slug).catch(() => false))) return row;
     return { found: true, actualSlug: slug, isReadOnly: false, targetId: slug, exact: row.isReadOnly ? 'view' : 'case' };
 }

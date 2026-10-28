@@ -47,8 +47,9 @@ async function plantCollision() {
   const imp = await fetch(`${BASE}/cal/${name}/import`, { method: 'PUT', headers: admin, body: JSON.stringify({ id: name, title: 'Kept editable', options: {}, events: [ev('e1', 'Practice')] }) });
   expect(imp.status).toBe(200);
   await new Promise((r) => setTimeout(r, 300));   // its directory registration (refused: the name leads to a live calendar)
-  // The lookup answers the calendar of exactly this name over the view row, and says so (exact: 'view', ExactNames.js).
-  expect(await lookup(name), 'planted: the directory says it is a view').toEqual({ found: true, actualSlug: name, isReadOnly: false, targetId: name, exact: 'view' });
+  // The lookup reports the row as it is (a view in the same spelling is not re-checked server-side, so view pages
+  // wake no extra room: ExactNames.js); the edit page's own HEAD /cal/<name> keeps the calendar editable.
+  expect(await lookup(name), 'planted: the directory says it is a view').toMatchObject({ found: true, actualSlug: name, isReadOnly: true });
   return name;
 }
 
