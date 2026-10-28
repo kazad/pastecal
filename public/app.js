@@ -473,14 +473,15 @@ const CalendarVueApp = {
             // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
             template: null,
             templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
-            // Settings' Backup row (icsPicked): the plan for a picked .ics file awaiting Import / Cancel, and the one line after
-            // (a result, or why a file can't be imported) with Undo while the import is still the last change.
+            // The import dialog (icsLoad), from any of the three ways in (Settings' Import .ics, quick add's link, a file
+            // dropped on the page): the plan for a picked .ics file awaiting Import / Cancel (with its preview lists), and
+            // the one line after (a result, or why a file can't be imported) with Undo while the import is still the last
+            // change. icsHereOpen, icsSkippedOpen: the folded lists (already in this calendar, not imported) shown. icsDragging: a file is over the page right now.
             icsPlan: null,
             icsNote: '',
             icsUndo: false,
-            // Where that file came from: 'settings' (shown in the Backup row) or 'dialog' (quick add's link, or a file
-            // dropped on the page: the same lines in a small dialog). icsDragging: a file is over the page right now.
-            icsFrom: 'settings',
+            icsHereOpen: false,
+            icsSkippedOpen: false,
             icsDragging: false,
             // Make a copy's dialog (openCopyDialog): { name, events, checking, taken, error, busy }, or null.
             copyDialog: null,
@@ -579,9 +580,9 @@ const CalendarVueApp = {
         sideTitle() {
             return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', you: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
         },
-        /** The import's small dialog: a file from quick add or a drop, while it has something to say. */
+        /** The import dialog, while it has something to say. */
         icsDialogOpen() {
-            return this.icsFrom === 'dialog' && !!(this.icsPlan || this.icsNote);
+            return !!(this.icsPlan || this.icsNote);
         },
         /** The You tab's circle: "SL" for Sam Lee, '' (a person icon) before a name is given. */
         myInitials() {
@@ -1419,7 +1420,7 @@ const CalendarVueApp = {
                 const file = e.dataTransfer.files && e.dataTransfer.files[0];
                 if (!file || !this.canEdit || this.isLoading) return;
                 track(a => a.featureUsed('ics_drop'));
-                this.icsLoad(file, 'dialog');
+                this.icsLoad(file);
             },
         };
         for (const [type, fn] of Object.entries(this._icsDragHandlers)) window.addEventListener(type, fn);
@@ -4723,30 +4724,35 @@ const CalendarVueApp = {
         icsDownloaded() { track(a => a.featureUsed('ics_download')); },
 
         /**
-         * Settings' "Import .ics": a file picked -> what importing it would do (services/ICSImport.js), shown for Import /
-         * Cancel. Nothing is saved yet. A file that can't be imported says why on the same line.
+         * Settings' "Import .ics" and quick add's link: a file picked -> the import dialog with what importing it would
+         * do (services/ICSImport.js), for Import / Cancel. Nothing is saved yet. A file that can't be imported says why.
          */
         async icsPicked(e) {
             const input = e && e.target, file = input && input.files && input.files[0];
             if (input) input.value = '';   // the same file can be picked again
-            // Settings' own input shows the plan in its Backup row; the page's (quick add's link) in a small dialog.
-            return this.icsLoad(file, input && input.dataset && input.dataset.from === 'dialog' ? 'dialog' : 'settings');
+            return this.icsLoad(file);
         },
         /** Quick add's "or import a .ics file": the file picker, from the click itself (a browser opens it only then). */
         openIcsPicker() {
             const input = this.$refs.icsFileAny;
             if (input) input.click();
         },
-        /** The import dialog (a file from quick add or dropped on the page) is up. */
+        /** The import dialog is done with: closed, and focus back where it was. */
         icsDialogClose() {
-            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false; this._icsUndo = null;
+            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false; this._icsUndo = null; this.icsHereOpen = false; this.icsSkippedOpen = false;
+            const back = this._icsOpener;
+            this._icsOpener = null;
+            if (back && back.isConnected && typeof back.focus === 'function') this.$nextTick(() => { try { back.focus(); } catch (e) { /* gone */ } });
         },
-        /** A .ics file from any of the three ways in (Settings, quick add, a drop): what importing it would do. */
-        async icsLoad(file, from = 'settings') {
-            this.icsFrom = from;
-            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false;
+        /**
+         * A .ics file from any of the three ways in (Settings, quick add, a drop): the import dialog, with what importing
+         * it would do. Its lists (ICSImport.preview) are made once here from the plan itself, which Import then applies.
+         */
+        async icsLoad(file) {
+            if (!this.icsDialogOpen) this._icsOpener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+            this.icsPlan = null; this.icsNote = ''; this.icsUndo = false; this.icsHereOpen = false; this.icsSkippedOpen = false;
             if (!file) return;
-            if (file.size > ICSImport.MAX_BYTES) { this.icsNote = 'That file is over 2 MB.'; return; }
+            if (file.size > ICSImport.MAX_BYTES) { this.icsNote = 'That file is over 2 MB.'; this.icsDialogFocus(); return; }
             let plan;
             try {
                 plan = ICSImport.plan(this.calendar.events || [], await file.text(),
@@ -4754,11 +4760,36 @@ const CalendarVueApp = {
             } catch (err) {
                 this.icsNote = err instanceof ICSImport.ImportError ? err.message : 'That file couldn’t be read.';
                 if (!(err instanceof ICSImport.ImportError)) console.warn('[ics import]', err);
+                this.icsDialogFocus();
                 return;
             }
             // A draft's first save is the whole calendar in one request, which the server caps at 1 MB (saved, it goes in parts).
-            if (!this.isExisting && plan.bytes > 900 * 1024) { this.icsNote = 'That file is big: save this calendar first, then import it.'; return; }
-            this.icsPlan = { ...plan, summary: ICSImport.summary(plan) };
+            if (!this.isExisting && plan.bytes > 900 * 1024) { this.icsNote = 'That file is big: save this calendar first, then import it.'; this.icsDialogFocus(); return; }
+            // Times as the calendars show them: this browser's zone, the person's clock and date format.
+            const order = { 'M/d/yy': 'us', 'yyyy-MM-dd': 'iso' }[this.resolveDateFormat()] || 'eu';
+            const preview = ICSImport.preview(plan, { zone: EventZone.localZone(), hour24: this.globalSettings.timeFormat === '24',
+                dateOrder: order, typeLabel: (n) => this.typeLabelFor(n - 1) });
+            // (Kept off the reactive data: a 1,000-event plan is read, never changed.)
+            this.icsPlan = Vue.markRaw({ ...plan, preview, fileName: String(file.name || 'calendar.ics') });
+            this.icsDialogFocus();
+        },
+        /** The dialog's first action takes focus (Import, else Done or Cancel), so Enter acts and Tab stays inside. */
+        icsDialogFocus() {
+            this.$nextTick(() => {
+                const d = this.$refs.icsDialog;
+                const b = d && (d.querySelector('[data-testid="ics-confirm"]') || d.querySelector('[data-testid="ics-done"]') || d.querySelector('[data-testid="ics-cancel"]'));
+                if (b) b.focus();
+            });
+        },
+        /** Tab and Shift+Tab go round the dialog's own controls (focus never leaves it for the page behind). */
+        icsDialogTab(e) {
+            const d = this.$refs.icsDialog;
+            if (!d) return;
+            const all = [...d.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null);
+            if (!all.length) return;
+            const first = all[0], last = all[all.length - 1];
+            if (e.shiftKey && (document.activeElement === first || !d.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && (document.activeElement === last || !d.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
         },
 
         /** Import: the plan's changes as one store change (saved and synced like any edit, one Undo). */
@@ -4769,7 +4800,7 @@ const CalendarVueApp = {
             const label = plan.add ? `Imported ${plan.add === 1 ? '1 event' : `${plan.add} events`}` : 'Imported changes';
             const r = this.store().dispatch({ type: 'batch', commands: plan.commands, label }, { label });
             // (A refused change has already said why in a toast: EventStore's onError.)
-            if (!r.ok) { this.icsNote = 'Nothing was imported.'; return; }
+            if (!r.ok) { this.icsNote = 'Nothing was imported.'; this.icsDialogFocus(); return; }
             if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             // (The entry itself kept off the reactive data: a proxy of it never equals the stack's own.)
             const stack = this.store().undoStack;
@@ -4778,15 +4809,14 @@ const CalendarVueApp = {
             this.icsNote = [plan.add && `Added ${plan.add === 1 ? '1 event' : `${plan.add} events`}`, plan.update && `updated ${plan.update}`]
                 .filter(Boolean).join(', ').replace(/^u/, 'U') + '.';
             track(a => a.featureUsed('ics_import', `${plan.add}+${plan.update}`));
+            this.icsDialogFocus();
         },
 
         /** The result line's Undo: only while the import is still this tab's last change. */
         icsUndoImport() {
             const stack = this.store().undoStack;
             if (this._icsUndo && stack[stack.length - 1] === this._icsUndo) this.undoLastLocal();
-            this._icsUndo = null;
-            this.icsUndo = false;
-            this.icsNote = '';
+            this.icsDialogClose();
         },
 
         getReadOnlyICSURL() {

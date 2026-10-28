@@ -3,16 +3,16 @@
  * Import a .ics three ways (Oct 28 2026), and never twice. Driven like a person, in the classic calendar and ?cal=native,
  * checked against what the SERVER stored (GET /cal/<id>), not the screen.
  *
- * Three ways in: Settings' Backup row (the plan shows in the row: ics-backup.spec.js), quick add's quiet "or import a
- * .ics file" link, and a file dropped on the calendar ("Drop to add these events" only while it is over the page). The
- * last two show the same plan, Import / Cancel and Undo in a small dialog.
+ * Three ways in: Settings' Backup row (ics-backup.spec.js), quick add's quiet "or import a .ics file" link, and a file
+ * dropped on the calendar ("Drop to add these events" only while it is over the page). All three open the same import
+ * dialog (its lists: ics-preview.spec.js): the plan, Import / Cancel (Done when there is nothing to do), then Undo.
  *
  * The owner, Oct 28 2026: "robust, no duplicates, if you import multiple times etc.":
  *   R1  the same file 3 times in a row from each way in, and mixed (Settings, then a drop, then quick add): the events
  *       and every stored row identical after the first
  *   R2  two browsers importing the same file at the same moment: no duplicates once both are done
  *   R3  import, Undo, import again: exactly one copy
- *   R4  import, rename an imported event, import again: the plan says it would update 1; Cancel keeps the rename
+ *   R4  import, rename an imported event, import again: the plan says Update 1 event; Cancel keeps the rename
  *   R5  a series with an edited occurrence (RECURRENCE-ID) and a skipped date (EXDATE), twice: one series, one edited
  *       occurrence, the date stays skipped, nothing drawn twice in the month
  *   R6  Download .ics into the same calendar twice: nothing changes; into an empty one twice: the source's rows
@@ -138,12 +138,13 @@ async function plan(t, how, file) {
   if (how === 'settings') await viaSettings(t.page, file);
   else if (how === 'quickadd') await viaQuickAdd(t.page, file);
   else await drop(t.page, t.native, file);
-  const where = how === 'settings' ? t.page.getByTestId('settings') : t.page.getByTestId('ics-dialog');
+  const where = t.page.getByTestId('ics-dialog');
   // Reading and planning the file is quick, but a classic calendar on a fully loaded test box (24 browsers) has taken over
   // 5 s to show it (passes 16/16 at 4 workers): wait longer here rather than call it flaky.
-  await expect(where.getByTestId('ics-plan')).toBeVisible({ timeout: 15_000 });
-  const line = how === 'settings' ? where.getByTestId('ics-plan').locator('.pc-set-copy-hint') : where.getByTestId('ics-plan');
-  return (await line.textContent()).trim();
+  // What the dialog proposes: its Import button ("Import 3 events"), or with nothing to do its one line ("Nothing new: ...").
+  const says = where.locator('[data-testid="ics-confirm"], [data-testid="ics-plan"]').first();
+  await expect(says).toBeVisible({ timeout: 15_000 });
+  return (await says.textContent()).trim();
 }
 /** Import, and the result line; a dialog is then closed with Done. */
 async function confirm(t, how) {
@@ -151,12 +152,14 @@ async function confirm(t, how) {
   const note = (await t.page.getByTestId('ics-note').textContent()).trim();
   return note;
 }
+/** Cancel, or Done when the plan has nothing to do (then there is no Cancel). */
 async function cancel(t) {
-  await t.page.getByTestId('ics-cancel').click();
+  const nothing = !(await t.page.getByTestId('ics-confirm').count());
+  await t.page.getByTestId(nothing ? 'ics-done' : 'ics-cancel').click();
   await expect(t.page.getByTestId('ics-plan')).toHaveCount(0);
   await expect(t.page.getByTestId('ics-dialog')).toHaveCount(0);
 }
-async function done(t, how) { if (how !== 'settings') { await t.page.getByTestId('ics-done').click(); await expect(t.page.getByTestId('ics-dialog')).toHaveCount(0); } }
+async function done(t) { await t.page.getByTestId('ics-done').click(); await expect(t.page.getByTestId('ics-dialog')).toHaveCount(0); }
 
 for (const native of [false, true]) {
   const where = native ? 'native' : 'classic';
@@ -165,16 +168,16 @@ for (const native of [false, true]) {
     test(`R1 ${where} ${how}: the same file 3 times in a row: the events and every stored row identical after the first`, async ({ browser }) => {
       const id = await seed();
       const t = await open(browser, id, { native, query: '&view=month&date=2026-10-01' });
-      expect(await plan(t, how, TEAM)).toBe('Add 3 events.');
+      expect(await plan(t, how, TEAM)).toBe('Import 3 events');
       expect(await stored(id)).toEqual([]);   // nothing saved before Import
-      if (how !== 'settings' && !native) await t.page.screenshot({ path: path.join(OUT, `${how}-plan-light.png`) });
+      if (!native) await t.page.screenshot({ path: path.join(OUT, `${how}-plan-light.png`) });
       expect(await confirm(t, how)).toContain('Added 3 events.');
-      if (how !== 'settings' && !native) await t.page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, `${how}-result-light.png`) });
-      await done(t, how);
+      if (!native) await t.page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, `${how}-result-light.png`) });
+      await done(t);
       await soon(async () => (await stored(id)).length).toBe(3);
       const first = sorted(await stored(id));
       for (const round of [2, 3]) {
-        expect(await plan(t, how, TEAM), `round ${round}`).toBe('All 3 already here.');
+        expect(await plan(t, how, TEAM), `round ${round}`).toBe('Nothing new: all 3 events in this file are already in this calendar.');
         await expect(t.page.getByTestId('ics-confirm')).toHaveCount(0);
         await cancel(t);
         expect(sorted(await stored(id)), `round ${round}`).toEqual(first);
@@ -187,14 +190,15 @@ for (const native of [false, true]) {
   test(`R1 ${where} mixed: Settings, then a drop, then quick add: one copy`, async ({ browser }) => {
     const id = await seed();
     const t = await open(browser, id, { native });
-    expect(await plan(t, 'settings', TEAM)).toBe('Add 3 events.');
+    expect(await plan(t, 'settings', TEAM)).toBe('Import 3 events');
     await confirm(t, 'settings');
+    await done(t);
     await soon(async () => (await stored(id)).length).toBe(3);
     const first = sorted(await stored(id));
     await t.page.getByTestId('side-close').click();
-    expect(await plan(t, 'drop', TEAM)).toBe('All 3 already here.');
+    expect(await plan(t, 'drop', TEAM)).toBe('Nothing new: all 3 events in this file are already in this calendar.');
     await cancel(t);
-    expect(await plan(t, 'quickadd', TEAM)).toBe('All 3 already here.');
+    expect(await plan(t, 'quickadd', TEAM)).toBe('Nothing new: all 3 events in this file are already in this calendar.');
     await cancel(t);
     expect(sorted(await stored(id))).toEqual(first);
     await t.ctx.close();
@@ -204,8 +208,8 @@ for (const native of [false, true]) {
     const id = await seed();
     const A = await open(browser, id, { native });
     const B = await open(browser, id, { native });
-    expect(await plan(A, 'drop', TEAM)).toBe('Add 3 events.');
-    expect(await plan(B, 'quickadd', TEAM)).toBe('Add 3 events.');
+    expect(await plan(A, 'drop', TEAM)).toBe('Import 3 events');
+    expect(await plan(B, 'quickadd', TEAM)).toBe('Import 3 events');
     await Promise.all([A.page.getByTestId('ics-confirm').click(), B.page.getByTestId('ics-confirm').click()]);
     await soon(async () => (await stored(id)).length).toBe(3);
     await A.page.waitForTimeout(2500);   // both saves (and the echo of each to the other) have landed
@@ -217,9 +221,9 @@ for (const native of [false, true]) {
         .toEqual(['Game vs Hawks', 'Practice', 'Team party']);
     }
     // And a third import, from either, adds nothing.
-    await done(A, 'drop').catch(() => {});
+    await done(A).catch(() => {});
     await A.page.keyboard.press('Escape');
-    expect(await plan(A, 'drop', TEAM)).toBe('All 3 already here.');
+    expect(await plan(A, 'drop', TEAM)).toBe('Nothing new: all 3 events in this file are already in this calendar.');
     expect(A.errors).toEqual([]); expect(B.errors).toEqual([]);
     expect([...A.refused, ...B.refused], 'neither save was refused').toEqual([]);
     await A.ctx.close(); await B.ctx.close();
@@ -228,28 +232,28 @@ for (const native of [false, true]) {
   test(`R3 ${where}: import, Undo, import again: exactly one copy`, async ({ browser }) => {
     const id = await seed();
     const t = await open(browser, id, { native });
-    expect(await plan(t, 'drop', TEAM)).toBe('Add 3 events.');
+    expect(await plan(t, 'drop', TEAM)).toBe('Import 3 events');
     await confirm(t, 'drop');
     await soon(async () => (await stored(id)).length).toBe(3);
     await t.page.getByTestId('ics-undo').click();
     await soon(async () => (await stored(id)).length).toBe(0);
     await t.page.keyboard.press('Escape');
     await expect(t.page.getByTestId('ics-dialog')).toHaveCount(0);
-    expect(await plan(t, 'drop', TEAM)).toBe('Add 3 events.');
+    expect(await plan(t, 'drop', TEAM)).toBe('Import 3 events');
     await confirm(t, 'drop');
-    await done(t, 'drop');
+    await done(t);
     await soon(async () => (await stored(id)).map((e) => e.title).sort()).toEqual(['Game vs Hawks', 'Practice', 'Team party']);
     await t.page.waitForTimeout(1000);
     expect((await stored(id)).length).toBe(3);
     await t.ctx.close();
   });
 
-  test(`R4 ${where}: import, rename an imported event, import again: "update 1" is shown first, and Cancel keeps the rename`, async ({ browser }) => {
+  test(`R4 ${where}: import, rename an imported event, import again: "Update 1 event" is shown first, and Cancel keeps the rename`, async ({ browser }) => {
     const id = await seed();
     const t = await open(browser, id, { native });
-    expect(await plan(t, 'quickadd', TEAM)).toBe('Add 3 events.');
+    expect(await plan(t, 'quickadd', TEAM)).toBe('Import 3 events');
     await confirm(t, 'quickadd');
-    await done(t, 'quickadd');
+    await done(t);
     await soon(async () => (await stored(id)).length).toBe(3);
     // Renamed in the app (the store, as the card's title field does), saved like any edit.
     await t.page.evaluate(() => {
@@ -259,8 +263,9 @@ for (const native of [false, true]) {
     });
     await soon(async () => (await stored(id)).map((e) => e.title).sort()).toEqual(['Game vs Hawks', 'Practice (moved to Field 2)', 'Team party']);
     const summary = await plan(t, 'drop', TEAM);
-    expect(summary).toMatch(/update 1/i);
-    expect(summary).toBe('Update 1 event, skip 2 already here.');
+    expect(summary).toBe('Update 1 event');
+    await expect(t.page.getByTestId('ics-changes').locator('.pc-imp-head')).toHaveText('Changes · 1');
+    await expect(t.page.getByTestId('ics-here').locator('.pc-imp-head')).toContainText('Already in this calendar · 2');
     await cancel(t);
     await t.page.waitForTimeout(800);
     expect((await stored(id)).map((e) => e.title).sort()).toEqual(['Game vs Hawks', 'Practice (moved to Field 2)', 'Team party']);
@@ -270,15 +275,15 @@ for (const native of [false, true]) {
   test(`R5 ${where}: a series with an edited occurrence and a skipped date, twice: one series, one override, nothing drawn twice`, async ({ browser }) => {
     const id = await seed();
     const t = await open(browser, id, { native, query: '&view=month&date=2026-10-01' });
-    expect(await plan(t, 'drop', SERIES)).toBe('Add 2 events.');
+    expect(await plan(t, 'drop', SERIES)).toBe('Import 2 events');
     await confirm(t, 'drop');
-    await done(t, 'drop');
+    await done(t);
     await soon(async () => (await stored(id)).length).toBe(2);
     const first = sorted(await stored(id));
-    expect(await plan(t, 'quickadd', SERIES)).toMatch(/^All 2 already here\.$/);
+    expect(await plan(t, 'quickadd', SERIES)).toBe('Nothing new: all 2 events in this file are already in this calendar.');
     await cancel(t);
-    expect(await plan(t, 'settings', SERIES)).toMatch(/^All 2 already here\.$/);
-    await t.page.getByTestId('ics-cancel').click();
+    expect(await plan(t, 'settings', SERIES)).toBe('Nothing new: all 2 events in this file are already in this calendar.');
+    await cancel(t);
     const events = await stored(id);
     expect(sorted(events)).toEqual(first);
     const swim = events.find((e) => e.title === 'Swim'), late = events.find((e) => e.title === 'Swim (late)');
@@ -310,7 +315,7 @@ test('R6 Download .ics: into the same calendar twice nothing changes; into an em
   await download.saveAs(file);
   const before = sorted(await stored(id));
   for (const how of ['settings', 'drop']) {
-    expect(await plan(t, how, file), how).toBe('All 3 already here.');
+    expect(await plan(t, how, file), how).toBe('Nothing new: all 3 events in this file are already in this calendar.');
     await cancel(t);
   }
   expect(sorted(await stored(id))).toEqual(before);
@@ -318,11 +323,11 @@ test('R6 Download .ics: into the same calendar twice nothing changes; into an em
 
   const fresh = await seed([], 'Rebuilt');
   const o = await open(browser, fresh, { native: true });
-  expect(await plan(o, 'drop', file)).toBe('Add 3 events.');
+  expect(await plan(o, 'drop', file)).toBe('Import 3 events');
   await confirm(o, 'drop');
-  await done(o, 'drop');
+  await done(o);
   await soon(async () => (await stored(fresh)).length).toBe(3);
-  expect(await plan(o, 'quickadd', file)).toBe('All 3 already here.');
+  expect(await plan(o, 'quickadd', file)).toBe('Nothing new: all 3 events in this file are already in this calendar.');
   await cancel(o);
   expect(sorted(await stored(fresh))).toEqual(before);
   await o.ctx.close();
@@ -332,12 +337,12 @@ for (const native of [false, true]) {
   test(`R7 ${native ? 'native' : 'classic'}: a Google Calendar export (time zone, folded lines, alarms, attendees) twice: no duplicates`, async ({ browser }) => {
     const id = await seed();
     const t = await open(browser, id, { native });
-    expect(await plan(t, 'drop', GOOGLE)).toBe('Add 2 events.');
+    expect(await plan(t, 'drop', GOOGLE)).toBe('Import 2 events');
     await confirm(t, 'drop');
-    await done(t, 'drop');
+    await done(t);
     await soon(async () => (await stored(id)).length).toBe(2);
     const first = sorted(await stored(id));
-    expect(await plan(t, 'drop', GOOGLE)).toBe('All 2 already here.');
+    expect(await plan(t, 'drop', GOOGLE)).toBe('Nothing new: all 2 events in this file are already in this calendar.');
     await cancel(t);
     expect(sorted(await stored(id))).toEqual(first);
     const dentist = first.find((e) => e.title === 'Dentist');
@@ -362,12 +367,12 @@ test('R8 1,000 events twice: the second import adds nothing, and the first is sa
   const file = write('thousand.ics', ics(lines));
   const id = await seed();
   const t = await open(browser, id);
-  expect(await plan(t, 'drop', file)).toBe('Add 1000 events.');
+  expect(await plan(t, 'drop', file)).toBe('Import 1000 events');
   await confirm(t, 'drop');
-  await done(t, 'drop');
+  await done(t);
   await expect.poll(async () => (await stored(id)).length, { timeout: 60_000, intervals: [500] }).toBe(1000);
   const first = sorted(await stored(id));
-  expect(await plan(t, 'quickadd', file)).toBe('All 1000 already here.');
+  expect(await plan(t, 'quickadd', file)).toBe('Nothing new: all 1000 events in this file are already in this calendar.');
   await expect(t.page.getByTestId('ics-confirm')).toHaveCount(0);
   await cancel(t);
   await t.page.waitForTimeout(1500);
@@ -393,7 +398,11 @@ for (const native of [false, true]) {
     await t.page.getByTestId('ics-done').click();
     // An event with no date: it can't be read, and there is nothing to import.
     await drop(t.page, native, NO_DATE);
-    await expect(t.page.getByTestId('ics-dialog').getByTestId('ics-plan')).toHaveText('1 can’t be read.');
+    await expect(t.page.getByTestId('ics-dialog').getByTestId('ics-plan')).toHaveText('Nothing to import: 1 can’t be read.');
+    await expect(t.page.getByTestId('ics-skipped').locator('.pc-imp-head')).toContainText('Not imported · 1');
+    await t.page.getByTestId('ics-skipped-toggle').click();
+    await expect(t.page.getByTestId('ics-skipped').locator('.pc-imp-text')).toHaveText(['Sometime']);
+    await expect(t.page.getByTestId('ics-skipped').locator('.pc-imp-what')).toHaveText(['no date']);
     await expect(t.page.getByTestId('ics-confirm')).toHaveCount(0);
     await cancel(t);
     await t.page.waitForTimeout(800);

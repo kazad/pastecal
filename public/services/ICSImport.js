@@ -23,7 +23,11 @@
  *
  * Pure: no page. Loaded as a script (window.ICSImport) after EventZone and EventStore; required by node tests.
  *   parse(text)                         { name, zone, events: [{ props }] } or throws ImportError (code, message)
- *   plan(existing, text, { calZone, localZone })   { commands, add, update, skip, unreadable } or throws ImportError
+ *   plan(existing, text, { calZone, localZone })   { commands, add, update, skip, unreadable, canceled, changed, here,
+ *                                       skipped } or throws ImportError
+ *   preview(plan, opts)                 the import dialog's lists (New, Changes, Already here, Not imported), from the
+ *                                       plan's own commands and rows, so what it shows is what Import applies
+ *   describe(before, changes, opts)     one update in words: ['time 5:00 → 5:30 PM', 'notes changed']
  */
 (function (root) {
     'use strict';
@@ -225,10 +229,11 @@
      */
     function fromVevent(ev, ctx) {
         const uid = text(ev, 'UID').trim();
+        const title = text(ev, 'SUMMARY').trim().slice(0, MAX_TITLE);
         const cancelled = /^CANCELLED$/i.test(text(ev, 'STATUS').trim());
         const ds = first(ev, 'DTSTART');
         const start = ds && readValue(ds.value, ds.params, ctx);
-        if (!start) return { uid, why: 'no start' };
+        if (!start) return { uid, title, why: ds ? 'bad date' : 'no start' };
         const allDay = !!start.date;
         const effective = ctx.calZone || ctx.localZone;   // where a series without its own zone repeats
         // The event's own zone only when its file named one other than the calendar's (a TZID equal to the calendar's
@@ -255,7 +260,7 @@
             } else endMs = startMs;
             if (!(endMs >= startMs)) endMs = startMs;
         }
-        if (isNaN(startMs) || isNaN(endMs)) return { uid, why: 'bad date' };
+        if (isNaN(startMs) || isNaN(endMs)) return { uid, title, why: 'bad date' };
 
         // Where this series repeats (EventZone.seriesZone), for its rule's weekdays and its skipped dates.
         const zone = allDay ? null : (tz || effective);
@@ -265,7 +270,7 @@
             rule = rr.value.trim().replace(/^RRULE:/i, '');
             if (start.utc) rule = utcDaysTo(rule, startMs, zone);
             rule = editorPositions(rule);
-            if (EventStore.unsafeRecurrence(rule)) return { uid, why: 'repeats too often' };
+            if (EventStore.unsafeRecurrence(rule)) return { uid, title, why: 'repeats too often' };
         }
         // A skipped date, or an override's original start, as the editor stores it (ScheduleAdapter EditOccurrence):
         // the occurrence's start as a UTC stamp; an all-day series' as this browser's midnight that day.
@@ -280,7 +285,7 @@
         for (const p of ev.props.EXDATE || []) for (const v of p.value.split(',')) { const s = toStamp(v, p.params); if (s && !exdates.includes(s)) exdates.push(s); }
         const ridProp = first(ev, 'RECURRENCE-ID');
         const rid = ridProp ? toStamp(ridProp.value, ridProp.params) : null;
-        if (ridProp && !rid) return { uid, why: 'bad date' };
+        if (ridProp && !rid) return { uid, title, why: 'bad date' };
 
         // The notes: DESCRIPTION, then LOCATION. A feed's last line is the calendar's view link (its URL:
         // ICSService.createEventBlock), which is not part of the notes.
@@ -292,7 +297,7 @@
 
         const type = parseInt(text(ev, 'X-PASTECAL-TYPE'), 10);
         const row = {
-            title: text(ev, 'SUMMARY').trim().slice(0, MAX_TITLE),
+            title,
             description: description.slice(0, MAX_TEXT),
             start: isoOf(startMs), end: isoOf(endMs), isAllDay: allDay,
             recurrencerule: rid ? '' : rule,
@@ -388,7 +393,8 @@
 
     /**
      * What importing `text` into a calendar holding `existing` would do: { commands (one batch for EventStore.dispatch),
-     * add, update, skip, unreadable, name }. Throws ImportError for a file that cannot be imported at all.
+     * add, update, skip, unreadable, canceled, name, changed ([{ before, changes }] per update command, in order), here
+     * (the file's rows already here), skipped ([{ title, reason: 'no date' | 'canceled' | 'invalid' }]) }. Throws ImportError for a file that cannot be imported at all.
      * opts: { calZone (EventZone.calendarZone), localZone (EventZone.localZone) }.
      */
     function plan(existing, text, opts = {}) {
@@ -412,7 +418,9 @@
         const updates = new Map();  // key -> { target, row (what it should become) }
         const touched = new Set();  // keys this import already decided (a row twice in one file counts once)
         const idMap = new Map();    // a file's series id or UID -> the id it has here
-        let skip = 0, unreadable = 0;
+        // What the preview lists besides the commands: the file's events already here, and those not imported (why).
+        const here = [], skipped = [];
+        const notImported = (title, reason) => skipped.push({ title: String(title || '').trim(), reason });
 
         const current = (key) => (updates.has(key) ? updates.get(key).row : adds.get(key) || byKey.get(key));
         const skipStamp = (parentId, stamp) => {   // an override's original start, skipped in its series
@@ -429,19 +437,19 @@
         // One incoming row against what is here: the same row (identical: skip; else update), the same event (skip), or new.
         const consider = (row, imported) => {
             const key = EventStore.keyOf(row);
-            if (touched.has(key)) { skip++; return; }
+            if (touched.has(key)) { here.push(row); return; }
             touched.add(key);
             const have = byKey.get(key);
             if (have) {
                 const next = imported ? inTermsOf(have, row, ctx, imported) : row;
                 const diff = EventStore.diff(EventStore.normalize(have), EventStore.normalize(next));
-                if (!Object.keys(diff).length) { skip++; return; }
+                if (!Object.keys(diff).length) { here.push(row); return; }
                 updates.set(key, { target: have, row: { ...(updates.has(key) ? updates.get(key).row : have), ...diff } });
                 return;
             }
             if (!row.recurrenceID) {
                 const same = seen.get(sameEventKey(row));
-                if (same !== undefined) { skip++; return same; }
+                if (same !== undefined) { here.push(row); return same; }
                 seen.set(sameEventKey(row), String(row.id));
             }
             adds.set(key, row);
@@ -453,7 +461,7 @@
             const row = backupRow(ev);
             if (row) { backups.push(row); continue; }
             const x = fromVevent(ev, ctx);
-            if (!x.row) { unreadable++; continue; }
+            if (!x.row) { notImported(x.title, x.why === 'no start' ? 'no date' : 'invalid'); continue; }
             if (!x.uid) x.uid = idFor(JSON.stringify(x.row));   // no UID: its content is its identity
             (x.rid ? overrides : masters).push(x);
         }
@@ -461,7 +469,7 @@
         const fileSeries = new Set(backups.filter((r) => !r.recurrenceID).map((r) => String(r.id)));
 
         for (const row of backups) {
-            if (EventStore.unsafeRecurrence(row.recurrencerule) || !row.start || !row.end || new Date(row.end) < new Date(row.start)) { unreadable++; continue; }
+            if (EventStore.unsafeRecurrence(row.recurrencerule) || !row.start || !row.end || new Date(row.end) < new Date(row.start)) { notImported(row.title, 'invalid'); continue; }
             if (row.recurrenceID) {
                 const parent = idMap.get(String(row.recurrenceID)) ?? (series.has(String(row.recurrenceID)) || fileSeries.has(String(row.recurrenceID)) ? row.recurrenceID : null);
                 // Its series is neither here nor in the file: kept as an event of its own (a row pointing at nothing is refused).
@@ -473,7 +481,7 @@
             idMap.set(String(row.id), same !== undefined ? same : row.id);
         }
         for (const x of masters) {
-            if (x.cancelled) { skip++; continue; }
+            if (x.cancelled) { notImported(x.row.title, 'canceled'); continue; }
             const asId = uidId(x.uid);
             const here = series.has(asId) ? series.get(asId).id : series.has(idFor(x.uid)) ? idFor(x.uid) : null;
             const row = { ...x.row, id: here !== null ? here : idFor(x.uid), recurrenceID: null };
@@ -486,7 +494,7 @@
             const parent = parentKey && current(parentKey);
             if (!parent || !parent.recurrencerule) {
                 // An occurrence of a series that is not here: an event of its own (a cancelled one: nothing).
-                if (x.cancelled) { skip++; continue; }
+                if (x.cancelled) { notImported(x.row.title, 'canceled'); continue; }
                 consider({ ...x.row, id: idFor(x.uid, x.rid), recurrenceID: null }, x);
                 continue;
             }
@@ -509,27 +517,198 @@
         // What the calendar's events would weigh (the server refuses a calendar over 2 MB); bytes: for a draft's first save.
         const bytes = JSON.stringify(rows).length + JSON.stringify([...adds.values()]).length;
         if (bytes > MAX_CALENDAR) throw new ImportError('too_big', 'That would make this calendar larger than 2 MB.');
-        const commands = [];
+        // The commands, and for each update the row it changes (the preview's Changes: the same objects Import applies).
+        const commands = [], changed = [];
         for (const row of adds.values()) commands.push({ type: 'add', event: row });
         for (const [key, u] of updates) {
             const changes = EventStore.diff(EventStore.normalize(u.target), EventStore.normalize(u.row));
-            if (Object.keys(changes).length) commands.push({ type: 'update', key, changes });
+            if (!Object.keys(changes).length) continue;
+            const command = { type: 'update', key, changes };
+            commands.push(command);
+            changed.push({ before: u.target, changes: command.changes });
         }
-        return { commands, add: adds.size, update: commands.length - adds.size, skip, unreadable, name: file.name, bytes };
+        const canceled = skipped.filter((x) => x.reason === 'canceled').length;
+        return { commands, add: adds.size, update: commands.length - adds.size, skip: here.length, unreadable: skipped.length - canceled, canceled,
+            changed, here, skipped, name: file.name, bytes };
     }
 
-    /** "Add 12 events, update 2, skip 30 already here." The plan in one line. */
+    const events = (k) => (k === 1 ? '1 event' : `${k} events`);
+    /**
+     * The plan in one line: "Add 12 events, update 2; 30 already in this calendar; 1 can’t be read." With nothing to do,
+     * the import dialog's lead: "Nothing new: all 232 events in this file are already in this calendar."
+     */
     function summary(p) {
-        const n = (k, one, many) => (k === 1 ? one : many.replace('#', k));
         const parts = [];
-        if (p.add) parts.push(n(p.add, 'Add 1 event', 'Add # events'));
-        if (p.update) parts.push(parts.length ? `update ${p.update}` : n(p.update, 'Update 1 event', 'Update # events'));
-        if (p.skip) parts.push(parts.length ? `skip ${p.skip} already here` : `All ${p.skip} already here`);
-        if (p.unreadable) parts.push(`${p.unreadable} can’t be read`);
-        return parts.length ? `${parts.join(', ')}.` : 'Nothing to import.';
+        if (p.add) parts.push(`Add ${events(p.add)}${p.update ? `, update ${p.update}` : ''}`);
+        else if (p.update) parts.push(`Update ${events(p.update)}`);
+        const left = [];
+        if (p.unreadable) left.push(`${p.unreadable} can’t be read`);
+        if (p.canceled) left.push(`${p.canceled} canceled`);
+        if (parts.length) {
+            if (p.skip) parts.push(`${p.skip} already in this calendar`);
+            return `${[...parts, ...left].join('; ')}.`;
+        }
+        if (p.skip && !left.length) return p.skip === 1 ? 'Nothing new: the 1 event in this file is already in this calendar.'
+            : `Nothing new: all ${p.skip} events in this file are already in this calendar.`;
+        if (p.skip) return `Nothing new: ${p.skip === 1 ? '1 event' : `${p.skip} events`} in this file ${p.skip === 1 ? 'is' : 'are'} already in this calendar; ${left.join(', ')}.`;
+        return left.length ? `Nothing to import: ${left.join(', ')}.` : 'Nothing new to import.';
+    }
+    /** The import button: "Import 12 events", "Update 2 events", "Import 12, update 2"; '' with nothing to do. */
+    function action(p) {
+        if (p.add && p.update) return `Import ${p.add}, update ${p.update}`;
+        if (p.add) return `Import ${events(p.add)}`;
+        return p.update ? `Update ${events(p.update)}` : '';
     }
 
-    const ICSImport = { parse, plan, summary, idFor, ruleKey, unescapeText, ImportError, MAX_BYTES, MAX_EVENTS };
+    // ---- the preview: the plan in words ------------------------------------------------------------------
+    // opts: { zone (where times are shown: this browser's, as the calendars draw them), hour24, dateOrder ('us' | 'eu' |
+    // 'iso', the person's date format), typeLabel (n -> name), now (for "this year") }.
+
+    const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const zoneFor = (o) => EventZone.validZone(o && o.zone) || EventZone.localZone();
+
+    /** "Tue, Oct 6" (us), "Tue 6 Oct" (eu), "Tue 2026-10-06" (iso); another year than this one is named. */
+    function fmtDay(y, m, d, o = {}) {
+        const wd = WD[new Date(Date.UTC(y, m, d)).getUTCDay()];
+        if (o.dateOrder === 'iso') return `${wd} ${y}-${pad(m + 1)}-${pad(d)}`;
+        const thisYear = new Date(o.now || Date.now()).getUTCFullYear();
+        const yr = y === thisYear ? '' : ` ${y}`;
+        return o.dateOrder === 'eu' ? `${wd} ${d} ${MON[m]}${yr}` : `${wd}, ${MON[m]} ${d}${yr ? ',' + yr : ''}`;
+    }
+    /** "5:00 PM" or "17:00". */
+    function fmtClock(h, min, o = {}) {
+        if (o.hour24) return `${pad(h)}:${pad(min)}`;
+        return `${((h + 11) % 12) + 1}:${pad(min)} ${h < 12 ? 'AM' : 'PM'}`;
+    }
+    /** Two times as "5:00 → 5:30 PM" (one AM/PM when both share it). */
+    function fmtClockChange(a, b, o) {
+        const x = fmtClock(a.h, a.min, o), y = fmtClock(b.h, b.min, o);
+        if (!o.hour24 && (a.h < 12) === (b.h < 12)) return `${x.replace(/ [AP]M$/, '')} → ${y}`;
+        return `${x} → ${y}`;
+    }
+    /** An all-day event's first and last day (its end is exclusive), as { y, m, d } each. */
+    function allDayRange(row) {
+        const ymd = (v) => { const s = slotDay(stampOf(new Date(v).getTime()), true); return s && { y: +s.slice(0, 4), m: +s.slice(4, 6) - 1, d: +s.slice(6, 8) }; };
+        const a = ymd(row.start), e = ymd(row.end);
+        if (!a) return null;
+        let b = e && addDays(e, -1);
+        if (!b || Date.UTC(b.y, b.m, b.d) < Date.UTC(a.y, a.m, a.d)) b = a;
+        return { a, b };
+    }
+    const sameDay = (a, b) => a.y === b.y && a.m === b.m && a.d === b.d;
+
+    /** When an event is: "Tue, Oct 6 · 5:00 PM", "Thu, Nov 26 · All day", "Sun, Nov 1 – Tue, Nov 3", "Fri, Oct 9 · 5:00 PM – Sat, Oct 10 · 9:00 AM". */
+    function when(row, o = {}) {
+        if (row.isAllDay) {
+            const r = allDayRange(row);
+            if (!r) return '';
+            return sameDay(r.a, r.b) ? `${fmtDay(r.a.y, r.a.m, r.a.d, o)} · All day` : `${fmtDay(r.a.y, r.a.m, r.a.d, o)} – ${fmtDay(r.b.y, r.b.m, r.b.d, o)}`;
+        }
+        const z = zoneFor(o), s = EventZone.wall(new Date(row.start).getTime(), z), e = EventZone.wall(new Date(row.end).getTime(), z);
+        const head = `${fmtDay(s.y, s.m, s.d, o)} · ${fmtClock(s.h, s.min, o)}`;
+        return sameDay(s, e) || new Date(row.end) <= new Date(row.start) ? head : `${head} – ${fmtDay(e.y, e.m, e.d, o)} · ${fmtClock(e.h, e.min, o)}`;
+    }
+
+    /** The date and the time of an event, apart (the dialog's columns): { date: 'Tue, Oct 6', time: '5:00 PM' | 'All day' }. */
+    function whenParts(row, o = {}) {
+        if (row.isAllDay) {
+            const r = allDayRange(row);
+            if (!r) return { date: '', time: '' };
+            return { date: sameDay(r.a, r.b) ? fmtDay(r.a.y, r.a.m, r.a.d, o) : `${fmtDay(r.a.y, r.a.m, r.a.d, o)} – ${fmtDay(r.b.y, r.b.m, r.b.d, o)}`, time: 'All day' };
+        }
+        const z = zoneFor(o), s = EventZone.wall(new Date(row.start).getTime(), z), e = EventZone.wall(new Date(row.end).getTime(), z);
+        const time = fmtClock(s.h, s.min, o);
+        return { date: fmtDay(s.y, s.m, s.d, o), time: sameDay(s, e) || new Date(row.end) <= new Date(row.start) ? time : `${time} – ${fmtDay(e.y, e.m, e.d, o)} ${fmtClock(e.h, e.min, o)}` };
+    }
+    /** How often a series repeats, in a word or two: "daily", "weekly", "every 2 weeks", "monthly", "yearly". */
+    function repeatWords(rule) {
+        const r = String(rule || '').toUpperCase();
+        const freq = (/(?:^|;)FREQ=(\w+)/.exec(r) || [])[1], n = +((/(?:^|;)INTERVAL=(\d+)/.exec(r) || [])[1] || 1);
+        const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' }[freq];
+        if (!unit) return 'repeats';
+        return n > 1 ? `every ${n} ${unit}s` : { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' }[unit];
+    }
+
+    const hasRule = (r) => !!String((r && r.recurrencerule) || '').trim();
+    const quote = (t) => `“${String(t || '').trim() || '(No title)'}”`;
+
+    /**
+     * What one update changes, field by field in plain words: ['title “Game” → “Game vs Hawks”', 'time 5:00 → 5:30 PM',
+     * 'notes changed', 'skips Mon, Oct 19']. `before` is the row here, `changes` the update's own changes.
+     */
+    function describe(before, changes, o = {}) {
+        const after = { ...before, ...changes };
+        const out = [];
+        const has = (f) => Object.prototype.hasOwnProperty.call(changes, f);
+        if (has('title')) out.push(`title ${quote(before.title)} → ${quote(after.title)}`);
+        if (has('isAllDay')) out.push(`${when(before, o)} → ${when(after, o)}`);
+        else if (has('start') || has('end')) {
+            if (after.isAllDay) {
+                const a = allDayRange(before), b = allDayRange(after);
+                const words = (r) => (sameDay(r.a, r.b) ? fmtDay(r.a.y, r.a.m, r.a.d, o) : `${fmtDay(r.a.y, r.a.m, r.a.d, o)} – ${fmtDay(r.b.y, r.b.m, r.b.d, o)}`);
+                if (a && b) out.push(`date ${words(a)} → ${words(b)}`);
+            } else {
+                const z = zoneFor(o), w = (v) => EventZone.wall(new Date(v).getTime(), z);
+                const s0 = w(before.start), s1 = w(after.start), e0 = w(before.end), e1 = w(after.end);
+                if (!sameDay(s0, s1)) out.push(`date ${fmtDay(s0.y, s0.m, s0.d, o)} → ${fmtDay(s1.y, s1.m, s1.d, o)}`);
+                if (s0.h !== s1.h || s0.min !== s1.min) out.push(`time ${fmtClockChange(s0, s1, o)}`);
+                const len0 = new Date(before.end) - new Date(before.start), len1 = new Date(after.end) - new Date(after.start);
+                if (len0 !== len1) {
+                    out.push(sameDay(s1, e1) && sameDay(s0, e0) ? `ends ${fmtClockChange(e0, e1, o)}`
+                        : `ends ${fmtDay(e0.y, e0.m, e0.d, o)} · ${fmtClock(e0.h, e0.min, o)} → ${fmtDay(e1.y, e1.m, e1.d, o)} · ${fmtClock(e1.h, e1.min, o)}`);
+                }
+            }
+        }
+        if (has('recurrencerule')) out.push(!hasRule(before) ? 'now repeats' : !hasRule(after) ? 'no longer repeats' : 'repeat changed');
+        if (has('recurrenceException')) {
+            const was = new Set(stampsOf(before.recurrenceException));
+            const zone = EventZone.seriesZone(after, null) || zoneFor(o);
+            const days = stampsOf(after.recurrenceException).filter((s) => !was.has(s)).map((s) => slotDay(s, !!after.isAllDay, zone)).filter(Boolean)
+                .sort().map((d) => fmtDay(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8), o));
+            if (days.length) out.push(`skips ${days.length > 3 ? `${days.slice(0, 2).join(', ')} and ${days.length - 2} more` : days.join(', ')}`);
+            else out.push('skipped dates changed');
+        }
+        if (has('type')) {
+            const label = (n) => (o.typeLabel ? o.typeLabel(n) : `Type ${n}`);
+            out.push(`type ${label(before.type || 1)} → ${label(after.type || 1)}`);
+        }
+        if (has('description')) out.push(!String(before.description || '').trim() ? 'notes added' : !String(after.description || '').trim() ? 'notes removed' : 'notes changed');
+        if (has('tz')) out.push('time zone changed');
+        if (!out.length) out.push('changed');
+        return out;
+    }
+
+    const LIMIT = 200;
+    const startMs = (r) => new Date(r.start).getTime() || 0;
+    const byStart = (a, b) => startMs(a) - startMs(b) || String(a.title || '').localeCompare(String(b.title || ''), 'en', { numeric: true });
+    const REASONS = { 'no date': 'no date', canceled: 'canceled', invalid: 'can’t be read' };
+
+    /**
+     * The plan as the import dialog lists it, from the plan itself (its add commands, its updates' rows and changes,
+     * what is here, what is not imported): { add, change, here, skipped }, each { rows (the first 200), more }.
+     * A row: { date, time, title, repeat ('weekly', or '') } (a change: + what; a skipped event: title and reason only).
+     * Also: lead (the one line, said only when there is nothing to do) and action (the import button, '' then).
+     */
+    function preview(p, o = {}) {
+        const cap = (list) => ({ rows: list.slice(0, LIMIT), total: list.length, more: Math.max(0, list.length - LIMIT) });
+        const title = (r) => String(r.title || '').trim() || '(No title)';
+        const repeat = (r) => (hasRule(r) && (r.recurrenceID === null || r.recurrenceID === undefined || r.recurrenceID === '') ? repeatWords(r.recurrencerule) : '');
+        const row = (r) => ({ ...whenParts(r, o), title: title(r), repeat: repeat(r) });
+        const adds = p.commands.filter((c) => c.type === 'add').map((c) => c.event).sort(byStart);
+        const changes = [...(p.changed || [])].sort((a, b) => byStart(a.before, b.before));
+        const here = [...(p.here || [])].sort(byStart);
+        return {
+            lead: p.commands.length ? '' : summary(p),
+            action: action(p),
+            add: cap(adds.map(row)),
+            change: cap(changes.map((c) => ({ ...row(c.before), what: describe(c.before, c.changes, o) }))),
+            here: cap(here.map(row)),
+            skipped: cap((p.skipped || []).map((x) => ({ title: x.title || '(No title)', reason: REASONS[x.reason] || x.reason }))),
+        };
+    }
+
+    const ICSImport = { parse, plan, summary, action, preview, whenParts, describe, when, idFor, ruleKey, unescapeText, ImportError, MAX_BYTES, MAX_EVENTS };
     if (typeof module !== 'undefined' && module.exports) module.exports = ICSImport;
     else root.ICSImport = ICSImport;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -96,6 +96,11 @@ const PANELS = [
   { name: 'Settings panel', open: "p.openSideTab('settings')", el: 'settings', budget: { filled: 0, words: 43 } },
   { name: 'You panel', open: "p.openSideTab('you')", el: 'you', budget: { filled: 0, words: 36 } },
   { name: 'Make a copy dialog', open: "p.openCopyDialog('settings')", el: 'copy-dialog', budget: { filled: 1, words: 8 } },
+  // The import preview (Oct 28 2026) for a file of two new events: its title, "New · 2", two rows
+  // (date, time, title), Cancel and Import 2 events. The rows are the file's; the rest is the dialog's own.
+  { name: 'Import dialog', el: 'ics-dialog', budget: { filled: 1, words: 21 },
+    open: "const y = new Date().getFullYear(); const ev = (u, s, d) => ['BEGIN:VEVENT', 'UID:' + u, 'SUMMARY:' + s, 'DTSTART:' + y + d + 'T230000Z', 'DTEND:' + y + d + 'T233000Z', 'END:VEVENT'];"
+      + " return p.icsLoad(new File([['BEGIN:VCALENDAR', 'VERSION:2.0', ...ev('a', 'Team party', '1024'), ...ev('b', 'Picnic', '1025'), 'END:VCALENDAR'].join('\\r\\n')], 'team.ics'));" },
 ];
 for (const P of PANELS) {
   test(`restraint: ${P.name}`, async ({ browser, request }) => {

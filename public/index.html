@@ -1341,7 +1341,8 @@
                                 <button type="button" class="pc-btn pc-btn--sm" @click="openCopyDialog('settings')" data-testid="settings-copy-btn">Make a copy</button>
                             </div>
                             <!-- Backup: this calendar as a file (the edit feed with each event's stored row), and a file's
-                                 events back in, never twice (services/ICSImport.js). Nothing is saved until Import. -->
+                                 events back in, never twice (services/ICSImport.js): the import dialog shows what would
+                                 come in. Nothing is saved until Import. -->
                             <div class="pc-set-backup" data-testid="settings-backup">
                                 <span class="pc-set-copy-hint">Backup:</span>
                                 <a v-if="icsDownloadURL()" :href="icsDownloadURL()" download class="pc-link" data-testid="ics-download"
@@ -1350,15 +1351,6 @@
                                 <button type="button" class="pc-link" @click="$refs.icsFile.click()" data-testid="ics-import">Import .ics</button>
                                 <input ref="icsFile" type="file" accept=".ics,text/calendar" hidden @change="icsPicked" data-testid="ics-file">
                             </div>
-                            <div v-if="icsPlan && icsFrom === 'settings'" class="pc-set-copy" data-testid="ics-plan">
-                                <span class="pc-set-copy-hint">{{ icsPlan.summary }}</span>
-                                <span class="pc-set-backup">
-                                    <button type="button" class="pc-link" @click="icsPlan = null" data-testid="ics-cancel">Cancel</button>
-                                    <button v-if="icsPlan.commands.length" type="button" class="pc-btn pc-btn--sm" @click="icsImportConfirm" data-testid="ics-confirm">Import</button>
-                                </span>
-                            </div>
-                            <p v-if="icsNote && icsFrom === 'settings'" class="pc-set-copy-hint pc-set-note" role="status" data-testid="ics-note">{{ icsNote }}
-                                <button v-if="icsUndo" type="button" class="pc-link" @click="icsUndoImport" data-testid="ics-undo">Undo</button></p>
                         </div>
 
                     </div>
@@ -1853,17 +1845,68 @@
             <button type="button" @click="slugTaken = null; slugProblem = ''" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-slug-taken-close" aria-label="Dismiss">&times;</button>
         </div>
 
-        <!-- A .ics file from quick add's "or import a .ics file" (openIcsPicker) or dropped on the page: what importing it
-             would do, Import / Cancel, then the result with Undo. The same lines as Settings' Backup row, in a small dialog. -->
-        <input v-if="canEdit" ref="icsFileAny" type="file" accept=".ics,text/calendar" hidden data-from="dialog" @change="icsPicked" data-testid="ics-file-any">
+        <!-- The import dialog: a .ics file from Settings' Import .ics, quick add's "or import a .ics file" (openIcsPicker) or
+             dropped on the page. What importing it would do, listed like the Agenda (date | time | title), from the plan
+             Import applies (ICSImport.preview): New, Changes, Already in this calendar (folded), Not imported (folded).
+             Import N events / Cancel, or one Done when there is nothing new; then the result with Undo. Lists scroll inside. -->
+        <input v-if="canEdit" ref="icsFileAny" type="file" accept=".ics,text/calendar" hidden @change="icsPicked" data-testid="ics-file-any">
         <div v-if="icsDialogOpen" class="pc-modal" @click.self="icsDialogClose" v-cloak>
-            <div class="pc-modal-panel pc-small-dialog" role="dialog" aria-modal="true" aria-labelledby="ics-dialog-title" data-testid="ics-dialog">
-                <h3 id="ics-dialog-title" class="pc-section-title">Import events</h3>
+            <div ref="icsDialog" class="pc-modal-panel pc-small-dialog pc-imp" role="dialog" aria-modal="true" aria-labelledby="ics-dialog-title" data-testid="ics-dialog"
+                @keydown.tab="icsDialogTab">
+                <h3 id="ics-dialog-title" class="pc-section-title pc-imp-title">{{ icsPlan ? 'Import “' + icsPlan.fileName + '”' : 'Import events' }}</h3>
                 <template v-if="icsPlan">
-                    <p class="pc-small-dialog-text" data-testid="ics-plan">{{ icsPlan.summary }}</p>
+                    <p v-if="icsPlan.preview.lead" class="pc-small-dialog-text" data-testid="ics-plan">{{ icsPlan.preview.lead }}</p>
+                    <div class="pc-imp-lists" data-testid="ics-lists">
+                        <section v-if="icsPlan.preview.add.total" data-testid="ics-new">
+                            <h4 class="pc-imp-head">New · {{ icsPlan.preview.add.total }}</h4>
+                            <ul class="pc-imp-list">
+                                <li v-for="(r, i) in icsPlan.preview.add.rows" :key="i" class="pc-imp-row" data-testid="ics-row">
+                                    <span class="pc-imp-date">{{ r.date }}</span><span class="pc-imp-time">{{ r.time }}</span><span class="pc-imp-name"><span class="pc-imp-text">{{ r.title }}</span><span v-if="r.repeat" class="pc-imp-rep" data-testid="ics-repeat"><icon name="repeat" aria-hidden="true"></icon>{{ r.repeat }}</span></span>
+                                </li>
+                            </ul>
+                            <p v-if="icsPlan.preview.add.more" class="pc-imp-more">and {{ icsPlan.preview.add.more }} more</p>
+                        </section>
+                        <section v-if="icsPlan.preview.change.total" data-testid="ics-changes">
+                            <h4 class="pc-imp-head">Changes · {{ icsPlan.preview.change.total }}</h4>
+                            <ul class="pc-imp-list">
+                                <li v-for="(r, i) in icsPlan.preview.change.rows" :key="i" class="pc-imp-row" data-testid="ics-row">
+                                    <span class="pc-imp-date">{{ r.date }}</span><span class="pc-imp-time">{{ r.time }}</span><span class="pc-imp-name"><span class="pc-imp-text">{{ r.title }}</span><span v-if="r.repeat" class="pc-imp-rep" data-testid="ics-repeat"><icon name="repeat" aria-hidden="true"></icon>{{ r.repeat }}</span><span class="pc-imp-what">{{ r.what.join(', ') }}</span></span>
+                                </li>
+                            </ul>
+                            <p v-if="icsPlan.preview.change.more" class="pc-imp-more">and {{ icsPlan.preview.change.more }} more</p>
+                        </section>
+                        <section v-if="icsPlan.preview.here.total" data-testid="ics-here">
+                            <div v-if="icsPlan.commands.length" class="pc-imp-head">Already in this calendar · {{ icsPlan.preview.here.total }}
+                                <button type="button" class="pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide' : 'Show' }}</button></div>
+                            <button v-else type="button" class="pc-imp-show" :aria-expanded="icsHereOpen ? 'true' : 'false'" @click="icsHereOpen = !icsHereOpen" data-testid="ics-here-toggle">{{ icsHereOpen ? 'Hide them' : 'Show them' }}</button>
+                            <template v-if="icsHereOpen">
+                                <ul class="pc-imp-list">
+                                    <li v-for="(r, i) in icsPlan.preview.here.rows" :key="i" class="pc-imp-row" data-testid="ics-row">
+                                        <span class="pc-imp-date">{{ r.date }}</span><span class="pc-imp-time">{{ r.time }}</span><span class="pc-imp-name"><span class="pc-imp-text">{{ r.title }}</span><span v-if="r.repeat" class="pc-imp-rep" data-testid="ics-repeat"><icon name="repeat" aria-hidden="true"></icon>{{ r.repeat }}</span></span>
+                                    </li>
+                                </ul>
+                                <p v-if="icsPlan.preview.here.more" class="pc-imp-more">and {{ icsPlan.preview.here.more }} more</p>
+                            </template>
+                        </section>
+                        <section v-if="icsPlan.preview.skipped.total" data-testid="ics-skipped">
+                            <div class="pc-imp-head">Not imported · {{ icsPlan.preview.skipped.total }}
+                                <button type="button" class="pc-imp-show" :aria-expanded="icsSkippedOpen ? 'true' : 'false'" @click="icsSkippedOpen = !icsSkippedOpen" data-testid="ics-skipped-toggle">{{ icsSkippedOpen ? 'Hide' : 'Show' }}</button></div>
+                            <template v-if="icsSkippedOpen">
+                                <ul class="pc-imp-list">
+                                    <li v-for="(r, i) in icsPlan.preview.skipped.rows" :key="i" class="pc-imp-row pc-imp-row--plain" data-testid="ics-row">
+                                        <span class="pc-imp-name"><span class="pc-imp-text">{{ r.title }}</span><span class="pc-imp-what">{{ r.reason }}</span></span>
+                                    </li>
+                                </ul>
+                                <p v-if="icsPlan.preview.skipped.more" class="pc-imp-more">and {{ icsPlan.preview.skipped.more }} more</p>
+                            </template>
+                        </section>
+                    </div>
                     <div class="pc-small-dialog-actions">
-                        <button type="button" class="pc-link" @click="icsDialogClose" data-testid="ics-cancel">Cancel</button>
-                        <button v-if="icsPlan.commands.length" type="button" class="pc-btn" @click="icsImportConfirm" data-testid="ics-confirm">Import</button>
+                        <template v-if="icsPlan.commands.length">
+                            <button type="button" class="pc-link" @click="icsDialogClose" data-testid="ics-cancel">Cancel</button>
+                            <button type="button" class="pc-btn pc-btn--primary" @click="icsImportConfirm" data-testid="ics-confirm">{{ icsPlan.preview.action }}</button>
+                        </template>
+                        <button v-else type="button" class="pc-btn" @click="icsDialogClose" data-testid="ics-done">Done</button>
                     </div>
                 </template>
                 <template v-else>
