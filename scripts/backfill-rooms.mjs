@@ -42,7 +42,12 @@ const BATCH = 300;
 const total = { asked: 0, known: 0, toAdd: 0, added: 0 };
 const missing = [], invalid = [], failed = [];
 for (let i = 0; i < ids.length; i += BATCH) {
-    const r = await fetch(`${base}/api/admin/rooms/backfill`, { method: 'POST', headers, body: JSON.stringify({ ids: ids.slice(i, i + BATCH), apply }) });
+    // A dropped connection retries the same batch (a batch is idempotent: an id already registered is skipped).
+    let r;
+    for (let attempt = 0; ; attempt++) {
+        try { r = await fetch(`${base}/api/admin/rooms/backfill`, { method: 'POST', headers, body: JSON.stringify({ ids: ids.slice(i, i + BATCH), apply }) }); break; }
+        catch (e) { if (attempt >= 4) throw e; await new Promise((res) => setTimeout(res, 2000 * (attempt + 1))); }
+    }
     if (!r.ok) { console.error(`backfill: HTTP ${r.status} at id ${i}`); process.exit(1); }
     const out = await r.json();
     for (const k of Object.keys(total)) total[k] += out[k] || 0;
