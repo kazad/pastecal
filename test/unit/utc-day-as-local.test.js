@@ -31,6 +31,7 @@ const UTC_ON_PURPOSE = {
     'cloudflare/src/CalendarRoom.js': [2, 'server-side buckets: author activity days and daily snapshot keys, in UTC'],
     'cloudflare/src/RoomInsight.js': [1, 'Pro stats day buckets, in UTC (the server has no viewer zone)'],
     'cloudflare/src/Waitlist.js': [1, 'a per-day rate bucket on the server, in UTC'],
+    'cloudflare/src/archive-format.js': [1, 'the daily full archive is keyed by its UTC date (archive/daily/YYYY-MM-DD.json.gz)'],
     'public/services/AuthorSignal.js': [1, 'an informational key; distinct days are counted from the server timestamp'],
     'public/components/ProInsight.js': [1, 'an all-day date key from a UTC-midnight instant built by the +13h read rule'],
 };

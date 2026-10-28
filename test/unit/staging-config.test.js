@@ -54,6 +54,10 @@ test('staging lists every binding production has (none are inherited), pointing 
     assert.equal(by.CALENDARS.script_name, 'pastecal-sync');
     assert.equal(by.DIRECTORY.script_name, 'pastecal-sync');
     assert.ok(!by.ACCOUNTS.script_name && !by.WAITLIST.script_name, 'own accounts and waitlist');
+    // The archive job runs in staging's own object, so its env.BACKUPS is the staging bucket (a job in
+    // pastecal-sync's objects would write to production's bucket).
+    assert.ok(by.BACKUP_ARCHIVE && !by.BACKUP_ARCHIVE.script_name, 'own archive job');
+    assert.deepEqual(st.triggers, cfg.triggers, 'the same daily archive cron');
     assert.equal(st.vars.BETA_REAL_DATA, '1', 'checkout is refused on the beta');
     assert.deepEqual(st.migrations, cfg.migrations, 'same classes, same migration tags');
     assert.deepEqual(names(st.ratelimits), names(cfg.ratelimits));

@@ -374,10 +374,16 @@ function restoreRefusal(room, now) {
 //      to 3 times, then 409 busy. A stale extra point is harmless: it is a real earlier state, and
 //      pruning drops it in time.
 //   5. Prune restore points past the newest keepPoints, outside the block, best effort.
-export async function restoreVersion(room, version) {
+//
+// fromArchive {calendar}: an admin restore from the daily full archive (BackupArchive.js; Worker route
+// /api/admin/backup/restore, Bearer IMPORT_SECRET). The Worker reads the archive from its own bucket and
+// passes the one calendar in; `version` is the archive's date. The lock-date gate does not apply (support
+// chose this backup on purpose); everything else -- restore point, one history entry, limits -- is the same.
+// Only the admin route sends it: the Pro route builds its own body ({version}) and never forwards one.
+export async function restoreVersion(room, version, fromArchive = null) {
     let recorded = null;
     try {
-        const r = await restoreNow(room, version, (at) => { recorded = at; });
+        const r = await restoreNow(room, version, (at) => { recorded = at; }, fromArchive);
         if (recorded !== null && !r.applied) room.sql.exec(`DELETE FROM restore_log WHERE at = ?`, recorded);   // nothing restored: don't count it
         if (r.applied) { await pruneRestorePoints(room).catch((e) => console.error('[restore] prune failed:', e && e.message)); delete r.applied; }
         return r;
@@ -387,17 +393,23 @@ export async function restoreVersion(room, version) {
         return { ok: false, status: 502, error: 'unavailable' };
     }
 }
-async function restoreNow(room, version, onRecord) {
+async function restoreNow(room, version, onRecord, fromArchive = null) {
     const s = room.state, env = room.env;
     const no = (status, error) => ({ ok: false, status, error });
     if (!s.id) return no(404, 'not-found');
     if (!env.BACKUPS) return no(503, 'no-backups');
     if (typeof version !== 'string' || !VERSION_RE.test(version)) return no(400, 'bad-version');
     const prefix = snapshotPrefix(s.id);
-    const obj = await env.BACKUPS.get(`${prefix}${version}.json`);
-    if (!obj) return no(404, 'no-such-version');
-    let snap; try { snap = await obj.json(); } catch { return no(422, 'bad-snapshot'); }
-    if (room.lock && savedAtMs(snap, obj) < (room.lock.lockedAt || 0)) return no(404, 'no-such-version');
+    let snap;
+    if (fromArchive) {
+        if (version.length !== 10) return no(400, 'bad-version');
+        snap = { calendar: fromArchive.calendar };
+    } else {
+        const obj = await env.BACKUPS.get(`${prefix}${version}.json`);
+        if (!obj) return no(404, 'no-such-version');
+        try { snap = await obj.json(); } catch { return no(422, 'bad-snapshot'); }
+        if (room.lock && savedAtMs(snap, obj) < (room.lock.lockedAt || 0)) return no(404, 'no-such-version');
+    }
     const cal = snap && snap.calendar;
     if (!cal || typeof cal !== 'object') return no(422, 'bad-snapshot');
     const { events } = room.dedupe(cal);
@@ -428,7 +440,7 @@ async function restoreNow(room, version, onRecord) {
         if (!put) continue;                                        // that name exists (never expected): a new name
         const r = await room.ctx.blockConcurrencyWhile(async () => {
             if (s.v !== v0) return null;                           // a save landed during the put: capture again
-            try { return applyRestore(room, version, events, title, optionsFrom(s.options)); }
+            try { return applyRestore(room, version, events, title, optionsFrom(s.options), !!fromArchive); }
             catch (e) {
                 console.error('[restore] apply failed:', e && e.message);
                 room.load();                                       // memory back in step with what SQLite holds
@@ -444,7 +456,7 @@ async function restoreNow(room, version, onRecord) {
 }
 // Synchronous, in one SQLite transaction: a throw part-way rolls every row back (and the caller reloads
 // memory from SQLite). No await inside, so no message can land in the middle.
-function applyRestore(room, version, events, title, options) {
+function applyRestore(room, version, events, title, options, fromArchive = false) {
     const s = room.state;
     const beforeEvents = s.events, beforeTitle = s.title, beforeOptions = s.options;
     room.ctx.storage.transactionSync(() => {
@@ -454,7 +466,8 @@ function applyRestore(room, version, events, title, options) {
         s.title = title; room.setMeta('title', title);
         s.options = options; room.setMeta('options', options);
         room.bump('restore', [{ type: 'restore', version, events: events.length }],
-            { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', label: `Restored the version from ${versionLabel(version)}`, countsOnly: true });
+            { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', countsOnly: true,
+                label: fromArchive ? `Restored the full backup from ${version}` : `Restored the version from ${versionLabel(version)}` });
     });
     return { ok: true, applied: true, v: s.v, events: events.length };
 }
@@ -493,7 +506,8 @@ export async function insightRoute(room, op, request) {
     if (op === 'stats-dump' && request.method === 'GET') return Response.json(statsDump(room));
     if (op === 'restore-version' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
-        const r = await restoreVersion(room, body && body.version);
+        const fromArchive = body && body.fromArchive && typeof body.fromArchive.calendar === 'object' ? body.fromArchive : null;
+        const r = await restoreVersion(room, body && body.version, fromArchive);
         return Response.json(r, { status: r.ok ? 200 : r.status });
     }
     return new Response('not found', { status: 404 });

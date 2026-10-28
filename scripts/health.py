@@ -9,6 +9,10 @@ Answers "is anything wrong right now?" from the places the truth lives:
      listed with the `cf` CLI), and for the ones edited in the last 24h their history and events (GET /cal/<id>,
      read-only; a script's read is not counted as a visit)
   2. Google Analytics (errors by message, refused changes, blocked saves) -- via stats.sh
+  3. the daily full archive (R2 archive/daily/<date>.json.gz, cloudflare/src/BackupArchive.js): GET
+     /api/admin/backup/health (Bearer IMPORT_SECRET, from the env or the Keychain item pastecal-import-secret,
+     never printed) -- missing, over 26h old, or under 95% of the directory's calendars is ATTENTION. Without
+     the secret, only the newest file's age is checked (from the R2 listing).
 
 Anything that needs a person is printed first, under ATTENTION. deploy.sh runs this after
 every hosting deploy, because a bad release shows up here within minutes (Sep 26: a series
@@ -17,7 +21,7 @@ edit that saved as a delete would have shown as an orphaned occurrence).
 Cheap by design: history is fetched only for calendars edited in the last 24h and only
 entries from the last 24h; calendars only if edited in the last 24h.
 """
-import json, os, subprocess, sys, time, urllib.parse, urllib.request
+import json, os, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 SITE = 'https://pastecal.com'
@@ -173,6 +177,43 @@ people = active_people()
 viewed = {k: active_calendars(n) for k, n in (('day', 1), ('week', 7), ('month', 28))}
 edited = {'day': len(within(24)), 'week': len(within(24 * 7)), 'month': len(within(24 * 28))}
 
+# ---------------------------------------------------------------- 4. the daily full archive (Cloudflare)
+def import_secret():
+    if os.environ.get('IMPORT_SECRET'): return os.environ['IMPORT_SECRET']
+    try:
+        return subprocess.run(['security', 'find-generic-password', '-s', 'pastecal-import-secret', '-w'],
+                              capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return ''
+
+def check_archive():
+    secret = import_secret()
+    if secret:
+        req = urllib.request.Request(f'{SITE}/api/admin/backup/health', headers={'User-Agent': 'pastecal-health', 'Authorization': f'Bearer {secret}'})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                h = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code != 503: return f'health route answered HTTP {e.code}', [f'backup: the archive health check answered HTTP {e.code}']
+            h = json.loads(e.read() or b'{}')
+        n = h.get('newest') or {}
+        line = (f"newest {n.get('date')}: {n.get('count')} of {h.get('editable')} calendars ({n.get('absent')} names lead nowhere), {n.get('ageHours')}h old, "
+                f"{(n.get('gzBytes') or 0) / 1e6:.1f} MB" if n else 'no archive for today or yesterday')
+        return line, ['backup: ' + p for p in h.get('problems', [])]
+    # No secret: the newest file's age from the listing (no count check).
+    files = [o for o in r2_list('archive/daily/') if o['key'].endswith('.json.gz')]
+    if not files: return 'no daily archive in R2', ['backup: no daily full archive in R2 (archive/daily/)']
+    o = max(files, key=lambda o: o['key'])
+    age = (NOW - ms(o['last_modified'])) / H
+    return (f"newest {o['key']}: {age:.1f}h old (no IMPORT_SECRET: count not checked)",
+            [f'backup: the newest full archive is {age:.1f} hours old, over 26'] if age > 26 else [])
+
+try:
+    backup, backup_flags = check_archive()
+except Exception as e:
+    backup, backup_flags = f'unavailable ({type(e).__name__})', [f'backup: the archive check failed ({type(e).__name__})']
+for f in backup_flags: flag(f)
+
 # ---------------------------------------------------------------- report
 print('pastecal health --', time.strftime('%Y-%m-%d %H:%M %Z'))
 print()
@@ -200,6 +241,7 @@ if errors:
     for d, m in errors[:10]:
         kind, msg, where = d
         print(f"   {m[0]:>4}x {m[1]:>3} people  {kind or '-':<16} {(msg or '(no message)')[:70]:<70}  {where[:40]}")
+print(f"BACKUP         {backup}")
 print('ACTIVE         (complete days, through yesterday)')
 if people:
     print(f'   people      DAU {people[0]:>5}   WAU {people[1]:>5}   MAU {people[2]:>5}   (stickiness DAU/MAU {people[0] / max(people[2], 1):.0%})')
@@ -207,5 +249,5 @@ print(f"   calendars   viewed:  DAC {viewed['day'][0]:>5}   WAC {viewed['week'][
 print(f"               shared (2+ people):  {viewed['day'][1]:>5}         {viewed['week'][1]:>5}         {viewed['month'][1]:>5}")
 print(f"               edited:  {edited['day']:>9}   {edited['week']:>9}   {edited['month']:>9}   (R2 backups, since Oct 22)")
 print()
-print('Read-only. Sources: Cloudflare (R2 backup listing via cf, GET /cal), GA4 (stats.sh).')
+print('Read-only. Sources: Cloudflare (R2 backup listing via cf, GET /cal, /api/admin/backup/health), GA4 (stats.sh).')
 sys.exit(1 if attention else 0)
