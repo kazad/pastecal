@@ -77,3 +77,45 @@ test('classic: dragging one occurrence keeps the series rule as stored', async (
   expect(series.recurrencerule).toBe(RULE);
   expect(series.recurrenceException).toBeTruthy();
 });
+
+// The reporter's own steps (issue #48, "Still not working", Oct 27 2026): a new event made in the classic editor on
+// the last Monday of October 2026, repeat "Every year on October last Mon", saved, then October 2027 in the same
+// session (no reload) -- and again after a reload.
+test('classic: made in the editor, the last Monday of October shows in October 2027 without a reload, and after one', async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const id = newId();
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Board', options: {}, events: [] } })).status()).toBe(201);
+  await page.goto(`/${id}?backend=cf&view=month&date=2026-10-01`);
+  const cell = page.locator(`.e-month-view td.e-work-cells[data-date="${new Date(2026, 9, 26).getTime()}"]`);
+  await expect(cell).toBeVisible({ timeout: 15_000 });
+  await cell.dblclick();
+  const dialog = page.locator('.e-schedule-dialog.e-popup-open');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('[name="Subject"]').fill('Board meeting');
+  const repeat = dialog.locator('.e-repeat-element');
+  await expect(async () => {
+    await repeat.locator('..').click();
+    await page.waitForTimeout(300);
+    await page.locator('.e-popup-open li', { hasText: /^Yearly$/ }).first().click({ timeout: 2000 });
+    await page.waitForTimeout(300);
+    expect(await repeat.inputValue()).toBe('Yearly');
+  }).toPass({ timeout: 10_000 });
+  // "On the Last Monday of October", as the reporter picked it.
+  await page.evaluate((rule) => {
+    const el = document.querySelector('.e-schedule-dialog.e-popup-open .e-recurrenceeditor');
+    el.ej2_instances[0].setRecurrenceRule(rule, new Date(2026, 9, 26));
+  }, RULE);
+  await expect(dialog.locator('.e-recurrenceeditor')).toContainText(/last/i);
+  await dialog.locator('.e-event-save').click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await stored(request, id)).map((e) => e.recurrencerule), { timeout: 10_000 }).toEqual([expect.stringMatching(/BYSETPOS=-1/)]);
+  console.log('STORED', JSON.stringify((await stored(request, id))[0]));
+  // Next October, same session.
+  await page.locator('.e-next').first().click();
+  for (let i = 0; i < 11; i++) await page.locator('.e-next').first().click();
+  const next = page.locator(`.e-month-view td.e-work-cells[data-date="${new Date(2027, 9, 25).getTime()}"]`);
+  await expect(next.locator('.e-appointment', { hasText: 'Board meeting' }), 'Oct 25 2027, no reload').toBeVisible({ timeout: 10_000 });
+  await page.reload();
+  await page.goto(`/${id}?backend=cf&view=month&date=2027-10-01`);
+  await expect(page.locator(`.e-month-view td.e-work-cells[data-date="${new Date(2027, 9, 25).getTime()}"]`).locator('.e-appointment', { hasText: 'Board meeting' }), 'Oct 25 2027 after a reload').toBeVisible({ timeout: 15_000 });
+});
