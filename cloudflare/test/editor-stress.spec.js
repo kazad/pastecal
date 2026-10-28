@@ -298,6 +298,7 @@ test('F03d [card] the next new event starts with the type the last one was added
   at = await slot(page, '2026-10-29', 9);
   await page.mouse.click(at.x, at.y + 6);
   await expect(card(page)).toBeVisible();
+  await page.waitForTimeout(300);   // past the card's entrance, as a person would be (as F03b)
   await page.mouse.click(5, 5);
   await expect(card(page)).toBeHidden();
   await page.waitForTimeout(1200);
