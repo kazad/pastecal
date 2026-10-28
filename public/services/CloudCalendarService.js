@@ -542,6 +542,12 @@ class CloudCalendarService extends CalendarDataService {
         return null;
     }
 
+    /** The You tab's name ({ name }), sent with each save so Activity can say "Edited by <name>"; {} without one.
+     *  Public: history is visible to everyone who can edit (the field says so). */
+    static _name() {
+        try { const name = typeof YourName !== 'undefined' ? YourName.get() : ''; return name ? { name } : {}; } catch (e) { return {}; }
+    }
+
     static _sendSave(room, commands, { journalT, replay = false, localEvents, partial = false } = {}) {
         if (replay && this._overWriteBudget()) return;
         const id = `s${++room.seq}`;
@@ -549,7 +555,7 @@ class CloudCalendarService extends CalendarDataService {
         const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents, partial };
         const tz = this._browserTz();
-        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...(tz ? { tz } : {}) })) { room.inflight = null; room.unsent = true; }
+        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...(tz ? { tz } : {}), ...this._name() })) { room.inflight = null; room.unsent = true; }
     }
 
     static _sendMeta(room, meta, opts = {}) {
@@ -557,7 +563,7 @@ class CloudCalendarService extends CalendarDataService {
         const author = this._authorUid();
         const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'meta', v: room.v, meta, journalT: opts.journalT };
-        if (!this._send(room, { t: 'meta', id, ...meta, author, writer })) { room.inflight = null; room.unsent = true; }
+        if (!this._send(room, { t: 'meta', id, ...meta, author, writer, ...this._name() })) { room.inflight = null; room.unsent = true; }
     }
 
     static _onAck(room, m) {

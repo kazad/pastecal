@@ -64,6 +64,24 @@ assert.equal(cleared.kind, 'title-cleared');
 assert.equal(cleared.events.length, 1, 'with the calendar as it was');
 step('a cleared title is still recorded');
 
+// The You tab's name rides with a save and lands on the history entry (Activity: "Edited by <name>"), cleaned by the
+// server whatever a client sends: trimmed, control characters gone, at most 40 characters; nothing for a blank or a
+// non-string. (YourName.clean, the browser's rule too.)
+const named = async (sid, name, title) => {
+    const a = await t.send({ t: 'save', id: sid, v, commands: [{ type: 'update', key: 'ev1|', changes: { title } }], ...(name === undefined ? {} : { name }) });
+    assert.equal(a.t, 'ack', JSON.stringify(a)); v = a.v;
+    return (await history())[0];
+};
+assert.equal((await named('n1', '  Sam Lee  ', 'Lunch 1')).name, 'Sam Lee');
+assert.equal((await named('n2', 'Ann\u0000\u0007\u001b[31m‮Bob\n', 'Lunch 2')).name, 'Ann [31m Bob');
+const long = 'x'.repeat(39) + '😀😀😀';
+assert.equal((await named('n3', long, 'Lunch 3')).name, 'x'.repeat(39) + '😀', '40 characters (code points), not 40 UTF-16 units');
+assert.equal((await named('n4', '   ', 'Lunch 4')).name, undefined, 'a blank name is no name');
+assert.equal((await named('n5', { evil: 1 }, 'Lunch 5')).name, undefined, 'not a string: no name');
+assert.equal((await named('n6', undefined, 'Lunch 6')).name, undefined, 'none sent: none stored');
+assert.equal((await named('n7', 'a'.repeat(5000), 'Lunch 7')).name, 'a'.repeat(40));
+step('a name sent with a save is stored on its history entry, trimmed, cleaned and at most 40 characters');
+
 t.close();
 console.log('history tests passed');
 process.exit(0);

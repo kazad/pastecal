@@ -9,6 +9,9 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 const BASE = process.env.BASE || 'http://localhost:8870', SECRET = process.env.IMPORT_SECRET || 'dev-secret', PERSIST = process.env.PERSIST;
 assert.ok(PERSIST, 'set PERSIST to the --persist-to directory of the running wrangler dev');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The gap between two restores (RoomInsight.js RESTORE.minGapMs, 5 s); test-all.sh runs the server with a shorter
+// RESTORE_MIN_GAP_MS and passes the same value here.
+const GAP = Number(process.env.RESTORE_MIN_GAP_MS) || 5000;
 let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
 const run = Date.now().toString(36);
 const enc = encodeURIComponent;
@@ -132,13 +135,20 @@ assert.equal((await fetch(`${BASE}/cal/${enc(id)}/restore-version`, { method: 'P
 assert.equal((await cal(id)).v, original.v, 'nothing changed');
 step('non-owner 403 not-owner, signed out 401, a foreign Origin 403 forbidden-origin; the room route is not reachable from outside');
 
-// 5. Restore the old day.
+// 5. Restore the old day. (A third old day, never restored, is the target of the too-soon check below.)
+const OLD2 = '2026-01-16';
+seed(`${prefix}${OLD2}.json`, { v: 1, savedAt: oldSavedAt, calendar: { id, title: 'Another old title', options: {}, events: [ev('o3', 'old three', 7)] } });
 const viewer = tab(id); await viewer.ready;
 const histBefore = await (await fetch(`${BASE}/cal/${enc(id)}/history`)).json();
 r = await post('/api/pro/versions/restore', { calendarId: id, date: OLD }, { cookie: owner.cookie });
 assert.equal(r.status, 200);
 const restored = await r.json();
 assert.deepEqual(restored, { ok: true, v: original.v + 1, events: 2 });
+const restoredAt = Date.now();
+// A second restore straight away is refused (checked here, right after the first, so it holds whatever the
+// gap; the history check below shows the refusal wrote nothing).
+r = await post('/api/pro/versions/restore', { calendarId: id, date: OLD2 }, { cookie: owner.cookie });
+assert.equal(r.status, 429, 'within 5 s of the previous restore'); assert.deepEqual(await r.json(), { ok: false, error: 'too-soon' });
 let now = await cal(id);
 assert.equal(now.v, original.v + 1, 'one version bump');
 assert.deepEqual(now.calendar.events.map((e) => e.id), ['o1', 'o2']);
@@ -179,9 +189,7 @@ assert.match(point.date, new RegExp(`^${today}T\\d{9}Z-[0-9a-f]{6}$`), 'to the m
 assert.deepEqual([point.day, point.v, point.events], [today, original.v, 3]);
 assert.equal(versions[0].date, today, 'newest first: today (saved after the restore), then the restore point');
 assert.equal(versions[1].date, point.date);
-r = await post('/api/pro/versions/restore', { calendarId: id, date: point.date }, { cookie: owner.cookie });
-assert.equal(r.status, 429, 'within 5 s of the previous restore'); assert.deepEqual(await r.json(), { ok: false, error: 'too-soon' });
-await sleep(5200);
+await sleep(restoredAt + GAP + 200 - Date.now());   // past the gap since the restore above
 r = await post('/api/pro/versions/restore', { calendarId: id, date: point.date }, { cookie: owner.cookie });
 assert.equal(r.status, 200);
 now = await cal(id);
@@ -239,7 +247,7 @@ const points = async (cid, cookie = owner.cookie) => (await (await get(`/api/pro
     const first = await cal(cid);
     let pts = await points(cid);
     assert.equal(pts.length, 1, 'only the restore that ran wrote a restore point');
-    await sleep(5200);
+    await sleep(GAP + 200);
     const other = first.calendar.title === 'Version A' ? '2026-03-02' : '2026-03-01';
     assert.equal((await restore(cid, other)).status, 200);
     pts = await points(cid);
@@ -257,12 +265,12 @@ const points = async (cid, cookie = owner.cookie) => (await (await get(`/api/pro
         { v: 1, savedAt: new Date().toISOString(), restorePointFor: 'seeded', calendar: { id: cid, title: `seeded ${i}`, options: {}, events: [] } });
     const mine = [];
     for (let i = 0; i < 10; i++) {
-        if (i) await sleep(5200);
+        if (i) await sleep(GAP + 200);
         r = await restore(cid, i % 2 ? '2026-03-02' : '2026-03-01');
         assert.equal(r.status, 200, `restore ${i + 1}: ${await r.clone().text()}`);
         mine.push((await cal(cid)).v);
     }
-    await sleep(5200);
+    await sleep(GAP + 200);
     r = await restore(cid, '2026-03-01');
     assert.equal(r.status, 429); assert.deepEqual(await r.json(), { ok: false, error: 'too-many-restores' });
     const pts = await points(cid);
@@ -291,7 +299,7 @@ const points = async (cid, cookie = owner.cookie) => (await (await get(`/api/pro
     assert.ok(list.every((x) => Date.parse(x.savedAt) >= atB), `B sees only versions saved since B's lock: ${JSON.stringify(list)}`);
     assert.ok(!list.some((x) => x.date === aPoint.date || x.date === '2026-03-01' || x.date === '2026-03-02'), "none of A's versions");
     assert.equal((await get(`/api/pro/versions/preview?calendar=${enc(cid)}&date=${aPoint.date}`, userB.cookie)).status, 404);
-    await sleep(5200);
+    await sleep(GAP + 200);
     r = await restore(cid, aPoint.date, userB.cookie);
     assert.equal(r.status, 404); assert.equal((await r.json()).error, 'no-such-version');
     assert.ok(r2get(`${p}${aPoint.date}.json`), "A's restore point is still in R2 (a backup), just not shown");

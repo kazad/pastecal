@@ -997,8 +997,15 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-bar { flex: none; display: flex; align-items: stretch; gap: 4px; min-height: 48px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--pc-line); background: var(--pc-soft) }
 /* The tabs (.pc-tabs .pc-tab): five labeled tabs (Notes, Share, Activity, Stats, Plus) fit the column; Settings is a gear at the end. */
 .pc-side-tabs { flex: 1 }
-.pc-side-tab--icon { display: grid; place-items: center; width: 40px; margin-left: auto }
+.pc-side-tab--icon { display: grid; place-items: center; width: 34px; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
+/* You: a small circle just before the gear, your initials once you give a name (else a person outline). */
+.pc-side-tab--you { display: grid; place-items: center; width: 34px; margin-left: auto }
+.pc-side-tab--you + .pc-side-tab--icon { margin-left: 0 }
+.pc-you-dot { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; border-radius: 50%;
+  font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); letter-spacing: 0; line-height: 1 }
+.pc-you-dot svg { width: 15px; height: 15px }
+.pc-you-name + .pc-set-pane { padding-top: 14px; border-top: 1px solid var(--pc-line) }
 .pc-side-title { flex: 1; min-width: 0; margin: 0; padding-left: 12px; align-self: center; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold); color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-side-close { align-self: center }   /* + .pc-btn--ghost.pc-btn--icon */
 .pc-side-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 20px 22px }
@@ -1021,8 +1028,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 }
 /* Docked between 1100 and 1279px the column is narrower: tighter tabs, still no scrolling. */
 @media (min-width: 1100px) and (max-width: 1279px) {
-  .pc-side-tabs .pc-tab { padding: 0 5px; font-size: var(--pc-fs-sm) }
-  .pc-side-tab--icon { width: 34px }
+  .pc-side-tabs { gap: 0 }
+  .pc-side-tabs .pc-tab { padding: 0 3px; font-size: var(--pc-fs-sm) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 30px }
   .pc-side-close { width: 30px }
 }
 @media (max-width: 1099px) {
@@ -1038,14 +1046,15 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
   .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: var(--pc-radius-pill); background: var(--pc-line) }
   .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
-  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 6px; font-size: var(--pc-fs-lg) }
+  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 4px; font-size: var(--pc-fs-lg) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 34px }   /* seven tabs and the close button fit a 390px phone */
   .pc-side-body { padding: 16px 16px 24px }
   .pc-side-notes-input { font-size: var(--pc-fs-lg) }   /* iOS zooms into smaller fields */
 }
 /* The narrowest phones (360px and under): one size smaller, so the six tabs still fit without scrolling. */
 @media (max-width: 380px) {
-  .pc-side-tabs .pc-tab { padding: 0 5px; font-size: var(--pc-fs-md) }
-  .pc-side-tab--icon { width: 34px }
+  .pc-side-tabs .pc-tab { padding: 0 4px; font-size: var(--pc-fs-md) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 32px }
 }
 @media (prefers-reduced-motion: no-preference) {
   @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease) } }
@@ -1264,6 +1273,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
    ========================================================================================= */
 .pc-qa-step { display: flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; border-radius: 50%;
   background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }   /* neutral step numbers */
+.pc-qa-import { margin-right: auto; font-size: var(--pc-fs-sm) }   /* + .pc-link: quiet, at the left of Cancel / Create */
 .pc-qa-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px }
 .pc-qa-try { margin-right: 2px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
 /* All day is a switch (.pc-toggle); while on, the times stay (blank, dimmed) so the height holds. */
@@ -1472,6 +1482,49 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 .pc-set-backup { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: var(--pc-space-3); font-size: var(--pc-fs-sm) }
 .pc-set-copy .pc-set-backup { margin-top: 0; flex: none }
 .pc-set-note { margin: var(--pc-space-2) 0 0 }
+/* Small dialogs (index.html): Make a copy, and an import from quick add or a dropped file. A title, a line or a field,
+   and the actions at the bottom right. */
+.pc-small-dialog { display: flex; flex-direction: column; gap: var(--pc-space-3); max-width: 26rem }
+.pc-small-dialog-text { margin: 0; font-size: var(--pc-fs-md); line-height: 1.5; color: var(--pc-text-2) }
+.pc-small-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--pc-space-4); margin-top: var(--pc-space-2) }
+/* The import dialog (index.html, ICSImport.preview): a title, the lists, the actions. Only the lists scroll, so the title
+   and Import stay in view with 1,000 rows. Rows read like the Agenda: date | time | title in aligned columns, no rules;
+   on a phone the title goes under its date and time. */
+.pc-imp { max-width: 36rem; overflow: hidden }
+.pc-imp-title { overflow-wrap: anywhere }
+.pc-imp-lists { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 calc(-1 * var(--pc-space-2)); padding: 0 var(--pc-space-2) }
+.pc-imp-lists > section + section { margin-top: var(--pc-space-4) }
+.pc-imp-head { display: flex; align-items: baseline; gap: var(--pc-space-2); margin: 0 0 var(--pc-space-2); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
+.pc-link.pc-imp-show { padding: 0; border: 0; background: none; font: var(--pc-fw-regular) var(--pc-fs-sm)/var(--pc-lh-tight) var(--pc-font); color: var(--pc-text-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer }
+.pc-link.pc-imp-show:hover { color: var(--pc-text) }
+.pc-imp-show:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px; border-radius: var(--pc-radius-xs) }
+/* The same columns in every section (max-content per list made New and Changes line up differently); a long range wraps. */
+.pc-imp-list { display: grid; grid-template-columns: 9.5rem 5.25rem minmax(0, 1fr); column-gap: var(--pc-space-4); row-gap: var(--pc-space-2);
+  margin: 0; padding: 0; list-style: none; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight) }
+.pc-imp-row { display: contents }
+.pc-imp-date, .pc-imp-time { color: var(--pc-text-2); font-variant-numeric: tabular-nums; white-space: nowrap }
+.pc-imp-date { white-space: normal }
+.pc-imp-name { min-width: 0; color: var(--pc-text); overflow-wrap: anywhere }
+.pc-imp-row--plain .pc-imp-name { grid-column: 1 / -1 }
+.pc-imp-rep { display: inline-flex; align-items: center; gap: 3px; margin-left: var(--pc-space-2); color: var(--pc-text-muted); white-space: nowrap }
+.pc-imp-rep svg { width: 12px; height: 12px }
+.pc-imp-what { margin-left: var(--pc-space-1); color: var(--pc-text-2) }
+.pc-imp-what::before { content: "· "; color: var(--pc-text-muted) }
+.pc-imp-show + .pc-imp-list { margin-top: var(--pc-space-2) }
+.pc-imp-more { margin: var(--pc-space-2) 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+@media (max-width: 480px) {
+  .pc-imp-list { display: block }
+  .pc-imp-row { display: block; padding-top: var(--pc-space-2) }
+  .pc-imp-list > .pc-imp-row:first-child { padding-top: 0 }
+  .pc-imp-date, .pc-imp-time { font-size: var(--pc-fs-xs) }
+  .pc-imp-time:not(:empty) { margin-left: var(--pc-space-2) }
+  .pc-imp-name { display: block; margin-top: 2px }
+  .pc-imp-row--plain .pc-imp-name { margin-top: 0 }
+}
+/* A file dragged over the page: one line, over a dimmed page, gone when the file leaves or drops. */
+.pc-drop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; pointer-events: none; background: var(--pc-scrim) }
+.pc-drop span { padding: var(--pc-space-3) var(--pc-space-4); border: 2px dashed var(--pc-link); border-radius: var(--pc-radius-card);
+  background: var(--pc-bg); color: var(--pc-text); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
 .pc-view-footer .pc-link { margin-left: 8px; font-weight: var(--pc-fw-semibold); white-space: nowrap }
 
 /* While the quick box is open on an empty slot: that slot shows as a "New event" block (app.showDraftBlock),

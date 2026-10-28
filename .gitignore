@@ -80,3 +80,6 @@ test-results/
 playwright-report/
 playwright/.cache/
 fix-name-collisions-*.json
+.cloudflare/
+.wrangler/
+test/native-audit/out/

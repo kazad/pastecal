@@ -43,6 +43,10 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 | View link, phone | 0 | 2 | 1 | 32 | +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
 | Embed, 720 | 0 | 0 | 0 | 18 | one quiet header line |
 | Event card (quick view) | - | - | - | 13 | title, type, date and times, More details, Done; the "Edited just now" line (3 words) removed Oct 27 2026 |
+| Settings panel | 0 | - | - | 43 | this calendar only since Oct 28 2026 (was ~70 words with "Only me" in it); Backup last |
+| You panel | 0 | - | - | 36 | your name (optional) and its one line, then the six preferences that left Settings |
+| Make a copy dialog | 1 | - | - | 8 | name, Include events, Make copy |
+| Import dialog (2 new events) | 1 | - | - | 21 | title, "New · 2", two rows (date, time, title, as the Agenda), Cancel, Import 2 events; no summary line (the headings and the button carry the counts), "Already in this calendar" and "Not imported" folded (Oct 28 2026) |
 
 ## Next, in order
 

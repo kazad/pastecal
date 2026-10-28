@@ -112,10 +112,10 @@ for (const native of [false, true]) {
         const { ctx, page, errors } = await open(browser, id, { native, query: '&view=month&date=2026-10-01' });
 
         await pick(page, FIXTURE);
-        await expect(page.getByTestId('ics-plan')).toContainText('Add 6 events.');
+        await expect(page.getByTestId('ics-confirm')).toHaveText('Import 6 events', { timeout: 15_000 });
         await expect.poll(async () => (await stored(id)).length, { timeout: 1000 }).toBe(1);   // nothing saved before Import
         if (!native) {
-            await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-plan-light.png') });
+            await page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, 'settings-plan-light.png') });
         }
         await page.getByTestId('ics-confirm').click();
         await expect(page.getByTestId('ics-note')).toContainText('Added 6 events.');
@@ -130,7 +130,7 @@ for (const native of [false, true]) {
         // Drawn, not only stored: Swim on the Mondays but the skipped Oct 12, the late one on Oct 19, Board on the last Monday.
         await expect.poll(() => drawnInOctober(page, native)).toMatchObject({ 5: ['Swim'], 19: ['Swim (late)'], 26: ['Board', 'Swim'] });
         expect((await drawnInOctober(page, native))[12]).toBeUndefined();
-        if (!native) await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-result-light.png') });
+        if (!native) await page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, 'settings-result-light.png') });
 
         // Undo: the whole import, in one step.
         await page.getByTestId('ics-undo').click();
@@ -142,9 +142,9 @@ for (const native of [false, true]) {
         await soon(async () => (await stored(id)).length).toBe(7);
         events = await stored(id);
         await pick(page, FIXTURE);
-        await expect(page.getByTestId('ics-plan')).toContainText('All 6 already here.');
+        await expect(page.getByTestId('ics-plan')).toHaveText('Nothing new: all 6 events in this file are already in this calendar.');
         await expect(page.getByTestId('ics-confirm')).toHaveCount(0);
-        await page.getByTestId('ics-cancel').click();
+        await page.getByTestId('ics-done').click();
         await expect(page.getByTestId('ics-plan')).toHaveCount(0);
         expect(await stored(id)).toEqual(events);
         expect(errors).toEqual([]);
@@ -163,8 +163,8 @@ test('download a backup: imported into the same calendar nothing changes; into a
 
     const before = await stored(id);
     await pick(page, file);
-    await expect(page.getByTestId('ics-plan')).toContainText('All 4 already here.');
-    await page.getByTestId('ics-cancel').click();
+    await expect(page.getByTestId('ics-plan')).toHaveText('Nothing new: all 4 events in this file are already in this calendar.');
+    await page.getByTestId('ics-done').click();
     expect(await stored(id)).toEqual(before);
     await ctx.close();
 
@@ -172,7 +172,7 @@ test('download a backup: imported into the same calendar nothing changes; into a
     const fresh = await seed([], 'Rebuilt');
     const other = await open(browser, fresh, { native: true });
     await pick(other.page, file);
-    await expect(other.page.getByTestId('ics-plan')).toContainText('Add 4 events.');
+    await expect(other.page.getByTestId('ics-confirm')).toHaveText('Import 4 events', { timeout: 15_000 });
     await other.page.getByTestId('ics-confirm').click();
     await soon(async () => (await stored(fresh)).length).toBe(4);
     const back = await stored(fresh);
@@ -190,11 +190,11 @@ test('a file that is not a calendar says so on the page; dark mode', async ({ br
     await pick(page, NOT_ICS);
     await expect(page.getByTestId('ics-note')).toHaveText('That file isn’t a calendar (.ics).');
     await expect(page.getByTestId('ics-plan')).toHaveCount(0);
-    await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-error-dark.png') });
+    await page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, 'settings-error-dark.png') });
     await pick(page, FIXTURE);
-    await expect(page.getByTestId('ics-plan')).toContainText('Add 6 events.');
+    await expect(page.getByTestId('ics-confirm')).toHaveText('Import 6 events', { timeout: 15_000 });
     await expect(page.getByTestId('ics-note')).toHaveCount(0);
-    await page.getByTestId('settings').screenshot({ path: path.join(OUT, 'settings-plan-dark.png') });
+    await page.getByTestId('ics-dialog').screenshot({ path: path.join(OUT, 'settings-plan-dark.png') });
     await ctx.close();
 });
 
@@ -211,7 +211,7 @@ test('a big backup (2,500 events, over one save message) is saved in full', asyn
     const id = await seed([]);
     const { ctx, page, errors } = await open(browser, id);
     await pick(page, file);
-    await expect(page.getByTestId('ics-plan')).toContainText('Add 2500 events.');
+    await expect(page.getByTestId('ics-confirm')).toHaveText('Import 2500 events', { timeout: 15_000 });
     await page.getByTestId('ics-confirm').click();
     await expect.poll(async () => (await stored(id)).length, { timeout: 30_000, intervals: [500] }).toBe(2500);
     const back = await stored(id);

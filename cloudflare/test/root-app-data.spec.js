@@ -257,10 +257,10 @@ test('ROOT 1: a label someone names reaches an idle tab (edit and view link) ove
 // =====================================================================================================
 // ROOT A + ROOT 5: odd names, through Share's links
 // =====================================================================================================
-test('ROOT A: Share\'s links for calendars named "50% off", "a?b", "TEAM NUÑEZ", "sp!x", "d&d8", "강아지봉사" and "trail " open that calendar', async ({ browser }) => {
-  test.setTimeout(180_000);
-  const out = {}, want = {};
-  for (const name of ['50% off', 'a?b', 'TEAM NUÑEZ', 'sp!x', 'd&d8', '강아지봉사', 'trail ']) {
+// One test per name, so the seven run side by side.
+for (const name of ['50% off', 'a?b', 'TEAM NUÑEZ', 'sp!x', 'd&d8', '강아지봉사', 'trail ']) {
+  test(`ROOT A: Share's links for calendars named "50% off", "a?b", "TEAM NUÑEZ", "sp!x", "d&d8", "강아지봉사" and "trail " open that calendar ("${name}")`, async ({ browser }) => {
+    const out = {}, want = {};
     const real = `${rand().slice(-5)} ${name}`;
     await seed([{ id: 'e1', title: 'Practice', start: '2026-10-23T00:00:00.000Z', end: '2026-10-23T01:00:00.000Z', description: '', repeat: '', recurrencerule: '',
       recurrenceID: null, recurrenceException: null, isAllDay: false, type: 1 }], { id: real, title: `Cal ${name}` });
@@ -284,6 +284,6 @@ test('ROOT A: Share\'s links for calendars named "50% off", "a?b", "TEAM NUÑEZ"
     out[name] = { rawSpaces: /\s/.test(edit + here + feed), ...opened, feed: feedText.includes(`X-WR-CALNAME:Cal ${name}`) };
     want[name] = { rawSpaces: false, edit: [`Cal ${name}`, true], here: [`Cal ${name}`, true], feed: true };
     await ctx.close();
-  }
-  expect(out, 'each copied link has no raw spaces and opens this calendar; the edit feed is its feed').toEqual(want);
-});
+    expect(out, 'each copied link has no raw spaces and opens this calendar; the edit feed is its feed').toEqual(want);
+  });
+}

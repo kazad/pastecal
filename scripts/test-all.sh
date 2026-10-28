@@ -4,14 +4,20 @@
 #   scripts/test-all.sh                 # everything
 #   scripts/test-all.sh --list          # suite names and the server setup each one needs
 #   scripts/test-all.sh --only sync,lock,unit
+#   scripts/test-all.sh --skip unit       # everything but these
+#   scripts/test-all.sh -j 1              # one suite at a time (default: -j <CPU count>: suites run side by side)
 #
-# Each Worker suite gets its own local `wrangler dev --local` (fresh --persist-to, ports from
-# 8700-8799 / inspector 9700-9799, settings only through --var), so suites never share state or
-# the 10-a-minute create limit. FIREBASE_DB_URL always points at a local address and COPY_BACK is
+# Each Worker suite gets its own local `wrangler dev --local` (fresh --persist-to, its own 4 ports, settings
+# only through --var), so suites never share state, ports or the 10-a-minute create limit, and run concurrently.
+# Ports: each run locks one of 50 blocks of 160 ports in 12000-19999 (inspectors +12000), starting from a block
+# picked by this checkout's path, so two runs on one machine (two checkouts, or the same one twice) never
+# collide; suite i takes base+4i .. base+4i+3. TEST_PORT_BASE=<n> pins the base (still locked).
+# The slowest suites start first; the table is in the order below, whatever order they finish in.
+# FIREBASE_DB_URL always points at a local address and COPY_BACK is
 # empty unless the suite is the copy-back test, so nothing reaches Firebase, Stripe or pastecal.com.
 # Every wrangler this script starts is killed on exit, and the unit-test node_modules symlinks are
 # removed again. Logs: /tmp/pastecal-test-all-<timestamp>/. Exits nonzero if any suite failed.
-# Works with macOS bash 3.2 and Linux. Status: complete; last full run 2026-10-23 (Linux, Node 22), all 25 run suites passed in 246s.
+# Works with macOS bash 3.2 and Linux. Status: complete; last full run 2026-10-28 (omarchy, Node 22, -j 16): all 34 run suites passed in 47s (322s one at a time).
 
 set -u
 
@@ -21,7 +27,7 @@ NODE="${NODE:-$HOME/.nvm/versions/node/v22.18.0/bin/node}"
 [ -x "$NODE" ] || NODE="$HOME/.local/share/mise/installs/node/22/bin/node"   # Linux box: mise, Node 22 (.nvmrc)
 MAIN_REPO="${MAIN_REPO:-/Users/kazad/Dropbox/computer/Projects/pastecal}"
 WRANGLER="node_modules/.bin/wrangler"   # relative to cloudflare/, as the tests expect
-RUN_DIR="/tmp/pastecal-test-all-$(date +%Y%m%d-%H%M%S)"
+RUN_DIR="/tmp/pastecal-test-all-$(date +%Y%m%d-%H%M%S)-$$"
 SECRET="dev-secret"
 DEAD_FIREBASE="http://127.0.0.1:9"
 
@@ -67,14 +73,25 @@ unit|node --test \$(node test/unit-files.js)
 "
 
 ONLY=""
+SKIP=""
 LIST=0
+JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+TEST_PORT_BASE="${TEST_PORT_BASE:-}"
+# Test-only timings, set on every wrangler with --var (production keeps the defaults in CalendarRoom.js and
+# RoomInsight.js). The tests read the same values, so their waits scale with them.
+export COPY_BACK_DELAY_MS="${COPY_BACK_DELAY_MS:-1000}" RESTORE_MIN_GAP_MS="${RESTORE_MIN_GAP_MS:-1000}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --list) LIST=1 ;;
     --only) shift; ONLY="${1:-}" ;;
     --only=*) ONLY="${1#--only=}" ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
-    *) echo "unknown argument: $1 (use --list or --only a,b)"; exit 2 ;;
+    --skip) shift; SKIP="${1:-}" ;;
+    --skip=*) SKIP="${1#--skip=}" ;;
+    -j|--jobs) shift; JOBS="${1:-}" ;;
+    -j*) JOBS="${1#-j}" ;;
+    --jobs=*) JOBS="${1#--jobs=}" ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1 (use --list, --only a,b, --skip a,b or -j N)"; exit 2 ;;
   esac
   shift
 done
@@ -84,18 +101,42 @@ if [ "$LIST" = 1 ]; then
   exit 0
 fi
 
+case "$JOBS" in ''|*[!0-9]*|0) echo "-j needs a positive number"; exit 2 ;; esac
+
 wanted() {
+  case ",$SKIP," in *",$1,"*) return 1 ;; esac
   [ -z "$ONLY" ] && return 0
   case ",$ONLY," in *",$1,"*) return 0 ;; esac
   return 1
 }
-if [ -n "$ONLY" ]; then
-  for w in $(echo "$ONLY" | tr ',' ' '); do
+if [ -n "$ONLY$SKIP" ]; then
+  for w in $(echo "$ONLY,$SKIP" | tr ',' ' '); do
     echo "$SUITES" | grep -q "^$w|" || { echo "no such suite: $w (see --list)"; exit 2; }
   done
 fi
 
 [ -x "$NODE" ] || { echo "node not found at $NODE (set NODE=)"; exit 2; }
+
+# ---------------------------------------------------------------- port block lock
+# /tmp/pastecal-test-ports-<base>.lock (a directory: mkdir is atomic) holds the owner's pid; a lock whose owner
+# is gone is taken over. Released on exit.
+PORT_LOCK=""
+lock_block() {   # lock_block BASE -> 0 if this run now holds it
+  local lock="/tmp/pastecal-test-ports-$1.lock" p
+  if ! mkdir "$lock" 2>/dev/null; then
+    p=$(cat "$lock/pid" 2>/dev/null)
+    { [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; } || return 1
+    rm -rf "$lock"; mkdir "$lock" 2>/dev/null || return 1
+  fi
+  echo $$ > "$lock/pid"; PORT_LOCK="$lock"; TEST_PORT_BASE=$1
+}
+if [ -n "$TEST_PORT_BASE" ]; then
+  lock_block "$TEST_PORT_BASE" || { echo "ports $TEST_PORT_BASE.. are locked by another test-all run (/tmp/pastecal-test-ports-$TEST_PORT_BASE.lock)"; exit 2; }
+else
+  b0=$(( $(printf '%s' "$ROOT" | cksum | cut -d' ' -f1) % 50 ))
+  for i in $(seq 0 49); do lock_block $((12000 + ((b0 + i) % 50) * 160)) && break; done
+  [ -n "$PORT_LOCK" ] || { echo "all 50 port blocks are locked by other test-all runs"; exit 2; }
+fi
 mkdir -p "$RUN_DIR"
 START_TS=$(date +%s)
 
@@ -124,25 +165,22 @@ cleanup() {
   for l in $MADE_LINKS; do [ -L "$l" ] && rm -f "$l"; done
   MADE_LINKS=""
 }
-trap cleanup EXIT
+trap 'cleanup; [ -n "$PORT_LOCK" ] && rm -rf "$PORT_LOCK"' EXIT
 trap 'echo; echo "interrupted"; exit 130' INT TERM
 
 # ---------------------------------------------------------------- ports
-NEXT_PORT=8700
-NEXT_INSPECT=9700
+# Suite number i (its line in SUITES) owns ports TEST_PORT_BASE+4i .. +4i+3 (billing needs all four: three
+# wranglers and fake Stripe), plus the same +12000 for wrangler's inspector, so concurrent suites never
+# collide. A port something else already listens on is skipped, within the block.
+NEXT_PORT=0
+PORT_END=0
 port_busy() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
-take_port() {   # take_port VAR  (8700-8799)
-  while port_busy "$NEXT_PORT"; do NEXT_PORT=$((NEXT_PORT + 1)); done
-  [ "$NEXT_PORT" -le 8799 ] || { echo "no free port left in 8700-8799"; exit 2; }
+take_port() {   # take_port VAR  (from this suite's block)
+  while port_busy "$NEXT_PORT" || port_busy $((NEXT_PORT + 12000)); do NEXT_PORT=$((NEXT_PORT + 1)); done
+  [ "$NEXT_PORT" -le "$PORT_END" ] || { echo "  no free port left in this suite's block (ends $PORT_END)"; return 1; }
   eval "$1=$NEXT_PORT"; NEXT_PORT=$((NEXT_PORT + 1))
 }
-take_inspect() {
-  while port_busy "$NEXT_INSPECT"; do NEXT_INSPECT=$((NEXT_INSPECT + 1)); done
-  [ "$NEXT_INSPECT" -le 9799 ] || { echo "no free inspector port left in 9700-9799"; exit 2; }
-  eval "$1=$NEXT_INSPECT"; NEXT_INSPECT=$((NEXT_INSPECT + 1))
-}
-# Ports wrap within the range: a stopped instance frees its port for a later suite.
-reset_ports() { NEXT_PORT=8700; NEXT_INSPECT=9700; }
+reset_ports() { NEXT_PORT=$((TEST_PORT_BASE + 4 * $1)); PORT_END=$((NEXT_PORT + 3)); }
 
 FAKE_PORT=""
 
@@ -152,11 +190,12 @@ LAST_BASE=""
 start_wrangler() {
   local label="$1" persist="$2" port insp log pid i
   shift 2
-  take_port port; take_inspect insp
+  take_port port || return 1; insp=$((port + 12000))
   log="$RUN_DIR/wrangler-$label.log"
   ( cd "$CF" && exec env WRANGLER_SEND_METRICS=false "$NODE" "$WRANGLER" dev --local \
       --port "$port" --inspector-port "$insp" --persist-to "$persist" \
-      --show-interactive-dev-session=false --var "IMPORT_SECRET:$SECRET" "$@" ) </dev/null >"$log" 2>&1 &
+      --show-interactive-dev-session=false --var "IMPORT_SECRET:$SECRET" \
+      --var "COPY_BACK_DELAY_MS:$COPY_BACK_DELAY_MS" --var "RESTORE_MIN_GAP_MS:$RESTORE_MIN_GAP_MS" "$@" ) </dev/null >"$log" 2>&1 &
   pid=$!
   WRANGLER_PIDS="$WRANGLER_PIDS $pid"
   for i in $(seq 1 120); do
@@ -184,10 +223,10 @@ fake_stripe_vars() {   # needs FAKE_PORT
 }
 
 # ---------------------------------------------------------------- results
-RESULTS=""   # lines: name|RESULT|checks|log
-FAILED=0
-record() { RESULTS="$RESULTS$1|$2|$3|$4
-"; [ "$2" = FAIL ] && FAILED=1; return 0; }
+# Suites run in separate processes: each writes its one line, name|RESULT|checks|log, to its own file in
+# $RUN_DIR/.res, and the table reads them back in SUITES order.
+RES_FILE=/dev/null
+record() { echo "$1|$2|$3|$4" > "$RES_FILE"; return 0; }
 checks_in() {   # "N checks passed" or node --test's "# pass N" / "ℹ pass N"
   local c
   c=$(grep -Eo '^[0-9]+ checks passed' "$1" 2>/dev/null | tail -1 | grep -Eo '^[0-9]+')
@@ -203,17 +242,18 @@ run_node() {
   local rc=$? t1=$(date +%s)
   local res=PASS; [ $rc -ne 0 ] && res=FAIL
   printf '  %-4s %-20s %3ss  %s checks\n' "$res" "$name" $((t1 - t0)) "$(checks_in "$log")"
+  [ "$res" = FAIL ] && tail -5 "$log" | sed 's/^/        | /'
   record "$name" "$res" "$(checks_in "$log")" "$log"
 }
 
 # ---------------------------------------------------------------- one suite
-run_one() {
-  local name="$1" setup="$2" log="$RUN_DIR/$name.log" persist base nokeys testkey
+run_one() {   # run_one NAME SETUP INDEX
+  local name="$1" setup="$2" log="$RUN_DIR/$name.log" persist base nokeys testkey fbport
   case "$setup" in SKIP:*)
     printf '  %-4s %-20s %s\n' SKIP "$name" "${setup#SKIP: }"
     record "$name" SKIP - "${setup#SKIP: }"; return ;;
   esac
-  reset_ports
+  reset_ports "$3"
   persist=$(mktemp -d "$RUN_DIR/persist-$name.XXXX")
   case "$name" in
     stripe-unit|collector|site|headers|ics-safety)
@@ -227,12 +267,11 @@ run_one() {
       start_wrangler "$name" "$persist" $PLAIN_VARS --var ARCHIVE_CHUNK:3 --test-scheduled || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
     copyback)
-      if port_busy 9099; then
-        echo "  FAIL copyback: port 9099 (the test's fake Firebase) is in use"; record "$name" FAIL - "port 9099 busy"; return
-      fi
-      start_wrangler "$name" "$persist" --var "COPY_BACK:test-cb-*" --var "FIREBASE_DB_URL:http://localhost:9099" \
+      take_port fbport || { record "$name" FAIL - "no port for the fake Firebase"; return; }
+      start_wrangler "$name" "$persist" --var "COPY_BACK:test-cb-*" --var "FIREBASE_DB_URL:http://localhost:$fbport" \
         || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
-      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
+      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" FIREBASE_PORT="$fbport" \
+        COPY_BACK_DELAY_MS="$COPY_BACK_DELAY_MS" "$NODE" "test/$name.test.mjs" ;;
     lock)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $LOCK_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
@@ -240,9 +279,10 @@ run_one() {
     permissions|stats|restore|name-collision|exact-names|name-key)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PRO_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
-      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
+      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" \
+        RESTORE_MIN_GAP_MS="$RESTORE_MIN_GAP_MS" "$NODE" "test/$name.test.mjs" ;;
     accounts|welcome|pro-health|test-inbox|billing)
-      take_port FAKE_PORT; fake_stripe_vars
+      take_port FAKE_PORT || { record "$name" FAIL - "no port for fake Stripe"; return; }; fake_stripe_vars
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $BILLING_VARS $STRIPE_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       base="$LAST_BASE"; nokeys=""; testkey=""
@@ -259,7 +299,7 @@ run_one() {
       run_node "$name" "$log" "$CF" BASE="$base" NOKEYS_BASE="$nokeys" TESTKEY_BASE="$testkey" FAKE_PORT="$FAKE_PORT" \
         IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
     trial|unlimited|handles)
-      take_port FAKE_PORT; fake_stripe_vars
+      take_port FAKE_PORT || { record "$name" FAIL - "no port for fake Stripe"; return; }; fake_stripe_vars
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $REAL_BILLING_VARS $STRIPE_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" FAKE_PORT="$FAKE_PORT" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
@@ -280,25 +320,67 @@ run_one() {
   stop_wranglers
 }
 
-echo "pastecal test-all  (logs: $RUN_DIR)"
-echo "$SUITES" > "$RUN_DIR/.suites"
+# ---------------------------------------------------------------- run
+# Up to JOBS suites at once, each in its own background process that stops its own wranglers (and is
+# stopped by this one on Ctrl-C). With -j > 1 the slowest start first, so the longest never starts last.
+SLOW_FIRST="restore copyback cloud-service billing trial unlimited handles accounts"
+mkdir -p "$RUN_DIR/.res"
+echo "pastecal test-all  (logs: $RUN_DIR, $JOBS at a time, ports $TEST_PORT_BASE+)"
+idx=0
+ORDERED=""   # lines idx|name|setup, in launch order
 while IFS='|' read -r name setup; do
   [ -z "$name" ] && continue
+  idx=$((idx + 1))
   wanted "$name" || continue
-  run_one "$name" "$setup"
-done < "$RUN_DIR/.suites"
-rm -f "$RUN_DIR/.suites"
+  ORDERED="$ORDERED$idx|$name|$setup
+"
+done <<EOF_SUITES
+$SUITES
+EOF_SUITES
+if [ "$JOBS" -gt 1 ]; then
+  first=""
+  for n in $SLOW_FIRST; do
+    line=$(printf '%s' "$ORDERED" | grep "^[0-9]*|$n|")
+    [ -n "$line" ] && first="$first$line
+"
+  done
+  rest=$(printf '%s' "$ORDERED" | while IFS='|' read -r i n st; do
+    case " $SLOW_FIRST " in *" $n "*) ;; *) echo "$i|$n|$st" ;; esac
+  done)
+  ORDERED="$first$rest"
+fi
+
+trap 'echo; echo "interrupted"; for p in $(jobs -p); do kill "$p" 2>/dev/null; done; wait; exit 130' INT TERM
+while IFS='|' read -r idx name setup; do
+  [ -z "$name" ] && continue
+  while [ "$(jobs -pr | wc -l)" -ge "$JOBS" ]; do sleep 0.2; done
+  (
+    trap cleanup EXIT
+    trap 'exit 143' INT TERM
+    RES_FILE="$RUN_DIR/.res/$(printf '%03d' "$idx")"
+    record "$name" FAIL - "did not finish"   # replaced by the real result
+    run_one "$name" "$setup" "$idx"
+  ) &
+done <<EOF_ORDER
+$ORDERED
+EOF_ORDER
+wait
 
 # ---------------------------------------------------------------- table
 END_TS=$(date +%s)
 echo
 printf '%-20s | %-6s | %-6s | %s\n' SUITE RESULT CHECKS "LOG PATH"
 printf '%-20s-+-%-6s-+-%-6s-+-%s\n' "--------------------" "------" "------" "--------"
-printf '%s' "$RESULTS" | while IFS='|' read -r n r c l; do
-  [ -n "$n" ] && printf '%-20s | %-6s | %-6s | %s\n' "$n" "$r" "$c" "$l"
+FAILED=0 NPASS=0 NFAIL=0 NSKIP=0
+for f in "$RUN_DIR"/.res/*; do
+  [ -f "$f" ] || continue
+  IFS='|' read -r n r c l < "$f"
+  printf '%-20s | %-6s | %-6s | %s\n' "$n" "$r" "$c" "$l"
+  case "$r" in PASS) NPASS=$((NPASS + 1)) ;; SKIP) NSKIP=$((NSKIP + 1)) ;; *) NFAIL=$((NFAIL + 1)); FAILED=1 ;; esac
 done
 echo
+echo "suites: $NPASS passed, $NFAIL failed, $NSKIP skipped"
 echo "total: $((END_TS - START_TS))s   logs: $RUN_DIR"
-if [ "$FAILED" = 1 ]; then echo "SOME SUITES FAILED"; exit 1; fi
+if [ "$FAILED" = 1 ] || [ $((NPASS + NFAIL + NSKIP)) -eq 0 ]; then echo "SOME SUITES FAILED"; exit 1; fi
 echo "all run suites passed"
 exit 0

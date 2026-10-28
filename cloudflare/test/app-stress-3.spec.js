@@ -351,6 +351,7 @@ test('A14 [settings] nit: with 24-hour time chosen, Settings still offers "Start
   const { id } = await seed([]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { settings: { timeFormat: '24' }, locale: 'de-DE' });
   await page.locator('[data-testid=settings-button-desktop]').click();
+  await page.getByTestId('side-tab-you').click();   // your own preferences: the You tab
   await expect(page.locator('#set-time-format')).toHaveValue('24');
   await shot(page, 'A14-start-hour-12h');
   expect(await page.locator('#set-start-hour option').allInnerTexts()).toEqual(['00:00', '05:00', '06:00', '07:00', '08:00', '09:00']);
@@ -561,10 +562,12 @@ test('pin: odd names that do work: "TEAM NUÑEZ", "d&d8", "royal city", "강아�
   }
 });
 
-test('pin: classic on 390/360 phones and iPad, light and dark, en-US and de-DE: no sideways scroll, no errors; embeds 360-1200 fit; ?theme wins', async ({ browser }) => {
-  const { id, viewId } = await seed([timed('e1', 'Practice at Riverside Park field 3', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00'),
-    { ...timed('e3', 'Camp', '2026-10-27T00:00:00Z', '2026-10-30T00:00:00Z'), isAllDay: true, type: 3 }], { options: { notes: 'Bring water https://example.com/x' } });
-  for (const device of ['phone', 'p360', 'ipad']) {
+// One test per device and per embed width, so they run side by side.
+const pinSeed = () => seed([timed('e1', 'Practice at Riverside Park field 3', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00'),
+  { ...timed('e3', 'Camp', '2026-10-27T00:00:00Z', '2026-10-30T00:00:00Z'), isAllDay: true, type: 3 }], { options: { notes: 'Bring water https://example.com/x' } });
+for (const device of ['phone', 'p360', 'ipad']) test(`pin: classic on 390/360 phones and iPad (${device}), light and dark, en-US and de-DE: no sideways scroll, no errors`, async ({ browser }) => {
+  const { id, viewId } = await pinSeed();
+  {
     for (const [scheme, locale] of [['light', 'en-US'], ['dark', 'de-DE']]) {
       for (const p of [`/${id}?backend=cf`, `/view/${viewId}?backend=cf`]) {
         const { ctx, page, errors } = await open(browser, p, { device, colorScheme: scheme, locale, now: NOW });
@@ -573,17 +576,18 @@ test('pin: classic on 390/360 phones and iPad, light and dark, en-US and de-DE: 
       }
     }
   }
-  for (const w of [360, 600, 1200]) {
+});
+for (const w of [360, 600, 1200]) test(`pin: the embed at ${w}px fits; ?theme wins`, async ({ browser }) => {
+  const { viewId } = await pinSeed();
+  {
     for (const theme of ['', '&theme=dark', '&theme=light']) {
       const { ctx, page } = await browserFor(browser, { colorScheme: theme ? (theme.includes('dark') ? 'light' : 'dark') : 'dark' });
       await page.setViewportSize({ width: w + 40, height: 700 });
       await page.goto(`${BASE}/about.html`);
       await page.setContent(`<body style="margin:20px;background:#111"><iframe id="f" src="${BASE}/view/${viewId}?backend=cf${theme}" title="cal" width="${w}" height="600" style="border:0"></iframe></body>`);
       await expect(page.frameLocator('#f').getByTestId('embed-bar')).toBeVisible({ timeout: 20_000 });
-      await page.waitForTimeout(800);
-      const f = page.frame({ url: /\/view\// });
-      const r = await f.evaluate(() => ({ sw: document.documentElement.scrollWidth, theme: document.documentElement.getAttribute('data-theme') }));
-      expect(r, `${w} ${theme}`).toEqual({ sw: w, theme: theme ? theme.slice(7) : 'dark' });
+      await expect.poll(() => page.frame({ url: /\/view\// }).evaluate(() => ({ sw: document.documentElement.scrollWidth, theme: document.documentElement.getAttribute('data-theme') })),
+        { message: `${w} ${theme}` }).toEqual({ sw: w, theme: theme ? theme.slice(7) : 'dark' });
       await ctx.close();
     }
   }

@@ -493,15 +493,4 @@ test('the line shows on an edit link you were sent, not on a calendar you made',
   await mine.ctx.close();
 });
 
-test('make a copy (Settings): a new draft with the same events, named "Copy of …"', async ({ browser, request }) => {
-  const { id } = await seedWithView(request);
-  const { ctx, page } = await open(browser, { path: `/${id}?backend=cf` });
-  await page.getByTestId('settings-button-desktop').click();
-  await page.getByTestId('settings-copy-btn').click();
-  await page.waitForURL((u) => u.pathname === '/');
-  await page.waitForFunction(() => window.__appMounted && window.scheduleObj, null, { timeout: 20_000 });
-  const draft = await page.evaluate(() => { const vm = document.querySelector('#app')._vnode.component.proxy; return { title: vm.calendar.title, titles: vm.calendar.events.map((e) => e.title).sort() }; });
-  expect(draft.title).toBe('Copy of Tigers');
-  expect(draft.titles).toEqual(['Game', 'Practice']);
-  await ctx.close();
-});
+// (Settings' "Make a copy" names and makes the copy in a dialog since Oct 28 2026: copy-dialog.spec.js.)

@@ -202,11 +202,12 @@ test('B socket: a dropped connection that comes right back does not flash the of
 // Screenshots of each change, light and dark, desktop and phone (read them).
 // =====================================================================================================
 
-test('shots: the messages and markers this pass added', async ({ browser }) => {
-  const { id, viewId } = await seed([timed('w', 'Weekly practice', '2026-09-01T17:00:00-07:00', '2026-09-01T18:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;' })],
-    { title: 'Riverside Rockets', options: { notes: 'Rainouts decided by 7am on game day.' } });
-  for (const device of ['desk', 'phone']) {
-    for (const colorScheme of ['light', 'dark']) {
+// One test per device and color scheme, so the four run side by side.
+for (const device of ['desk', 'phone']) {
+  for (const colorScheme of ['light', 'dark']) {
+    test(`shots: the messages and markers this pass added (${device}, ${colorScheme})`, async ({ browser }) => {
+      const { id, viewId } = await seed([timed('w', 'Weekly practice', '2026-09-01T17:00:00-07:00', '2026-09-01T18:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;' })],
+        { title: 'Riverside Rockets', options: { notes: 'Rainouts decided by 7am on game day.' } });
       const tag = `${device}-${colorScheme}`;
       // Save & share fails.
       let b = await open(browser, '/?backend=cf', { device, colorScheme });
@@ -255,7 +256,7 @@ test('shots: the messages and markers this pass added', async ({ browser }) => {
       await b.page.locator('input[type=search]:visible').first().fill('practice');
       await b.page.waitForTimeout(400);
       await shot(b.page, `search-series-${tag}`);
-      await app("openSideTab('settings')");
+      await app("openSideTab('you')");
       await b.page.locator('#set-start-hour').scrollIntoViewIfNeeded();
       await b.page.waitForTimeout(300);
       await shot(b.page, `settings-24h-${tag}`);
@@ -276,6 +277,6 @@ test('shots: the messages and markers this pass added', async ({ browser }) => {
         await shot(b.page, `embed-300-${colorScheme}`);
         await b.ctx.close();
       }
-    }
+    });
   }
-});
+}

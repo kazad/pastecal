@@ -111,20 +111,24 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   const { id } = await seed(request, true);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
-  // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
+  // Settings is this calendar's (it fits without scrolling); your own preferences are in the You tab.
   await expect(page.getByTestId('settings-calendar')).toContainText('This calendar');
-  await expect(page.getByTestId('settings-me')).toContainText('Only me');
+  await expect(page.getByTestId('settings-me')).toHaveCount(0);
   await expect(panel(page).getByLabel('Default view for everyone')).toBeVisible();
   // A calendar that never set one shows Auto, not a blank select.
   expect(await panel(page).getByLabel('Default view for everyone').evaluate((e) => e.options[e.selectedIndex]?.text || '')).toMatch(/^Auto/);
-  await expect(panel(page).getByLabel('First day of week')).toBeVisible();
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Settings fits without scrolling').toBe(true);
+  await page.getByTestId('side-tab-you').click();
+  await expect(page.getByTestId('settings-me')).toBeVisible();
+  await expect(panel(page).getByLabel('First day of week')).toBeVisible();
+  expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'You fits without scrolling').toBe(true);
   await panel(page).getByLabel('First day of week').selectOption('1');   // Monday
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(1);
   await expect(page.locator('.e-month-view .e-header-cells').first()).toContainText('Monday');
   await panel(page).getByLabel('First day of week').selectOption('0');
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(0);
   // A calendar setting still binds to the calendar.
+  await page.getByTestId('side-tab-settings').click();
   await panel(page).getByLabel('Default view for everyone').selectOption('Week');
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe('Week');
   await panel(page).getByLabel('Default view for everyone').selectOption({ index: 0 })   // Auto;
@@ -194,22 +198,23 @@ test('phone: the panel is a bottom sheet over the calendar, with tabs, closed by
   await page.getByTestId('notes-edit').click();
   await expect(panel(page).getByLabel('Calendar notes')).toBeVisible();
   const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
-  expect(row[0], 'all six tabs fit a phone').toBeLessThanOrEqual(row[1]);
+  expect(row[0], 'all seven tabs fit a phone').toBeLessThanOrEqual(row[1]);
   await page.getByTestId('side-scrim').click({ position: { x: 195, y: 60 } });
   await expect(panel(page)).toHaveCount(0);
   await ctx.close();
 });
 
-const TABS = ['notes', 'share', 'changes', 'stats', 'plus', 'settings'];
+const TABS = ['notes', 'share', 'changes', 'stats', 'plus', 'you', 'settings'];
 const tabIds = (page) => page.$$eval('[data-testid^="side-tab-"]', (els) => els.map((e) => e.dataset.testid.replace('side-tab-', '')));
 
-test('the same six tabs in the same order, and the row never scrolls', async ({ browser, request }) => {
+test('the same seven tabs in the same order, and the row never scrolls', async ({ browser, request }) => {
   const { id } = await seed(request);
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1100, height: 800 }, { width: 1000, height: 800 }]) {
     const { ctx, page } = await open(browser, `/${id}?backend=cf`, viewport);
     await page.getByTestId('settings-button-desktop').click();
     expect(await tabIds(page)).toEqual(TABS);
     await expect(page.getByTestId('side-tab-settings')).toHaveAccessibleName('Settings');   // a gear, named
+    await expect(page.getByTestId('side-tab-you')).toHaveAccessibleName('You');             // a circle, named
     const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
     expect(row[0], `${viewport.width}px: no hidden tabs`).toBeLessThanOrEqual(row[1]);
     // Stats on a free calendar: two counts side by side (/api/stats), then what Pro adds and one way to get it.

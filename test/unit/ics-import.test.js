@@ -149,7 +149,7 @@ test('parse: an event that cannot be read is counted, the rest imported', () => 
         vevent('UID:bomb', 'SUMMARY:bomb', 'DTSTART:20261006T170000Z', 'RRULE:FREQ=SECONDLY')), LA);
     assert.equal(p.add, 1);
     assert.equal(p.unreadable, 2);
-    assert.equal(ICSImport.summary(p), 'Add 1 event, 2 can’t be read.');
+    assert.equal(ICSImport.summary(p), 'Add 1 event; 2 can’t be read.');
 });
 
 // ---- round trip --------------------------------------------------------------------------------------------
@@ -225,7 +225,7 @@ test('no duplicates: the same file twice adds nothing the second time', () => {
     const rows = applyPlan([], first);
     const second = ICSImport.plan(rows, GOOGLE, LA);
     assert.deepEqual(second.commands, []);
-    assert.equal(ICSImport.summary(second), 'All 4 already here.');
+    assert.equal(ICSImport.summary(second), 'Nothing new: all 4 events in this file are already in this calendar.');
     // ...from another zone, too (all-day dates, the series' skipped days).
     assert.deepEqual(ICSImport.plan(rows, GOOGLE, { calZone: 'America/Los_Angeles', localZone: 'Europe/Paris' }).commands, []);
 });
@@ -252,7 +252,7 @@ test('no duplicates: the same event under another UID (another app\'s copy) is s
 test('a changed event is updated, only in what changed; an external file leaves a type it does not name alone', () => {
     const rows = imported(GOOGLE).map((e) => (e.title === 'Dentist' ? { ...e, type: 4 } : e));
     const p = ICSImport.plan(rows, GOOGLE.replace('SUMMARY:Dentist', 'SUMMARY:Dentist (Dr. Lee)'), LA);
-    assert.equal(ICSImport.summary(p), 'Update 1 event, skip 3 already here.');
+    assert.equal(ICSImport.summary(p), 'Update 1 event; 3 already in this calendar.');
     assert.deepEqual(p.commands.map((c) => [c.type, c.changes]), [['update', { title: 'Dentist (Dr. Lee)' }]]);
 });
 
@@ -268,4 +268,111 @@ test('an imported batch undoes as one change', () => {
     assert.equal(r.events.length, 5);
     const back = EventStore.apply(r.events, r.inverse).events;
     assert.deepEqual(back, before);
+});
+
+// ---- the preview (the import dialog's lists: ICSImport.preview, describe) -----------------------------------
+
+const LA_SHOW = { zone: 'America/Los_Angeles', now: Date.UTC(2026, 9, 1) };
+const la = (ymd, hm) => vevent(`DTSTART;TZID=America/Los_Angeles:${ymd}T${hm}00`);
+
+test('preview: events not imported say why (no date, canceled, can\'t be read), and are not "already here"', () => {
+    const p = ICSImport.plan([], cal(
+        vevent('UID:ok', 'SUMMARY:Practice', 'DTSTART:20261006T170000Z'),
+        vevent('UID:nodate', 'SUMMARY:Sometime'),
+        vevent('UID:baddate', 'SUMMARY:Garbled', 'DTSTART:2026-10-06'),
+        vevent('UID:bomb', 'SUMMARY:Every second', 'DTSTART:20261006T170000Z', 'RRULE:FREQ=SECONDLY'),
+        vevent('UID:off', 'SUMMARY:Rained out', 'STATUS:CANCELLED', 'DTSTART:20261007T170000Z'),
+        vevent('UID:lone', 'SUMMARY:Lone (off)', 'STATUS:CANCELLED', 'RECURRENCE-ID:20261013T170000Z', 'DTSTART:20261013T170000Z')), LA);
+    assert.deepEqual(p.skipped, [
+        { title: 'Sometime', reason: 'no date' }, { title: 'Garbled', reason: 'invalid' }, { title: 'Every second', reason: 'invalid' },
+        { title: 'Rained out', reason: 'canceled' }, { title: 'Lone (off)', reason: 'canceled' }]);
+    assert.equal(p.skip, 0, 'a canceled event is not "already here"');
+    assert.deepEqual([p.add, p.unreadable, p.canceled], [1, 3, 2]);
+    assert.equal(ICSImport.summary(p), 'Add 1 event; 3 can’t be read; 2 canceled.');
+    assert.deepEqual(ICSImport.preview(p, LA_SHOW).skipped.rows.map((r) => `${r.title} · ${r.reason}`),
+        ['Sometime · no date', 'Garbled · can’t be read', 'Every second · can’t be read', 'Rained out · canceled', 'Lone (off) · canceled']);
+});
+
+test('preview: New, Changes and Already here come from the plan\'s own commands, sorted by date', () => {
+    const base = cal(
+        vevent('UID:p', 'SUMMARY:Practice', 'DTSTART;TZID=America/Los_Angeles:20261006T170000', 'DTEND;TZID=America/Los_Angeles:20261006T183000'),
+        vevent('UID:g', 'SUMMARY:Game', 'DTSTART;TZID=America/Los_Angeles:20261010T100000', 'DTEND;TZID=America/Los_Angeles:20261010T113000'),
+        vevent('UID:d', 'SUMMARY:Dentist', 'DTSTART;TZID=America/Los_Angeles:20261015T090000', 'DTEND;TZID=America/Los_Angeles:20261015T100000'));
+    const rows = imported(base);
+    const next = base.replace('SUMMARY:Game', 'SUMMARY:Game vs Hawks').replace('20261006T170000', '20261006T173000').replace('20261006T183000', '20261006T190000')
+        .replace('END:VCALENDAR', [
+            ...vevent('UID:trip', 'SUMMARY:Trip', 'DTSTART;VALUE=DATE:20261101', 'DTEND;VALUE=DATE:20261104'),
+            ...vevent('UID:s', 'SUMMARY:Swim', 'DTSTART;TZID=America/Los_Angeles:20261005T160000', 'DTEND;TZID=America/Los_Angeles:20261005T170000', 'RRULE:FREQ=WEEKLY;BYDAY=MO'),
+            ...vevent('UID:h', 'SUMMARY:Thanksgiving', 'DTSTART;VALUE=DATE:20261126', 'DTEND;VALUE=DATE:20261127'),
+            'END:VCALENDAR'].join('\r\n'));
+    const p = ICSImport.plan(rows, next, LA);
+    const v = ICSImport.preview(p, LA_SHOW);
+    assert.deepEqual(v.add.rows, [
+        { date: 'Mon, Oct 5', time: '4:00 PM', title: 'Swim', repeat: 'weekly' },
+        { date: 'Sun, Nov 1 – Tue, Nov 3', time: 'All day', title: 'Trip', repeat: '' },
+        { date: 'Thu, Nov 26', time: 'All day', title: 'Thanksgiving', repeat: '' }]);
+    assert.equal(v.action, 'Import 3, update 2');
+    assert.equal(v.lead, '', 'with something to do, the lists and the button say it');
+    assert.deepEqual(v.change.rows.map((r) => `${r.title} · ${r.what.join(', ')}`), ['Practice · time 5:00 → 5:30 PM', 'Game · title “Game” → “Game vs Hawks”']);
+    assert.deepEqual(v.here.rows.map((r) => `${r.date} | ${r.time} | ${r.title}`), ['Thu, Oct 15 | 9:00 AM | Dentist']);
+    // Exactly what Import applies: one row per add command, one per update command, with its own changes.
+    assert.equal(v.add.total, p.commands.filter((c) => c.type === 'add').length);
+    assert.equal(v.change.total, p.commands.filter((c) => c.type === 'update').length);
+    for (const c of p.changed) assert.ok(p.commands.some((x) => x.type === 'update' && x.changes === c.changes));
+    // 24-hour clock, and the other date orders.
+    assert.equal(ICSImport.preview(p, { ...LA_SHOW, hour24: true }).change.rows[0].what[0], 'time 17:00 → 17:30');
+    assert.equal(ICSImport.preview(p, { ...LA_SHOW, dateOrder: 'eu' }).add.rows[1].date, 'Sun 1 Nov – Tue 3 Nov');
+    assert.equal(ICSImport.preview(p, { ...LA_SHOW, dateOrder: 'iso' }).add.rows[0].date, 'Mon 2026-10-05');
+    assert.equal(ICSImport.preview(p, { ...LA_SHOW, hour24: true }).add.rows[0].time, '16:00');
+});
+
+test('preview: a long list shows the first 200 and says how many more', () => {
+    const many = Array.from({ length: 450 }, (_, i) => vevent(`UID:m${i}`, `SUMMARY:Shift ${i}`, `DTSTART:202611${String(1 + (i % 28)).padStart(2, '0')}T170000Z`));
+    const v = ICSImport.preview(ICSImport.plan([], cal(...many), LA), LA_SHOW);
+    assert.deepEqual([v.add.rows.length, v.add.total, v.add.more], [200, 450, 250]);
+    assert.deepEqual(v.add.rows.slice(0, 3).map((r) => r.title), ['Shift 0', 'Shift 28', 'Shift 56'], 'by date, then title in number order');
+});
+
+const DESCRIBE = [
+    { name: 'title', changes: { title: 'Game vs Hawks' }, want: ['title “Game” → “Game vs Hawks”'] },
+    { name: 'time, the same AM/PM once', changes: { start: '2026-10-07T00:30:00.000Z', end: '2026-10-07T01:30:00.000Z' }, want: ['time 5:00 → 5:30 PM'] },
+    { name: 'time across noon', changes: { start: '2026-10-06T18:00:00.000Z', end: '2026-10-06T19:00:00.000Z' }, want: ['time 5:00 PM → 11:00 AM'] },
+    { name: 'another day, same time', changes: { start: '2026-10-08T00:00:00.000Z', end: '2026-10-08T01:00:00.000Z' }, want: ['date Tue, Oct 6 → Wed, Oct 7'] },
+    { name: 'only the end', changes: { end: '2026-10-07T01:30:00.000Z' }, want: ['ends 6:00 → 6:30 PM'] },
+    { name: 'now all day', changes: { isAllDay: true, start: '2026-10-06T07:00:00.000Z', end: '2026-10-07T07:00:00.000Z' }, want: ['Tue, Oct 6 · 5:00 PM → Tue, Oct 6 · All day'] },
+    { name: 'repeats', changes: { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU' }, want: ['now repeats'] },
+    { name: 'skipped dates', before: { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU' }, changes: { recurrenceException: '20261014T000000Z' }, want: ['skips Tue, Oct 13'] },
+    { name: 'type, by name', changes: { type: 2 }, want: ['type Practice → Game'] },
+    { name: 'notes', changes: { description: 'Field 2' }, want: ['notes added'] },
+    { name: 'notes changed', before: { description: 'Field 1' }, changes: { description: 'Field 2' }, want: ['notes changed'] },
+    { name: 'several at once', changes: { title: 'Game vs Hawks', description: 'Bring water' }, want: ['title “Game” → “Game vs Hawks”', 'notes added'] },
+];
+for (const c of DESCRIBE) {
+    test(`describe: ${c.name}`, () => {
+        const before = { id: 'g', title: 'Game', start: '2026-10-07T00:00:00.000Z', end: '2026-10-07T01:00:00.000Z', isAllDay: false, type: 1,
+            description: '', recurrencerule: '', recurrenceID: null, recurrenceException: null, ...(c.before || {}) };
+        const labels = ['Practice', 'Game'];
+        assert.deepEqual(ICSImport.describe(before, c.changes, { ...LA_SHOW, typeLabel: (n) => labels[n - 1] }), c.want);
+    });
+}
+
+test('preview: a canceled occurrence of a series here is a change to the series: it skips that date', () => {
+    const series = cal(vevent('UID:s', 'SUMMARY:Swim', 'DTSTART;TZID=America/Los_Angeles:20261005T160000', 'DTEND;TZID=America/Los_Angeles:20261005T170000', 'RRULE:FREQ=WEEKLY;BYDAY=MO'));
+    const rows = imported(series);
+    const p = ICSImport.plan(rows, series.replace('END:VCALENDAR', [...vevent('UID:s', 'STATUS:CANCELLED',
+        'RECURRENCE-ID;TZID=America/Los_Angeles:20261019T160000', 'DTSTART;TZID=America/Los_Angeles:20261019T160000'), 'END:VCALENDAR'].join('\r\n')), LA);
+    assert.deepEqual(ICSImport.preview(p, LA_SHOW).change.rows.map((r) => `${r.title} · ${r.what.join(', ')}`), ['Swim · skips Mon, Oct 19']);
+});
+
+test('preview: nothing to do says so in plain words, and how often a series repeats', () => {
+    const file = cal(vevent('UID:a', 'SUMMARY:A', 'DTSTART:20261006T170000Z'), vevent('UID:b', 'SUMMARY:B', 'DTSTART:20261007T170000Z'));
+    const p = ICSImport.plan(imported(file), file, LA);
+    const v = ICSImport.preview(p, LA_SHOW);
+    assert.deepEqual([v.lead, v.action, v.here.total], ['Nothing new: all 2 events in this file are already in this calendar.', '', 2]);
+    const one = cal(vevent('UID:a', 'SUMMARY:A', 'DTSTART:20261006T170000Z'));
+    assert.equal(ICSImport.summary(ICSImport.plan(imported(one), one, LA)), 'Nothing new: the 1 event in this file is already in this calendar.');
+    assert.equal(ICSImport.summary(ICSImport.plan([], cal(vevent('UID:n', 'SUMMARY:x')), LA)), 'Nothing to import: 1 can’t be read.');
+    const rule = (r) => ICSImport.preview(ICSImport.plan([], cal(vevent('UID:r', 'SUMMARY:R', 'DTSTART:20261006T170000Z', `RRULE:${r}`)), LA), LA_SHOW).add.rows[0].repeat;
+    assert.deepEqual(['FREQ=DAILY', 'FREQ=WEEKLY;BYDAY=TU', 'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU', 'FREQ=MONTHLY;BYMONTHDAY=6', 'FREQ=YEARLY'].map(rule),
+        ['daily', 'weekly', 'every 2 weeks', 'monthly', 'yearly']);
 });
