@@ -43,6 +43,7 @@ view-socket|plain
 previews-tz|plain
 archive|plain+persist
 backup|plain+persist
+db-archive|plain+persist + --test-scheduled, ARCHIVE_CHUNK=3
 copyback|copyback (fake Firebase on 9099, started by the test)
 lock|lock (UNSAFE_DEV_SESSION_HEADER)
 permissions|pro (UNSAFE_DEV_SESSION_HEADER + ACCOUNTS_DEV_MODE)
@@ -217,6 +218,10 @@ run_one() {
     sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|view-socket|previews-tz|archive|backup)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PLAIN_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
+      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
+    db-archive)
+      # shellcheck disable=SC2086
+      start_wrangler "$name" "$persist" $PLAIN_VARS --var ARCHIVE_CHUNK:3 --test-scheduled || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
     copyback)
       if port_busy 9099; then

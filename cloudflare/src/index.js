@@ -25,6 +25,8 @@
  *   POST /api/contact             Contact form, incl. calendar reports (Contact.js: same-site, honeypot,
  *                                 fill time, 5 an hour per IP)
  *   GET  /api/admin/messages      Contact messages, newest first (Bearer IMPORT_SECRET)
+ *   /api/admin/backup/{run,status,list,health,restore}   The daily full archive (BackupArchive.js; Bearer IMPORT_SECRET)
+ *   scheduled()                   Cron (wrangler.jsonc triggers): starts the daily full archive
  */
 import CalendarPath from '../../public/services/CalendarPath.js';
 import { ICSService } from './ICSService.js';
@@ -37,6 +39,8 @@ export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
+export { BackupArchive } from './BackupArchive.js';
+import { handleBackupAdmin, scheduledArchive } from './BackupArchive.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { handleNames, serveAt, serveNamePage } from './Names.js';
 import { PLANS } from './Waitlist.js';
@@ -188,6 +192,11 @@ export default {
         await handleTestInboxEmail(message, env);
     },
 
+    // Cron: the daily full archive of every calendar (BackupArchive.js).
+    async scheduled(controller, env, ctx) {
+        ctx.waitUntil(scheduledArchive(env, controller.scheduledTime));
+    },
+
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
         // Local test servers only (wrangler dev --var LOCAL_NO_LIMITS:1): no per-address rate limits, so parallel
@@ -274,6 +283,10 @@ async function route(request, env, ctx) {
         // Pro accounts and billing: /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook, /api/admin/accounts/*
         const accountsRes = await handleAccounts(request, env, url);
         if (accountsRes) return accountsRes;
+
+        // The daily full archive: /api/admin/backup/* (Bearer IMPORT_SECRET)
+        const backupRes = await handleBackupAdmin(request, env, url);
+        if (backupRes) return backupRes;
 
         // Test inbox admin: GET|DELETE /api/admin/test-inbox (Bearer IMPORT_SECRET)
         const inboxRes = await handleTestInboxAdmin(request, env, url);
