@@ -28,6 +28,7 @@
  *   /api/admin/backup/{run,status,list,health,restore}   The daily full archive (BackupArchive.js; Bearer IMPORT_SECRET)
  *   GET  /api/admin/directory/collisions, POST .../make-editable   View rows named like an editable calendar, and
  *                                 their repair (NameCollisions.js; Bearer IMPORT_SECRET)
+ *   POST /api/admin/rooms/backfill, GET .../stats   The registry of exact calendar ids (ExactNames.js; Bearer IMPORT_SECRET)
  *   scheduled()                   Cron (wrangler.jsonc triggers): starts the daily full archive
  */
 import CalendarPath from '../../public/services/CalendarPath.js';
@@ -50,6 +51,7 @@ import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
 import { timingSafeEqual } from './Stripe.js';
 import { handleCollisionAdmin } from './NameCollisions.js';
+import { exactLookup, nameTakenByVariant, handleRoomsAdmin } from './ExactNames.js';
 import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL, NATIVE_CAL_META, nativeViewLinks } from './Site.js';
 
 // Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
@@ -275,8 +277,9 @@ async function route(request, env, ctx) {
             const dir = getDirectory(env);
             if (dir) {
                 try {
-                    const lookupRes = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
-                    const lookup = await lookupRes.json();
+                    // An edit feed opens the calendar of exactly this name first (ExactNames.js); a view feed, the view link.
+                    const lookup = icsMatch[1] ? await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`)).json()
+                        : await exactLookup(env, dir, slug);
                     if (lookup.ended) return new Response('This link has ended', { status: 410 });   // a released account's short name
                     if (lookup.found) {
                         targetId = lookup.targetId || lookup.actualSlug;
@@ -318,7 +321,10 @@ async function route(request, env, ctx) {
         if ((request.method === 'GET' || request.method === 'POST') && path === '/api/lookup') {
             const dir = getDirectory(env);
             if (!dir) return withCors(Response.json({ found: false }));
-            return withCors(Response.json(publicLookup(await (await dir.fetch(request)).json())));
+            let slug = url.searchParams.get('slug');
+            if (!slug && request.method === 'POST') slug = (await request.json().catch(() => ({})))?.slug;
+            if (typeof slug !== 'string' || !slug) return withCors(Response.json({ found: false }));
+            return withCors(Response.json(publicLookup(await exactLookup(env, dir, slug))));
         }
 
         // Pro waitlist: anyone may sign up (rate-limited, with a hidden field that only bots fill
@@ -368,8 +374,7 @@ async function route(request, env, ctx) {
             const slug = body?.data?.slug || body?.slug;
             const dir = getDirectory(env);
             if (!dir || !slug) return withCors(Response.json({ data: { found: false }, result: { found: false } }));
-            const res = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
-            const out = publicLookup(await res.json());
+            const out = publicLookup(typeof slug === 'string' ? await exactLookup(env, dir, slug) : { found: false });
             return withCors(Response.json({ data: out, result: out }));
         }
 
@@ -482,6 +487,16 @@ async function route(request, env, ctx) {
             return handleCollisionAdmin(request, env, dir, path, url);
         }
 
+        // The registry of exact calendar ids: ExactNames.js.
+        if (path.startsWith('/api/admin/rooms/')) {
+            if (!env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
+                return new Response('forbidden', { status: 403 });
+            }
+            const dir = getDirectory(env);
+            if (!dir || !env.CALENDARS) return Response.json({ ok: false }, { status: 500 });
+            return handleRoomsAdmin(request, env, dir, path);
+        }
+
         if (path === '/api/directory/stats') {
             const dir = getDirectory(env);
             if (!dir) return withCors(Response.json({ total: 0 }));
@@ -508,10 +523,14 @@ async function route(request, env, ctx) {
                     targetId = lookup.targetId;
                 } else if (lookup.found && lookup.actualSlug) {
                     // A view link named after its own calendar (July 2025 allowed it): its row is the edit name's now
-                    // (editable wins, NameCollisions.js), so its view is served from that calendar's own view id.
-                    const r = await env.CALENDARS.get(env.CALENDARS.idFromName(lookup.actualSlug)).fetch(`http://internal/cal/${encodeURIComponent(lookup.actualSlug)}`);
-                    const own = r.ok ? (await r.json().catch(() => null))?.calendar?.options?.publicViewId : null;
-                    if (typeof own === 'string' && own.toLowerCase() === viewId.toLowerCase()) targetId = lookup.actualSlug;
+                    // (editable wins, NameCollisions.js), so its view is served from that calendar's own view id. The
+                    // calendar of exactly this name first: the row may be another spelling's (ExactNames.js).
+                    for (const cal of new Set([viewId, lookup.actualSlug])) {
+                        if (!validId(cal)) continue;
+                        const r = await env.CALENDARS.get(env.CALENDARS.idFromName(cal)).fetch(`http://internal/cal/${encodeURIComponent(cal)}`);
+                        const own = r.ok ? (await r.json().catch(() => null))?.calendar?.options?.publicViewId : null;
+                        if (typeof own === 'string' && own.toLowerCase() === viewId.toLowerCase()) { targetId = cal; break; }
+                    }
                 }
             }
             if (!targetId) return new Response('not found', { status: 404 });
@@ -557,6 +576,9 @@ async function route(request, env, ctx) {
                 const dir = getDirectory(env);
                 const look = dir ? await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(id)}`)).json().catch(() => ({})) : {};
                 if (look.found && look.isReadOnly) return withCors(Response.json({ ok: false, error: 'name taken' }, { status: 409 }));
+                // Another calendar has this name in another spelling ("Foo" for "foo", "foo " for "foo"): a new one would
+                // be a second calendar answering to one name. Old variants keep working (exact names first, ExactNames.js).
+                if (dir && await nameTakenByVariant(env, dir, id)) return withCors(Response.json({ ok: false, error: 'name taken' }, { status: 409 }));
             }
             if (request.method === 'POST' && !m[2] && env.CREATE_LIMITER) {
                 const { success } = await env.CREATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });

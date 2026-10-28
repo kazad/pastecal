@@ -70,8 +70,7 @@ const CalendarVueApp = {
         let urlslug = normalizedPathParts[0];
 
         if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-            // slug is ok, normalize for consistent lookup
-            urlslug = SlugManager.normalizeSlug(urlslug);
+            // slug is ok. Kept exactly as typed: "Foo" and "foo" can be two calendars, and the exact one opens first.
         } else {
             // should redirect back to homepage if we have a bad url;
             urlslug = null;

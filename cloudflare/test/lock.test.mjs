@@ -170,21 +170,28 @@ assert.equal(r.status, 201);
 await sleep(300);
 let view = await (await fetch(`${BASE}/cal/view/${enc(VIEW)}`)).json();
 assert.ok(view.calendar.events.some((e) => e.title === 'by owner'), 'the view link still shows the locked calendar');
+// A new case variant is refused outright (ExactNames.js); one that exists already (Firebase kept both) is stored by /import.
 r = await fetch(`${BASE}/cal/${enc(id.toUpperCase())}`, { method: 'POST', body: JSON.stringify({ title: 'case thief', events: [] }) });
-assert.equal(r.status, 201);
+assert.equal(r.status, 409, 'a new case variant of a calendar\'s name');
+r = await fetch(`${BASE}/cal/${enc(id.toUpperCase())}/import`, { method: 'PUT', headers: auth, body: JSON.stringify({ id: id.toUpperCase(), title: 'case thief', events: [] }) });
+assert.equal(r.status, 200);
 await sleep(300);
-const lk = await (await fetch(`${BASE}/api/lookup?slug=${enc(id)}`)).json();
+// Asked in a third spelling (no calendar of its own), the lookup shows the directory row itself.
+const third = (x) => x[0].toUpperCase() + x.slice(1);
+const lk = await (await fetch(`${BASE}/api/lookup?slug=${enc(third(id))}`)).json();
 assert.equal(lk.actualSlug, id, 'the name still leads to the locked calendar, not its case variant');
 // A case variant can't take an unlocked calendar's lookup either (red team, Oct 24 2026), and locking keeps it.
 const claim = `test-lock-claim-${Date.now()}`;
 assert.equal((await fetch(`${BASE}/cal/${enc(claim)}`, { method: 'POST', body: JSON.stringify({ title: 'real', events: [] }) })).status, 201);
 await sleep(300);
-assert.equal((await fetch(`${BASE}/cal/${enc(claim.toUpperCase())}`, { method: 'POST', body: JSON.stringify({ title: 'variant', events: [] }) })).status, 201);
+assert.equal((await fetch(`${BASE}/cal/${enc(claim.toUpperCase())}`, { method: 'POST', body: JSON.stringify({ title: 'variant', events: [] }) })).status, 409);
+assert.equal((await fetch(`${BASE}/cal/${enc(claim.toUpperCase())}/import`, { method: 'PUT', headers: auth,
+    body: JSON.stringify({ id: claim.toUpperCase(), title: 'variant', events: [] }) })).status, 200);
 await sleep(300);
-assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'before the lock: the original keeps the lookup');
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(third(claim))}`)).json()).actualSlug, claim, 'before the lock: the original keeps the lookup');
 assert.equal((await admin(claim, 'lock', { ownerId: OWNER })).status, 200);
 await sleep(300);
-assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'after the lock: still the original');
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(third(claim))}`)).json()).actualSlug, claim, 'after the lock: still the original');
 r = await fetch(`${BASE}/cal/${enc(claim)}/archive`, { method: 'POST', headers: auth });
 assert.deepEqual(await r.json(), { ok: false, error: 'locked' }, 'a locked calendar is never archived');
 assert.equal((await get(claim)).calendar.title, 'real');

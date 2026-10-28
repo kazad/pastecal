@@ -9,6 +9,7 @@
 import { describe, displayTitle } from './model.js';
 import { calendarMeta, injectMeta } from './meta.js';
 import { isoDay, dayOf } from './time.js';
+import { exactLookup } from '../ExactNames.js';
 
 export const PAGE_BUDGET_MS = 400;        // a person opening the link
 export const BOT_BUDGET_MS = 2000;        // a link-preview fetcher: it caches what it gets, so a miss sticks
@@ -38,7 +39,9 @@ export async function loadPreview(env, target) {
     let roomId = null;
     const dir = env.DIRECTORY ? env.DIRECTORY.get(env.DIRECTORY.idFromName('global')) : null;
     if (dir) {
-        const look = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(target.id)}`)).json();
+        // An edit name is the calendar of exactly that name first (ExactNames.js); a view id, its view link.
+        const look = target.kind === 'view' ? await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(target.id)}`)).json()
+            : await exactLookup(env, dir, target.id);
         if (look && look.found) {
             if (look.ended || (look.isReadOnly && !look.targetId)) return null;    // a tombstone ("This link has ended"): no room behind it
             if (target.kind === 'view' && !look.isReadOnly) return null;           // /view/<edit name> is no view link

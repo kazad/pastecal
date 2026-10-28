@@ -252,10 +252,12 @@ const CalendarVueApp = {
         'click-outside': clickOutside
     },
     data() {
-        // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        // The name exactly as in the address; null for the homepage or a bad path. Never lowercased: "Foo" and "foo"
+        // can be two calendars, and the calendar of exactly this name opens first (CalendarDataService.findAndSubscribe;
+        // a name typed in another case still finds its calendar through the directory). A new calendar's name is
+        // lowercased when it is saved (create).
         // (On /view/<x> this is "view", on /@handle/<name> "@handle": never a calendar to open, and never the homepage.)
         let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
-        if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
         let id = urlslug ?? Utils.randomID(10);
         let cal = new Calendar(id, "New Calendar", []);

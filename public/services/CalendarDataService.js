@@ -334,6 +334,10 @@ class CalendarDataService {
                     }
                     this._forwardToView(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
+                } else if (result.data.actualSlug !== slug && await this._editableAt(slug)) {
+                    // A calendar of exactly this name: it, not the directory's other spelling ("foo" and "Foo" are two).
+                    if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_case_variant', {}));
+                    this._subscribeExact(slug, callback);
                 } else {
                     // Found as editable calendar - subscribe with correct case
                     this._subscribeExact(result.data.actualSlug, callback);

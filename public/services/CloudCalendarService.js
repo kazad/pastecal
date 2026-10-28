@@ -218,13 +218,19 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- live subscription ------------------------------------------------------------------
 
-    // Open a calendar. Resolves case differences and read-only views via directory.
+    // Open a calendar. The calendar of EXACTLY this name first, as Firebase did: "foo" and "Foo" can be two calendars,
+    // and the directory keeps one row per lowercase name (91 owners' links opened the other spelling's calendar, Oct 28
+    // 2026). Only a name with no calendar of its own follows the directory: another spelling, or a view link.
     static findAndSubscribe(slug, callback) {
         if (!slug) { console.warn('findAndSubscribe called with empty slug'); callback(null); return; }
         this.subscribe(slug, callback);
         (async () => {
             try {
                 const lookup = await this.lookupCalendar(slug);
+                // The server already answered with this exact name over its row (ExactNames.js): say which case it was.
+                if (lookup.data?.exact && typeof trackSafely === 'function') {
+                    trackSafely(a => a.track(lookup.data.exact === 'view' ? 'edit_name_collision' : 'edit_case_variant', {}));
+                }
                 // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
                 if (lookup.data?.ended && typeof window !== 'undefined' && window.location) {
                     this.close(slug);
@@ -247,6 +253,10 @@ class CloudCalendarService extends CalendarDataService {
                         }
                     }
                     if (lookup.data.actualSlug && lookup.data.actualSlug !== slug) {
+                        if (await this._editableAt(slug)) {
+                            if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_case_variant', {}));
+                            return;                                            // stay on the calendar of this exact name
+                        }
                         this.close(slug);
                         this.subscribe(lookup.data.actualSlug, callback);
                     }
