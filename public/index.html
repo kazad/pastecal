@@ -516,7 +516,7 @@
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" :named="namedTypes" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" :named="namedTypes" @event-created="handleQuickAddEvent" @import-ics="openIcsPicker"></quick-add-dialog>
 
         <topbar v-if="!embedBar" class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -1334,10 +1334,11 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- A copy of this calendar (events, colors, type names) as a new draft: next season, or your own. -->
+                            <!-- A copy of this calendar (events, colors, type names) under a new name: next season, or your own.
+                                 Its dialog (copyDialog) names it and makes it; this calendar is untouched. -->
                             <div v-if="isExisting" class="pc-set-copy" data-testid="settings-copy">
                                 <span class="pc-set-copy-hint">A new calendar with these events and colors, for next season or your own use.</span>
-                                <button type="button" class="pc-btn pc-btn--sm" @click="makeOwnCopy('full', 'settings')" data-testid="settings-copy-btn">Make a copy</button>
+                                <button type="button" class="pc-btn pc-btn--sm" @click="openCopyDialog('settings')" data-testid="settings-copy-btn">Make a copy</button>
                             </div>
                             <!-- Backup: this calendar as a file (the edit feed with each event's stored row), and a file's
                                  events back in, never twice (services/ICSImport.js). Nothing is saved until Import. -->
@@ -1349,14 +1350,14 @@
                                 <button type="button" class="pc-link" @click="$refs.icsFile.click()" data-testid="ics-import">Import .ics</button>
                                 <input ref="icsFile" type="file" accept=".ics,text/calendar" hidden @change="icsPicked" data-testid="ics-file">
                             </div>
-                            <div v-if="icsPlan" class="pc-set-copy" data-testid="ics-plan">
+                            <div v-if="icsPlan && icsFrom === 'settings'" class="pc-set-copy" data-testid="ics-plan">
                                 <span class="pc-set-copy-hint">{{ icsPlan.summary }}</span>
                                 <span class="pc-set-backup">
                                     <button type="button" class="pc-link" @click="icsPlan = null" data-testid="ics-cancel">Cancel</button>
                                     <button v-if="icsPlan.commands.length" type="button" class="pc-btn pc-btn--sm" @click="icsImportConfirm" data-testid="ics-confirm">Import</button>
                                 </span>
                             </div>
-                            <p v-if="icsNote" class="pc-set-copy-hint pc-set-note" role="status" data-testid="ics-note">{{ icsNote }}
+                            <p v-if="icsNote && icsFrom === 'settings'" class="pc-set-copy-hint pc-set-note" role="status" data-testid="ics-note">{{ icsNote }}
                                 <button v-if="icsUndo" type="button" class="pc-link" @click="icsUndoImport" data-testid="ics-undo">Undo</button></p>
                         </div>
 
@@ -1850,6 +1851,55 @@
             </template>
             <span v-else data-testid="slug-problem">{{ slugProblem }}</span>
             <button type="button" @click="slugTaken = null; slugProblem = ''" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-slug-taken-close" aria-label="Dismiss">&times;</button>
+        </div>
+
+        <!-- A .ics file from quick add's "or import a .ics file" (openIcsPicker) or dropped on the page: what importing it
+             would do, Import / Cancel, then the result with Undo. The same lines as Settings' Backup row, in a small dialog. -->
+        <input v-if="canEdit" ref="icsFileAny" type="file" accept=".ics,text/calendar" hidden data-from="dialog" @change="icsPicked" data-testid="ics-file-any">
+        <div v-if="icsDialogOpen" class="pc-modal" @click.self="icsDialogClose" v-cloak>
+            <div class="pc-modal-panel pc-small-dialog" role="dialog" aria-modal="true" aria-labelledby="ics-dialog-title" data-testid="ics-dialog">
+                <h3 id="ics-dialog-title" class="pc-section-title">Import events</h3>
+                <template v-if="icsPlan">
+                    <p class="pc-small-dialog-text" data-testid="ics-plan">{{ icsPlan.summary }}</p>
+                    <div class="pc-small-dialog-actions">
+                        <button type="button" class="pc-link" @click="icsDialogClose" data-testid="ics-cancel">Cancel</button>
+                        <button v-if="icsPlan.commands.length" type="button" class="pc-btn" @click="icsImportConfirm" data-testid="ics-confirm">Import</button>
+                    </div>
+                </template>
+                <template v-else>
+                    <p class="pc-small-dialog-text" role="status" data-testid="ics-note">{{ icsNote }}
+                        <button v-if="icsUndo" type="button" class="pc-link" @click="icsUndoImport" data-testid="ics-undo">Undo</button></p>
+                    <div class="pc-small-dialog-actions">
+                        <button type="button" class="pc-btn" @click="icsDialogClose" data-testid="ics-done">Done</button>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <!-- While a file is dragged over the page (mounted: the drag handlers). Lets the drop through to the page. -->
+        <div v-if="icsDragging" class="pc-drop" aria-hidden="true" data-testid="ics-drop" v-cloak><span>Drop to add these events</span></div>
+
+        <!-- Make a copy (openCopyDialog): the copy's name and whether it takes the events; this calendar is untouched. -->
+        <div v-if="copyDialog" class="pc-modal" @click.self="copyDialog = null" v-cloak>
+            <form class="pc-modal-panel pc-small-dialog" role="dialog" aria-modal="true" aria-labelledby="copy-dialog-title" data-testid="copy-dialog" @submit.prevent="makeCopy()">
+                <button type="button" @click="copyDialog = null" aria-label="Close" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-modal-x">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+                <h3 id="copy-dialog-title" class="pc-section-title">Make a copy</h3>
+                <div class="pc-field-group">
+                    <span class="pc-field-prefix">pastecal.com/</span>
+                    <input ref="copyInput" type="text" v-model="copyDialog.name" aria-label="Name of the copy" class="pc-field" spellcheck="false" autocomplete="off"
+                        @input="copyNameEdited" data-testid="copy-name">
+                </div>
+                <p v-if="copyDialog.taken" class="pc-small-dialog-text" role="alert" data-testid="copy-taken">
+                    <strong v-text="'pastecal.com/' + copyDialog.taken.slug"></strong> is taken.<template v-if="copyDialog.taken.options.length"> Try
+                    <template v-for="(o, i) in copyDialog.taken.options" :key="o"><button type="button" class="pc-link" @click="makeCopy(o)">{{ o }}</button>{{ i < copyDialog.taken.options.length - 1 ? ', ' : '' }}</template>.</template>
+                </p>
+                <p v-else-if="copyDialog.error" class="pc-small-dialog-text pc-say-err" role="alert" data-testid="copy-error">{{ copyDialog.error }}</p>
+                <label class="pc-set-check"><input type="checkbox" v-model="copyDialog.events" data-testid="copy-events"> Include events</label>
+                <div class="pc-small-dialog-actions">
+                    <button type="submit" class="pc-btn pc-btn--primary" :disabled="copyDialog.busy" data-testid="copy-make">Make copy</button>
+                </div>
+            </form>
         </div>
 
         <!-- Claim Intervention Modal -->

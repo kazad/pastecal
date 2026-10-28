@@ -465,8 +465,9 @@ adds)
 panels)
     # Side panel tabs people opened, and from where (feature_used 'panel_<tab>:<via>', since Oct 26 2026), and the
     # Settings fields people changed ('settings:<field>'; before Oct 26 'settings' also counted the first visit's
-    # automatic import of the browser's locale, so older numbers are inflated).
-    f='{"andGroup":{"expressions":[{"filter":{"fieldName":"eventName","stringFilter":{"value":"feature_used"}}},{"orGroup":{"expressions":[{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"panel_"}}},{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"settings"}}}]}}]}}'
+    # automatic import of the browser's locale, so older numbers are inflated). Since Oct 28 2026 your own preferences
+    # and your name are in the You tab (panel_you:<via>, 'you:<field>', 'you:name'); before that, 'settings:<field>'.
+    f='{"andGroup":{"expressions":[{"filter":{"fieldName":"eventName","stringFilter":{"value":"feature_used"}}},{"orGroup":{"expressions":[{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"panel_"}}},{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"settings"}}},{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"you:"}}}]}}]}}'
     emit "$(report "$(mk 'customEvent:feature' 'eventCount,totalUsers' "$f")")" "tab:where,opens,people"
     ;;
 

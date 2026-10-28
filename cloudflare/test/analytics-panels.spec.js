@@ -42,16 +42,22 @@ async function open(browser, path) {
 test('a first visit (the locale is read into Settings) is not counted as using Settings', async ({ browser, request }) => {
   const id = await seed(request);
   const { ctx, features } = await open(browser, `/${id}?backend=cf`);
-  expect((await features()).filter((f) => String(f).startsWith('settings'))).toEqual([]);
+  expect((await features()).filter((f) => /^(settings|you)/.test(String(f)))).toEqual([]);
   await ctx.close();
 });
 
-test('changing a setting counts once, with the field: settings:time_format', async ({ browser, request }) => {
+test('changing a preference in the You tab counts once, with the field: you:time_format; your name: you:name', async ({ browser, request }) => {
   const id = await seed(request);
   const { ctx, page, features } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
+  await page.getByTestId('side-tab-you').click();
+  await expect.poll(async () => (await features()).filter((f) => String(f).startsWith('panel_'))).toEqual(['panel_settings:header', 'panel_you:tabs']);
   await page.locator('#set-time-format').selectOption('24');
-  await expect.poll(async () => (await features()).filter((f) => String(f).startsWith('settings'))).toEqual(['settings:time_format']);
+  const mine = async () => (await features()).filter((f) => /^(settings|you):/.test(String(f)));
+  await expect.poll(mine).toEqual(['you:time_format']);
+  await page.getByLabel('Your name (optional)').fill('Sam');
+  await page.getByLabel('Your name (optional)').press('Enter');
+  await expect.poll(mine).toEqual(['you:time_format', 'you:name']);
   await ctx.close();
 });
 

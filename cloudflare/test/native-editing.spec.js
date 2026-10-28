@@ -664,8 +664,10 @@ test('the app around it: 24-hour time and Monday first in the card and pickers, 
   const id = await seed([timed('g', 'Game', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00', { type: 2 })]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
   await page.getByTestId('settings-button-desktop').click();
+  await page.getByTestId('side-tab-you').click();   // your own preferences: the You tab
   await page.locator('#set-time-format').selectOption('24');
   await page.locator('#set-first-day').selectOption('1');
+  await page.getByTestId('side-tab-settings').click();
   await page.locator('[data-category-label="1"]').fill('Matches');
   await page.keyboard.press('Escape');
   await expect(page.locator('.nc-dayhead').first()).toContainText('Mon');

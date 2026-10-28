@@ -135,7 +135,9 @@ const QuickAddDialog = {
                             </p>
                         </div>
 
-                        <div class="flex justify-end gap-2">
+                        <div class="flex items-center justify-end gap-2">
+                            <!-- Many events at once, from another calendar's file (app.js openIcsPicker). -->
+                            <button type="button" class="pc-link pc-qa-import" @click="importIcs" data-testid="qa-import">or import a .ics file</button>
                             <button type="button"
                                     @click="hideDialog"
                                     class="pc-btn">
@@ -252,6 +254,12 @@ const QuickAddDialog = {
             this.type = 1;
             this.allDay = false;
             this.savedTimes = null;
+        },
+        /** "or import a .ics file": the page opens its file picker (in this click, or the browser won't) and shows the
+         *  import in its own small dialog; this one closes. */
+        importIcs() {
+            this.$emit('import-ics');
+            this.hideDialog();
         },
         // The All day switch, flipped by hand. On: the times blank out (kept to restore) and the
         // inputs disable. Off: the earlier times come back, or 9 to 10 if there were none.
