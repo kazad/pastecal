@@ -43,7 +43,10 @@ const settle = async (slug, pred, ms = 4000) => {
     while (Date.now() - t0 < ms) { last = await lookup(slug); if (pred(last)) return last; await sleep(50); }
     return last;
 };
-const editable = (l) => !!(l && l.found && l.isReadOnly === false);
+// The ROW is editable: /api/lookup answers a calendar of exactly the asked name over a view row (ExactNames.js), and
+// then says so (exact: 'view'), so an answer with `exact` is not an editable row.
+const editable = (l) => !!(l && l.found && l.isReadOnly === false && !l.exact);
+const viewRow = (l) => !!(l && l.found && (l.isReadOnly === true || l.exact === 'view'));
 // After a write that registers in the background (waitUntil): give it time, then the row must still be editable.
 const staysEditable = async (slug, why) => { await sleep(600); assert.ok(editable(await lookup(slug)), `${slug} stays editable: ${why}`); };
 const post = (p, body, headers = admin) => fetch(`${BASE}${p}`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -184,7 +187,7 @@ await settle(self, editable); await settle(crossB, editable);
 assert.equal((await plant({ actualSlug: self, isReadOnly: true, targetId: self }, { 'Content-Type': 'application/json' })).status, 403);
 assert.equal((await plant({ actualSlug: self, isReadOnly: true, targetId: self })).status, 200);       // the shape the cutover left
 assert.equal((await plant({ actualSlug: crossB, isReadOnly: true, targetId: crossA })).status, 200);   // a view named like another calendar
-assert.equal((await lookup(self)).isReadOnly, true, 'planted');
+assert.ok(viewRow(await lookup(self)), 'planted');
 
 assert.equal((await collisions('?scope=self', {})).status, 403);
 assert.equal((await collisions('', { Authorization: 'Bearer wrong' })).status, 403);
@@ -231,7 +234,7 @@ const dir = mkdtempSync(path.join(tmpdir(), 'nc-fix-'));
 let res = await runScript([], dir);
 assert.equal(res.code, 0, res.stderr);
 assert.match(res.stdout, new RegExp(`SELF .*\\n[\\s\\S]*${self2}`)); assert.match(res.stdout, /Dry run/);
-assert.equal(readdirSync(dir).length, 0, 'a dry run writes nothing'); assert.equal((await lookup(self2)).isReadOnly, true, 'and changes nothing');
+assert.equal(readdirSync(dir).length, 0, 'a dry run writes nothing'); assert.ok(viewRow(await lookup(self2)), 'and changes nothing');
 res = await runScript(['--apply', '--include-cross'], dir);
 assert.equal(res.code, 0, res.stdout + res.stderr);
 const undoFile = readdirSync(dir).find((f) => /^fix-name-collisions-.*\.json$/.test(f));

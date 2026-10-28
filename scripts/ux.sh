@@ -121,7 +121,7 @@ FROM $DS WHERE blob1 IN ('event_added','editor_abandoned') AND $D GROUP BY ui"
 
 run "Trust: refused saves and errors by UI and detail" \
 "SELECT blob1 AS event, blob2 AS ui, blob6 AS detail, SUM(_sample_interval) AS n
-FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed','edit_link_readonly','edit_name_collision','edit_link_forwarded') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
+FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed','edit_link_readonly','edit_name_collision','edit_case_variant','edit_link_forwarded') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
 
 # "Try the new calendar (beta)" (app.js setCalPref / sendCalFeedback): detail is <action>_<source>,
 # e.g. opt_in_footer, opt_out_pill, feedback_open_pill, feedback_sent_pill (Collector.js).

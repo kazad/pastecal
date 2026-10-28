@@ -613,6 +613,26 @@ export class CalendarRoom extends DurableObject {
         if (viewId) this.ctx.waitUntil(this.registerInDirectory(viewId, true, id));
     }
 
+    // The registry of exact calendar ids (CalendarDirectory rooms): what the daily archive walks and what the new-name
+    // check reads. A case variant or a spaced name has no directory row of its own, so this is the only list that has
+    // every calendar. Written when a calendar is first stored (create, /import, /from-firebase's first sight) and once
+    // per wake-up on a change, so calendars stored before the registry existed add themselves. Idempotent.
+    async registerRoom(source = null) {
+        const id = this.state.id;
+        if (!this.env.DIRECTORY || typeof id !== 'string' || !id) return;
+        this.roomRegistered = true;
+        try {
+            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            await dir.fetch('http://internal/rooms/add', { method: 'POST', body: json({ ids: [id], source }) });
+        } catch (e) {
+            this.roomRegistered = false;
+            console.error(`[CalendarRoom] registerRoom failed for ${id}:`, e.message);
+        }
+    }
+    registerRoomOnce() {
+        if (!this.roomRegistered) this.ctx.waitUntil(this.registerRoom('change'));
+    }
+
     async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         // A view id that is this calendar's own name (July 2025 allowed it) is never registered: the name is the edit
@@ -1007,6 +1027,7 @@ export class CalendarRoom extends DurableObject {
         const s = this.state, title = cal.title ?? '', options = cal.options || {};
         if (s.id === cal.id && s.title === title && json(s.options) === json(options) && json(s.events) === json(events)) {
             this.setMirrored(title, options, events);
+            this.registerRoomOnce();                                     // a calendar stored before the registry
             return { ok: true, unchanged: true, v: s.v, events: events.length, renamedDuplicates: renamed };
         }
         const beforeEvents = s.events;
@@ -1019,6 +1040,7 @@ export class CalendarRoom extends DurableObject {
         this.setMeta('id', cal.id); this.setMeta('title', title); this.setMeta('options', options);
         this.setMirrored(title, options, events);
         this.bump(source, [{ type: source, events: events.length }], { beforeEvents, beforeTitle, beforeOptions });
+        this.ctx.waitUntil(this.registerRoom(source));
         this.ctx.waitUntil(this.registerInDirectory(cal.id));
         if (options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(options.publicViewId, true, cal.id));
         this.broadcast({ t: 'snapshot', v: this.state.v, calendar: this.calendar() });
@@ -1170,6 +1192,7 @@ export class CalendarRoom extends DurableObject {
         if (this.env.DIRECTORY) {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
             await dir.fetch('http://internal/remove', { method: 'POST', body: json({ slug: id, actualSlug: id }) }).catch(() => {});
+            await dir.fetch('http://internal/rooms/remove', { method: 'POST', body: json({ id }) }).catch(() => {});
         }
         return { ok: true, archived: id };
     }
@@ -1335,6 +1358,7 @@ export class CalendarRoom extends DurableObject {
             }
             this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             this.healTrimmedName();
+            this.registerRoomOnce();
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -1362,6 +1386,7 @@ export class CalendarRoom extends DurableObject {
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
             this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             this.healTrimmedName();
+            this.registerRoomOnce();
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();

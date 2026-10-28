@@ -15,9 +15,10 @@
  *     missing, older than 26 hours, or short of 95% of the directory's calendars. Logs: [backup:archive].
  * A thrown step is retried by the alarm (Cloudflare retries failed alarms with backoff).
  *
- * Which calendars. Every edit name in the directory (CalendarDirectory /list, keyset pages), plus every id
- * with a per-calendar snapshot (a calendar whose directory row is missing or was trimmed before Oct 26),
- * deduplicated by exact id. A name that leads to no calendar (404) is counted as `absent`, not written.
+ * Which calendars. Every edit name in the directory (CalendarDirectory /list, keyset pages) and every calendar a
+ * view row opens, every id in the registry of exact calendar ids (CalendarDirectory /rooms/list: a case variant
+ * or a spaced name has no directory row of its own; 54 calendars with 4,974 events were missed before it, Oct 28
+ * 2026), plus every id with a per-calendar snapshot, deduplicated by exact id. A name that leads to no calendar (404) is counted as `absent`, not written.
  * The directory rows themselves are archived too (view links, short names, tombstones): that is what
  * restores /view/ and short-name links. Accounts (owners, emails, @handles) are NOT archived here.
  *
@@ -83,7 +84,7 @@ export class BackupArchive extends DurableObject {
         if (!DATE_RE.test(date || '')) throw new Error('bad date');
         const run = [...crypto.getRandomValues(new Uint8Array(4))].map((b) => b.toString(16).padStart(2, '0')).join('');
         const j = { version: ARCHIVE_VERSION, run, date, phase: 'directory', cursor: '', part: 0, steps: 0,
-            count: 0, dirRows: 0, absent: 0, failed: 0, bytes: 0, startedAt: new Date().toISOString(), done: false };
+            count: 0, dirRows: 0, rooms: 0, absent: 0, failed: 0, bytes: 0, startedAt: new Date().toISOString(), done: false };
         this.sql.exec(`DELETE FROM todo`);
         this.saveJob(j);
         await this.ctx.storage.setAlarm(Date.now());
@@ -116,9 +117,17 @@ export class BackupArchive extends DurableObject {
             const { rows, next } = await res.json();
             for (const row of rows) {
                 lines.push({ t: 'dir', row });
-                if (!row.is_readonly && !row.ended_at) { add(row.target_id || row.actual_slug); add(row.actual_slug); }
+                if (!row.ended_at) { add(row.target_id || row.actual_slug); if (!row.is_readonly) add(row.actual_slug); }
             }
             j.dirRows += rows.length;
+            if (next) j.cursor = next; else { j.phase = 'rooms'; j.cursor = ''; }
+        } else if (j.phase === 'rooms') {
+            const dir = env.DIRECTORY.get(env.DIRECTORY.idFromName('global'));
+            const res = await dir.fetch(`http://internal/rooms/list?after=${encodeURIComponent(j.cursor)}&limit=${chunk}`);
+            if (!res.ok) throw new Error(`registry list HTTP ${res.status}`);
+            const { ids, next } = await res.json();
+            for (const id of ids) add(id);
+            j.rooms = (j.rooms || 0) + ids.length;
             if (next) j.cursor = next; else { j.phase = 'snapshots'; j.cursor = ''; }
         } else if (j.phase === 'snapshots') {
             const page = await env.BACKUPS.list({ prefix: 'snapshots/', delimiter: '/', cursor: j.cursor || undefined });
@@ -177,7 +186,7 @@ export class BackupArchive extends DurableObject {
         const parts = (await listAll(env.BACKUPS, `${partsPrefix(j.date)}${j.run}/`)).sort((a, b) => (a.key < b.key ? -1 : 1));
         if (parts.length !== j.part) throw new Error(`expected ${j.part} parts, found ${parts.length}`);
         const finishedAt = new Date().toISOString();
-        const end = json({ t: 'end', count: j.count, dirRows: j.dirRows, absent: j.absent, failed: j.failed, finishedAt }) + '\n';
+        const end = json({ t: 'end', count: j.count, dirRows: j.dirRows, rooms: j.rooms || 0, absent: j.absent, failed: j.failed, finishedAt }) + '\n';
         const cs = new CompressionStream('gzip'), w = cs.writable.getWriter();
         const out = new Response(cs.readable).arrayBuffer();
         for (const p of parts) {
@@ -188,7 +197,7 @@ export class BackupArchive extends DurableObject {
         await w.write(new TextEncoder().encode(end));
         await w.close();
         const gz = await out;
-        const meta = { version: String(ARCHIVE_VERSION), date: j.date, run: j.run, count: String(j.count), dirRows: String(j.dirRows),
+        const meta = { version: String(ARCHIVE_VERSION), date: j.date, run: j.run, count: String(j.count), dirRows: String(j.dirRows), rooms: String(j.rooms || 0),
             absent: String(j.absent), failed: String(j.failed), bytes: String(j.bytes + end.length), gzBytes: String(gz.byteLength),
             parts: String(parts.length), startedAt: j.startedAt, finishedAt };
         const cur = this.job();
@@ -202,7 +211,7 @@ export class BackupArchive extends DurableObject {
         if (this.job()?.run !== j.run) return;
         this.saveJob(j);
         this.sql.exec(`DELETE FROM todo`);
-        console.log(`[backup:archive] ok ${key}: ${j.count} calendars, ${j.dirRows} directory rows, ${j.absent} absent, ${j.failed} failed, ` +
+        console.log(`[backup:archive] ok ${key}: ${j.count} calendars, ${j.dirRows} directory rows, ${j.rooms || 0} registered ids, ${j.absent} absent, ${j.failed} failed, ` +
             `${j.bytes} bytes (${gz.byteLength} gzipped) in ${j.steps} steps`);
     }
 }
@@ -221,7 +230,8 @@ export async function scheduledArchive(env, scheduledTime = Date.now()) {
     catch (e) { console.error(`[backup:archive] FAILED to start: ${e && e.message}`); }
 }
 
-// The newest daily file (today's, else yesterday's) against the directory's calendar count.
+// The newest daily file (today's, else yesterday's) against the calendars there are: the directory's edit names or the
+// registry of exact ids, whichever is more (the registry has every case variant once it is backfilled).
 export async function backupHealth(env, now = Date.now()) {
     let newest = null;
     for (const date of [utcDate(now), utcDate(now - 86400000)]) {
@@ -230,7 +240,7 @@ export async function backupHealth(env, now = Date.now()) {
     }
     const dir = env.DIRECTORY.get(env.DIRECTORY.idFromName('global'));
     const stats = await (await dir.fetch('http://internal/stats')).json();
-    return evaluateHealth({ newest, now, editable: stats.editable });
+    return evaluateHealth({ newest, now, editable: stats.editable, rooms: stats.rooms || 0 });
 }
 
 async function listArchives(env) {
