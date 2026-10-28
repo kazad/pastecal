@@ -199,6 +199,7 @@ test('createWithId: a refusal, a 500 or no connection calls onError (the page st
 function slugManager() {
     const vm = require('node:vm');
     const ctx = vm.createContext({ console });
+    vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/CalendarName.js'), 'utf8'), ctx);   // as the pages load it, first
     vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/SlugManager.js'), 'utf8') + ';this.SlugManager = SlugManager;', ctx);
     return ctx.SlugManager;
 }
@@ -222,6 +223,7 @@ test('SlugManager: names the server refuses are said in words before any request
 test('SlugManager.createReadOnlyLink rethrows with words for the page (userMessage), and shows nothing itself', async () => {
     const vm = require('node:vm');
     const ctx = vm.createContext({ console: { log() {}, error() {} }, alert: () => { throw new Error('alert() called'); } });
+    vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/CalendarName.js'), 'utf8'), ctx);
     vm.runInContext(`var CalendarDataService = { createPublicLink: async () => { const e = new Error('Slug is already taken'); e.code = 'already-exists'; throw e; } };`
         + fs.readFileSync(path.join(PUBLIC, 'services/SlugManager.js'), 'utf8') + ';this.SlugManager = SlugManager;', ctx);
     await assert.rejects(ctx.SlugManager.createReadOnlyLink({ id: 'c', options: {} }, { customSlug: 'taken-one' }), (e) => /taken/i.test(e.userMessage || ''));

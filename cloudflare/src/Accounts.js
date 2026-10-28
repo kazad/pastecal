@@ -111,6 +111,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { LockClient } from './LockClient.js';
+import CalendarName from '../../public/services/CalendarName.js';
 import { INTERVALS, PLANS, isUnlimited, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
@@ -158,7 +159,7 @@ function safeNext(raw) {
     const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|trial|keep))?$/.exec(raw);
     if (!m) return null;
     let id; try { id = decodeURIComponent(m[1]); } catch { return null; }
-    if (!validId(id) || RESERVED_NEXT.has(id.toLowerCase())) return null;
+    if (!validId(id) || RESERVED_NEXT.has(CalendarName.key(id))) return null;
     return '/' + encodeURIComponent(id) + (m[2] || '');
 }
 

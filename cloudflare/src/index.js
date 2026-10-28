@@ -28,6 +28,7 @@
  *   /api/admin/backup/{run,status,list,health,restore}   The daily full archive (BackupArchive.js; Bearer IMPORT_SECRET)
  *   GET  /api/admin/directory/collisions, POST .../make-editable   View rows named like an editable calendar, and
  *                                 their repair (NameCollisions.js; Bearer IMPORT_SECRET)
+ *   POST /api/admin/directory/rekey {apply?}   Move rows keyed before CalendarName.key to their key (Rekey.js; Bearer IMPORT_SECRET)
  *   POST /api/admin/rooms/backfill, GET .../stats   The registry of exact calendar ids (ExactNames.js; Bearer IMPORT_SECRET)
  *   scheduled()                   Cron (wrangler.jsonc triggers): starts the daily full archive
  */
@@ -51,6 +52,8 @@ import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
 import { timingSafeEqual } from './Stripe.js';
 import { handleCollisionAdmin } from './NameCollisions.js';
+import { handleRekey } from './Rekey.js';
+import CalendarName from '../../public/services/CalendarName.js';
 import { exactLookup, nameTakenByVariant, handleRoomsAdmin } from './ExactNames.js';
 import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL, NATIVE_CAL_META, nativeViewLinks } from './Site.js';
 
@@ -394,7 +397,7 @@ async function route(request, env, ctx) {
                 if (!success) return fail(429, { ok: false, error: 'resource-exhausted', message: 'Too many read-only links from here; try again in a minute' });
             }
             // Before anything is written: the source must be a real calendar, and a custom name must not
-            // be a calendar's name (rooms are exact-case, so check what was typed and its stored lowercase form).
+            // be a calendar's name (rooms are exact, so check what was typed, its key and the registered spellings of that key).
             const hasCalendar = async (name) => validId(name)
                 && (await env.CALENDARS.get(env.CALENDARS.idFromName(name)).fetch(`http://internal/cal/${encodeURIComponent(name)}`, { method: 'HEAD' })).status === 200;
             if (typeof sourceCalendarId !== 'string' || !(await hasCalendar(sourceCalendarId))) {
@@ -412,12 +415,14 @@ async function route(request, env, ctx) {
             }
             if (access.paused) return fail(403, { ok: false, error: 'paused', message: 'Editing is paused by the owner.' });   // after Pro ended
             if (customSlug) {
-                // Never a calendar's name, its own included: a view row there would take the name's lookups, and that
-                // calendar's edit link would forward to the view (CalendarDirectory.js EDITABLE_TAKEN).
+                // Never a calendar's name in any spelling (CalendarName.key), its own included: a view row there would take
+                // the name's lookups, and that calendar's edit link would forward to the view (CalendarDirectory.js
+                // EDITABLE_TAKEN). The spellings checked: as typed, its key, and every registered calendar with that key.
                 const typed = String(customSlug).trim();
                 const isCalendar = { ok: false, error: 'already-exists', reason: 'calendar', message: 'That is a calendar’s name' };
-                if (typed.toLowerCase() === sourceCalendarId.toLowerCase()) return fail(409, isCalendar);
-                for (const name of new Set([typed, typed.toLowerCase()])) {
+                if (CalendarName.same(typed, sourceCalendarId)) return fail(409, isCalendar);
+                const variants = await (await dir.fetch(`http://internal/rooms/variants?slug=${encodeURIComponent(typed)}`)).json().catch(() => ({ ids: [] }));
+                for (const name of new Set([typed, CalendarName.key(typed), ...(variants.ids || []).slice(0, 5)])) {
                     if (await hasCalendar(name)) return fail(409, isCalendar);
                 }
             }
@@ -484,6 +489,7 @@ async function route(request, env, ctx) {
             }
             const dir = getDirectory(env);
             if (!dir || !env.CALENDARS) return Response.json({ ok: false }, { status: 500 });
+            if (path === '/api/admin/directory/rekey' && request.method === 'POST') return handleRekey(request, env, dir);
             return handleCollisionAdmin(request, env, dir, path, url);
         }
 
@@ -529,7 +535,7 @@ async function route(request, env, ctx) {
                         if (!validId(cal)) continue;
                         const r = await env.CALENDARS.get(env.CALENDARS.idFromName(cal)).fetch(`http://internal/cal/${encodeURIComponent(cal)}`);
                         const own = r.ok ? (await r.json().catch(() => null))?.calendar?.options?.publicViewId : null;
-                        if (typeof own === 'string' && own.toLowerCase() === viewId.toLowerCase()) { targetId = cal; break; }
+                        if (typeof own === 'string' && CalendarName.same(own, viewId)) { targetId = cal; break; }
                     }
                 }
             }
@@ -568,7 +574,7 @@ async function route(request, env, ctx) {
             if (m[2] === '/ws' && request.headers.get('Upgrade') !== 'websocket') {
                 return new Response('expected a WebSocket', { status: 426 });
             }
-            if (request.method === 'POST' && !m[2] && (RESERVED_CALENDAR_NAMES.has(id.toLowerCase()) || id.startsWith('@'))) {
+            if (request.method === 'POST' && !m[2] && (RESERVED_CALENDAR_NAMES.has(CalendarName.key(id)) || id.trim().startsWith('@'))) {
                 return withCors(Response.json({ ok: false, error: 'reserved name' }, { status: 409 }));
             }
             // A read-only name (a view link, or a Pro Unlimited short name) already answers at this address.
