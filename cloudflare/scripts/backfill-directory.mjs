@@ -115,6 +115,7 @@ async function run() {
     // Next: fetch target IDs for read-only views in concurrent pools
     console.log(`Fetching target IDs for ${roKeys.length} read-only views...`);
     const CONCURRENCY = 60;
+    const collisions = [];   // view names that are an editable calendar's: skipped
     let fetched = 0;
     const t0 = Date.now();
 
@@ -128,6 +129,14 @@ async function run() {
                 if (res.ok) {
                     const targetId = await res.json();
                     if (targetId && typeof targetId === 'string') {
+                        // Editable always wins: a view link named like a calendar (July 2025's custom view names
+                        // allowed it) must never take that calendar's row. The Oct 4 2026 run let it, and 45 edit
+                        // links forwarded to their view (CalendarDirectory refuses it too now).
+                        const held = entries.get(key.toLowerCase());
+                        if (held && !held.isReadOnly) {
+                            collisions.push({ name: key, calendar: held.actualSlug, viewOpens: targetId.trim() });
+                            return;
+                        }
                         entries.set(key.toLowerCase(), {
                             actualSlug: key,
                             isReadOnly: true,
@@ -146,6 +155,10 @@ async function run() {
         }
     }
 
+    if (collisions.length) {
+        console.log(`${collisions.length} view link(s) named like an editable calendar, skipped (the calendar keeps its name):`);
+        for (const c of collisions) console.log(`  ${c.name}: calendar ${c.calendar}; the view opens ${c.viewOpens}`);
+    }
     console.log(`Total directory items to upload: ${entries.size}`);
 
     // Post to Cloudflare /api/directory/backfill in batches of 500
@@ -167,6 +180,8 @@ async function run() {
             const txt = await res.text();
             throw new Error(`Upload batch failed HTTP ${res.status}: ${txt}`);
         }
+        const out = await res.json().catch(() => ({}));
+        if (out.skipped && out.skipped.length) console.log(`\nThe directory kept the editable row for: ${out.skipped.join(', ')}`);
         uploaded += chunk.length;
         process.stdout.write(`Uploaded ${uploaded}/${allItems.length}\r`);
     }

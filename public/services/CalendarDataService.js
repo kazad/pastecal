@@ -287,6 +287,11 @@ class CalendarDataService {
         // - Validate event formats
     }
 
+    // The calendar stored under exactly this name, or null (none, or Firebase could not be read).
+    static async _editableAt(slug) {
+        try { return (await this.db.child(slug).once('value')).val() ? slug : null; } catch (e) { return null; }
+    }
+
     // find calendar (with redirect logic) and subscribe
     static async findAndSubscribe(slug, callback) {
         if (!slug) {
@@ -306,7 +311,15 @@ class CalendarDataService {
             if (result.data?.ended) { window.location.replace('/link-ended/' + encodeURIComponent(slug)); return; }
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
-                    // Found as read-only calendar - redirect to view URL
+                    // A view row at an editable calendar's name (a view link named after a calendar): stay and edit it.
+                    // Only a name with no calendar behind it is a view link - redirect to view URL.
+                    const here = await this._editableAt(slug);
+                    if (here) {
+                        if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_name_collision', {}));
+                        this._subscribeExact(here, callback);
+                        return;
+                    }
+                    if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
                     window.location.href = CalendarPath.view(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {

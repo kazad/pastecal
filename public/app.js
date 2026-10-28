@@ -4715,7 +4715,7 @@ const CalendarVueApp = {
         async customizeExistingLink() {
             const name = this.readOnlySlugInput.trim();
             if (!name) return;
-            this.viewRenameError = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar)) || '';
+            this.viewRenameError = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar), this.calendar.id) || '';
             if (this.viewRenameError) return;
             try {
                 await SlugManager.customizeReadOnlyLink(this.calendar, name);

@@ -212,6 +212,10 @@ test('SlugManager: names the server refuses are said in words before any request
     assert.match(S.viewNameProblem('my team!', 'abc123') || '', /letters, numbers/);
     assert.equal(S.viewNameProblem('my-team', 'abc123'), null);
     assert.match(S.linkErrorMessage({ code: 'already-exists' }), /taken/);
+    // A view link named after its calendar took the calendar's edit link (Oct 28 2026): refused, and said so.
+    assert.match(S.viewNameProblem('Kazumichi', 'abc123', 'kazumichi') || '', /calendar.s edit link/);
+    assert.equal(S.viewNameProblem('kazumichi-view', 'abc123', 'kazumichi'), null);
+    assert.match(S.linkErrorMessage({ code: 'already-exists', reason: 'calendar' }), /calendar.s edit link/);
     assert.match(S.linkErrorMessage(new TypeError('Failed to fetch')), /connection/);
 });
 

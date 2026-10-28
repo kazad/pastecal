@@ -44,17 +44,22 @@ class SlugManager {
     }
 
     // Why a view-only link can't be renamed to this, in words, or null. The server's rule (SlugService.validateSlug):
-    // 3 to 50 letters, numbers, dashes or underscores.
-    static viewNameProblem(name, current) {
+    // 3 to 50 letters, numbers, dashes or underscores, and never a calendar's name -- this calendar's own least of all
+    // (its edit link would then open the view: the July 2025 custom names allowed it, Oct 28 2026).
+    static viewNameProblem(name, current, calendarId = null) {
         const s = String(name ?? '').trim();
         if (current && s.toLowerCase() === String(current).toLowerCase()) return 'That’s already this link’s name.';
+        if (calendarId && s.toLowerCase() === String(calendarId).toLowerCase()) return this.CALENDAR_NAME_MESSAGE;
         if (!/^[a-zA-Z0-9_-]{3,50}$/.test(s)) return 'Use 3 to 50 letters, numbers, dashes or underscores.';
         return null;
     }
 
+    static CALENDAR_NAME_MESSAGE = 'That’s a calendar’s edit link, so it can’t be a view-only link. Try another name.';
+
     // What a failed view-link request says to a person (createPublicLink's error: .code from the server).
     static linkErrorMessage(error) {
         const code = error && error.code;
+        if (code === 'already-exists' && error.reason === 'calendar') return this.CALENDAR_NAME_MESSAGE;
         if (code === 'already-exists') return 'That name is taken. Try another.';
         if (code === 'invalid-argument') return 'That name won’t work. Use 3 to 50 letters, numbers, dashes or underscores.';
         if (code === 'resource-exhausted') return 'Too many tries. Wait a minute and try again.';

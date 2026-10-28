@@ -234,7 +234,16 @@ class CloudCalendarService extends CalendarDataService {
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {
-                            window.location.href = CalendarPath.view(lookup.data.actualSlug);
+                            // A view row at an editable calendar's name (a view link named after a calendar, July 2025): the
+                            // calendar stays editable here. Only a name with no calendar behind it forwards to its view.
+                            const here = await this._editableAt(slug, lookup.data.actualSlug);
+                            if (!here) {
+                                if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_link_forwarded', {}));
+                                window.location.href = CalendarPath.view(lookup.data.actualSlug);
+                                return;
+                            }
+                            if (typeof trackSafely === 'function') trackSafely(a => a.track('edit_name_collision', {}));
+                            if (here !== slug) { this.close(slug); this.subscribe(here, callback); }
                             return;
                         }
                     }
@@ -249,6 +258,15 @@ class CloudCalendarService extends CalendarDataService {
         })();
     }
     static _subscribeExact(slug, callback) { this.subscribe(slug, callback); }
+
+    /** The editable calendar at this name (exactly, else at `alt`, the directory's spelling), or null if neither exists.
+     *  HEAD /cal/<id>: 200 is a calendar with data. Unreachable counts as none: the forward the page always made. */
+    static async _editableAt(slug, alt = null) {
+        for (const id of alt && alt !== slug ? [slug, alt] : [slug]) {
+            try { if ((await fetch(this._url(id), { method: 'HEAD' })).status === 200) return id; } catch (e) { /* offline */ }
+        }
+        return null;
+    }
 
     static subscribe(slug, callback) {
         if (!slug) return;
@@ -770,6 +788,7 @@ class CloudCalendarService extends CalendarDataService {
         if (!res.ok || !out.ok) {
             const err = new Error(out.message || 'Failed to create read-only link');
             err.code = out.error || 'internal';
+            if (out.reason) err.reason = out.reason;   // 'calendar': the name is a calendar's (SlugManager.linkErrorMessage)
             throw err;
         }
         return { data: { publicViewId: out.publicViewId } };
