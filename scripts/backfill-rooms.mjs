@@ -38,7 +38,7 @@ if (!secret) {
 }
 const headers = { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' };
 
-const BATCH = 300;
+const BATCH = 100;   // one HEAD per id on the server; 300 took ~30 s and the connection dropped (Oct 28)
 const total = { asked: 0, known: 0, toAdd: 0, added: 0 };
 const missing = [], invalid = [], failed = [];
 for (let i = 0; i < ids.length; i += BATCH) {
