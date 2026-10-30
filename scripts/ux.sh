@@ -12,7 +12,10 @@
 # Column layout is defined in cloudflare/src/Collector.js -- keep the two in sync:
 #   blob1 event name, blob2 ui, blob6 detail (the event's one value), double7 = 1.
 # First-party, so it covers EU visitors (GA4 is off for them); test traffic (surface=test) is
-# dropped by the collector before it is written, so nothing here needs to filter it.
+# dropped by the collector before it is written, so nothing here needs to filter it. Automation is dropped
+# at write time too (cloudflare/src/Bots.js: crawlers, headless browsers, curl, any User-Agent containing
+# "pastecal-", which our own scripts and audits that hit the live site send; node/python runtimes are never
+# views or page events, though a follow from one counts, since calendar apps like Home Assistant use them).
 set -euo pipefail
 REPORT=ux
 if [ "${1:-}" = "trials" ]; then REPORT=trials; shift; fi

@@ -422,6 +422,8 @@ const CalendarVueApp = {
             EXTRA_COLORS: EXTRA_COLORS,
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
+            toolbarMid: null,   // the classic toolbar's empty middle, where the type filter goes (mountSyncfusion)
+            toolbarChipsFit: true,   // false: the chips don't fit that space, so one "Types" button stands in
             searchOpenId: null,   // the search result shown open, if any
             printFrom: null,      // 'share' while Share's Print button opens the dialog (counted in beforeprint)
             printMonth: null, printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
@@ -506,6 +508,18 @@ const CalendarVueApp = {
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
         // Where a repeating event without its own zone repeats (EventZone.calendarZone), as the calendar feed writes it.
         calendarZone() { return typeof EventZone !== 'undefined' && EventZone.calendarZone ? EventZone.calendarZone(this.calendar) : null; },
+        // A visitor in another time zone sees times in their own; say so, in the footer line (it moves nothing).
+        // Only for a calendar with a known zone and timed events, when the clocks differ right now.
+        tzNote() {
+            if (typeof EventZone === 'undefined') return '';
+            const cal = this.calendarZone, me = EventZone.localZone();
+            if (!cal || !me || cal === me || !(this.calendar?.events || []).some(e => e && !e.isAllDay)) return '';
+            const now = Date.now(), a = EventZone.wall(now, cal), b = EventZone.wall(now, me);
+            const mins = (Date.UTC(b.y, b.m, b.d, b.h, b.min) - Date.UTC(a.y, a.m, a.d, a.h, a.min)) / 60000;
+            if (!mins) return '';
+            const h = Math.abs(mins) / 60, hours = `${Number.isInteger(h) ? h : h.toFixed(1)} ${h === 1 ? 'hour' : 'hours'}`;
+            return `Shown in ${EventZone.zoneCity(me)} time. This calendar is in ${EventZone.zoneCity(cal)}, ${hours} ${mins > 0 ? 'behind' : 'ahead'}.`;
+        },
         // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
         // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
         nativeDraft() {
@@ -770,6 +784,14 @@ const CalendarVueApp = {
             }
             return this.COLORS.map((color, idx) => ({ idx, color, count: counts[idx], label: this.typeLabelFor(idx) }))
                 .filter(c => c.count > 0 || this.colorFilters[c.idx] === false);
+        },
+
+        // The type filter in the toolbar's middle: the same chips as Search's color filter, shown only once
+        // someone has named a type and two or more are in use (a filter of "Type 1, Type 2" says nothing).
+        toolbarTypeChips() {
+            const used = this.filterChips.filter(c => c.count > 0);
+            const named = used.some(c => !/^Type \d+$/.test(c.label));
+            return (used.length > 1 && named) || this.isColorFilterActive ? this.filterChips : [];
         },
 
         // What the search panel lists: the matches for the words typed, or, with no words and a color
@@ -1440,6 +1462,7 @@ const CalendarVueApp = {
     },
 
     watch: {
+        toolbarTypeChips() { this.$nextTick(() => this.fitToolbarTypes()); },
         // The event card follows changes made in other browsers (nativeCardRefresh).
         'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
@@ -2979,6 +3002,30 @@ const CalendarVueApp = {
                         if (inst) inst.setRecurrenceRule(ScheduleAdapter.editorRule(args.data), args.data.StartTime);
                     }
 
+                    // "Every other week" in Repeat: Syncfusion's list has no such entry, so picking it sets up Weekly,
+                    // repeat every 2, on the event's weekday; the editor then shows those settings to adjust.
+                    const repeatEl = args.element.querySelector('.e-repeat-element');
+                    const repeatList = repeatEl && repeatEl.ej2_instances && repeatEl.ej2_instances[0];
+                    const recEl = args.element.querySelector('.e-recurrenceeditor');
+                    const recEditor = recEl && recEl.ej2_instances && recEl.ej2_instances[0];
+                    if (repeatList && recEditor && !repeatList.pcEveryOtherWeek) {
+                        repeatList.pcEveryOtherWeek = true;
+                        // Last in the list: Syncfusion selects Never..Yearly by position, so nothing may move.
+                        repeatList.dataSource = [...repeatList.dataSource, { text: 'Every other week', value: 'everyotherweek' }];
+                        repeatList.dataBind();
+                        repeatList.addEventListener('change', (e) => {
+                            if (e.value !== 'everyotherweek') return;
+                            const picker = args.element.querySelector('[name="StartTime"]');
+                            const start = (picker && picker.ej2_instances && picker.ej2_instances[0].value) || new Date();
+                            const day = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][start.getDay()];
+                            setTimeout(() => {
+                                repeatList.value = 'weekly';
+                                repeatList.dataBind();
+                                recEditor.setRecurrenceRule(`FREQ=WEEKLY;INTERVAL=2;BYDAY=${day}`, start);
+                            });
+                        });
+                    }
+
                     // Configure datetime pickers with strictMode and the user's chosen date format.
                     // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
                     // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
@@ -3310,6 +3357,31 @@ const CalendarVueApp = {
                     if (staleRetries++ < 3) relayout();
                 });
             });
+            // Long titles wrap where their day has room (ScheduleAdapter.fitMonthTitles): once per frame after
+            // events are drawn, which also catches refreshLayout (a theme switch, a resize) that fires no dataBound.
+            let fitPending = false;
+            const fitTitles = () => {
+                if (fitPending) return;
+                fitPending = true;
+                requestAnimationFrame(() => { fitPending = false; ScheduleAdapter.fitMonthTitles(document.getElementById('Schedule')); });
+            };
+            scheduleObj.addEventListener('dataBound', fitTitles);
+            // A home for the type filter that moves nothing: Syncfusion's empty toolbar middle. Checked after each
+            // render, as Syncfusion can rebuild the toolbar; Vue's teleport follows a new slot.
+            scheduleObj.addEventListener('dataBound', () => {
+                const items = document.querySelector('#Schedule .e-schedule-toolbar .e-toolbar-items');
+                if (!items) return;
+                let slot = items.querySelector(':scope > .pc-tb-types');
+                if (!slot) {
+                    slot = document.createElement('div');
+                    slot.className = 'pc-tb-types';
+                    items.appendChild(slot);
+                    if (window.ResizeObserver) new ResizeObserver(() => this.fitToolbarTypes()).observe(items);
+                }
+                if (this.toolbarMid !== slot) this.toolbarMid = slot;
+                this.fitToolbarTypes();
+            });
+            scheduleObj.addEventListener('eventRendered', fitTitles);
             // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
             // with empty page below, and the side panel (same grid row) follows. Rows grow, never
             // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
@@ -5029,6 +5101,24 @@ const CalendarVueApp = {
             const onlyThis = this.colorFilters[index] !== false
                 && [...used].every(i => i === index || this.colorFilters[i] === false);
             this.colorFilters = this.COLORS.map((_, i) => onlyThis || i === index || !used.has(i));
+        },
+
+        // The toolbar's type filter takes exactly the gap between the date and the view buttons; when its
+        // chips don't fit there, one "Types" button (opening Search's filter) stands in, so nothing overlaps.
+        fitToolbarTypes() {
+            const slot = this.toolbarMid;
+            const items = slot && slot.parentElement;
+            const left = items && items.querySelector('.e-toolbar-left');
+            const right = items && items.querySelector('.e-toolbar-right');
+            if (!left || !right) return;
+            const box = items.getBoundingClientRect();
+            slot.style.left = (left.getBoundingClientRect().right - box.left + 12) + 'px';
+            slot.style.right = (box.right - right.getBoundingClientRect().left + 12) + 'px';
+            this.$nextTick(() => {
+                const row = slot.querySelector('.pc-tb-types-row');
+                const fits = !row || row.scrollWidth <= slot.clientWidth;
+                if (fits !== this.toolbarChipsFit) this.toolbarChipsFit = fits;
+            });
         },
 
         resetColorFilters() {

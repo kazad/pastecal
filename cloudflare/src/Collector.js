@@ -12,6 +12,8 @@
 //   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached | blob8 homepage variant
 //   double1 ttfb_ms | double2 fcp_ms | double3 lcp_ms | double4 load_ms | double5 cls | double6 first_event_seconds | double7 count
 
+import { isBot, isScript } from './Bots.js';
+
 export const MAX_BODY_BYTES = 16 * 1024;
 export const MAX_EVENTS = 20;           // the page sends at most 12 at a time (analytics.js BATCH_SIZE)
 
@@ -58,6 +60,8 @@ export async function handleCollect(request, env) {
     const done = new Response(null, { status: 204 });
     try {
         if (!env.EVENTS) return done;
+        // Headless browsers and our own scripts and audits (Bots.js, the same test as calendar visits).
+        if (isBot(request) || isScript(request)) return done;
         // Per IP (COLLECT_LIMITER, wrangler.jsonc): a page sends one batch every ~10 s at most, so
         // anything faster is not a person. Over the limit, the batch is dropped -- still a 204.
         if (env.COLLECT_LIMITER) {

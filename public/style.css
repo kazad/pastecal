@@ -120,6 +120,15 @@ html, div#Schedule, .e-control, .e-css, .e-toolbar, .e-tbar-btn, .e-tbar-btn-tex
 .e-schedule .e-month-view .e-appointment .e-subject { font-size: 12px !important }
 .e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 !important }
 .e-schedule .e-month-view .e-appointment .e-recurrence-icon { display: none !important }
+/* Today: the whole cell takes a light tint of the accent, so it stands out at a glance. */
+.e-schedule .e-month-view td.e-work-cells.e-current-date { background: color-mix(in srgb, var(--pc-primary) 8%, var(--pc-bg)) !important }
+/* A long title wraps to three lines where its day has room (ScheduleAdapter.fitMonthTitles sets .pc-wrap). */
+.e-schedule .e-month-view .e-appointment.pc-wrap { height: auto !important }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-appointment-details { height: auto !important; white-space: normal !important;
+  display: -webkit-box !important; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; line-height: 1.25 !important; padding-block: 2px }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-time,
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-subject { display: inline !important; white-space: normal !important; overflow-wrap: normal; word-break: normal; line-height: inherit !important }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-time { margin-right: 4px; white-space: nowrap !important }
 .e-schedule .e-month-view .e-more-indicator { color: var(--pc-text-muted) !important; font-weight: 600; font-size: 11.5px !important }
 
 /* ---- Week and Day: working hours plain, the rest a faint tint, quiet hour lines -------------- */
@@ -160,6 +169,10 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .e-schedule .e-month-view .e-appointment .e-subject { text-overflow: clip !important;   /* a few more letters, not an ellipsis taking three */
     -webkit-mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent); mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent) }
   .e-schedule .e-month-view .e-more-indicator { padding-inline: 2px !important; text-overflow: clip !important; font-size: var(--pc-fs-2xs) !important }
+  /* Wrapped titles (.pc-wrap): the week view's small type, so more of each word fits a ~50px column. */
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-time { display: none !important }
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-appointment-details { font-size: 10.5px !important; letter-spacing: -.02em; line-height: 1.2 !important }
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-subject { font-size: inherit !important }
   /* Week: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion sets an inline
      max-height of one line); the time, already shown by the grid, gives way. */
   .e-schedule.e-schedule .e-vertical-view .e-appointment .e-subject { white-space: normal !important; max-height: none !important; overflow-wrap: normal !important; word-break: normal !important;
@@ -781,6 +794,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* Under the calendar: a view link's pitch, Pro's credit, an embed's corner, an edit link's links.
    The same type, spacing and hover as the site footer. */
 .pc-view-footer { margin: 12px 4px 4px; font-size: var(--pc-fs-sm); line-height: 1.6; color: var(--pc-text-muted); text-align: center; text-wrap: balance }
+.pc-tz-note { margin-right: 14px; color: var(--pc-text-2) }   /* a visitor in another zone (app.js tzNote) */
 .pc-view-footer img { display: inline-block; width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px }
 .pc-view-footer a { margin-left: 8px; color: var(--pc-link); font-weight: var(--pc-fw-medium); white-space: nowrap }
 .pc-edit-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin: 12px 4px 4px; font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font) }
@@ -1428,6 +1442,16 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
 .pc-search-filter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-2) }
 .pc-search-filter-hint { font-weight: var(--pc-fw-regular); color: var(--pc-text-muted) }
 .pc-filter-count { color: var(--pc-text-muted); font-weight: var(--pc-fw-regular); font-variant-numeric: tabular-nums }
+/* The type filter in the classic toolbar's empty middle (index.html teleport): placed in the measured gap
+   between the date and the view buttons (fitToolbarTypes), so it never pushes or covers them. Chips that
+   don't fit give way to one "Types" button; phones keep the filter in the Search panel only. */
+.e-schedule .e-schedule-toolbar .e-toolbar-items { position: relative }
+.pc-tb-types { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; min-width: 0; pointer-events: none }
+.pc-tb-types > * { pointer-events: auto }
+.pc-tb-types-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap }
+.pc-tb-types-row.is-measuring { position: absolute; visibility: hidden; pointer-events: none }
+.pc-tb-chip { height: 26px; font-size: var(--pc-fs-xs) }
+@media (max-width: 640px) { .pc-tb-types { display: none } }
 .pc-filter-chip.is-off { opacity: .6; text-decoration: line-through; border-style: dashed }
 .pc-filter-chip.is-off::before { background: transparent }
 

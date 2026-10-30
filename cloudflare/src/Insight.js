@@ -48,6 +48,7 @@
  * forwarded calendar read as a countable hit for RoomInsight.countHit.
  */
 import { LockClient } from './LockClient.js';
+import { isBot, isScript } from './Bots.js';
 import { sameSite } from './Accounts.js';
 import { VERSION_RE, snapshotPrefix, savedAtMs, sourceOf } from './RoomInsight.js';
 
@@ -56,22 +57,15 @@ const json = (data, status = 200) => Response.json(data, { status, headers: { 'C
 const devMode = (env) => env.ACCOUNTS_DEV_MODE === '1';
 const DAYS = new Set([30, 90, 365]);
 
-// Crawlers, link previews, monitors, scripts. Calendar apps (Google-Calendar-Importer, Outlook,
-// iOS dataaccessd) don't match. The uptime check and GitHub Actions use curl.
-const BOT_UA = /bot\b|bot\/|crawler|spider|preview|monitor|uptime|headless|lighthouse|curl\/|wget|python-requests|go-http-client|github/i;
-export function isBot(request) {
-    const bm = request.cf && request.cf.botManagement;
-    if (bm && (bm.verifiedBot === true || (typeof bm.score === 'number' && bm.score > 0 && bm.score < 30))) return true;
-    const ua = request.headers.get('User-Agent') || '';
-    return !ua || BOT_UA.test(ua);
-}
+// isBot (Bots.js): crawlers, monitors, headless browsers, our own scripts and audits.
+export { isBot, isScript };
 
 // Headers that mark a forwarded calendar read as a hit ('view' or 'follow'), with the place it came
 // from (request.cf; wrangler dev fills it with this machine's place). null for bots. City is
 // URI-encoded: header values must be Latin-1. A view also carries where it came from, as a category
 // only (RoomInsight.sourceOf): the Referer and the page's ?ref= host stop here.
 export function hitHeaders(request, env, kind) {
-    if (isBot(request)) return null;
+    if (isBot(request) || (kind === 'view' && isScript(request))) return null;   // a script runtime may be a calendar app, never a page view
     const country = (request.cf && request.cf.country) || '', city = (request.cf && request.cf.city) || '';
     const h = { 'X-PC-Hit': kind, 'X-PC-Geo-Country': String(country).slice(0, 2), 'X-PC-Geo-City': encodeURIComponent(String(city).slice(0, 80)) };
     if (kind === 'view') {

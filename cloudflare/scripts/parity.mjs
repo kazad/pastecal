@@ -30,7 +30,7 @@ const keyed = (v) => {
 const canon = (x) => JSON.stringify(x, (_, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([, y]) => y != null).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
 
 async function compare(id) {
-    const [fb, res] = await Promise.all([fbGet(`/calendars/${encodeURIComponent(id)}`), fetch(`${BASE}/cal/${encodeURIComponent(id)}`)]);
+    const [fb, res] = await Promise.all([fbGet(`/calendars/${encodeURIComponent(id)}`), fetch(`${BASE}/cal/${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'pastecal-parity' } })]);
     if (!fb) return { id, why: 'gone from Firebase' };
     if (res.status === 404) return { id, why: 'missing on Cloudflare' };
     const cf = (await res.json()).calendar;

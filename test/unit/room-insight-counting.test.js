@@ -227,6 +227,35 @@ test('isBot / hitHeaders: crawlers, previews, monitors, curl and empty user agen
     }
 });
 
+test('isBot: our own scripts and audits are not hits (Oct 28: health.py swept every calendar edited in 24h); real browsers are', async () => {
+    const { hitHeaders, isBot } = await loadWorker();
+    const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    // Ours (marked "pastecal-") and headless browsers: neither a view nor a follow.
+    for (const ua of ['pastecal-health', `${iphone} pastecal-audit`, 'pastecal-launch-smoke',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.0.0 Safari/537.36']) {
+        assert.equal(isBot(req('https://pastecal.com/cal/x', { 'User-Agent': ua })), true, ua);
+        assert.equal(hitHeaders(req('https://pastecal.com/cal/x', { 'User-Agent': ua }), {}, 'view'), null, ua);
+        assert.equal(hitHeaders(req('https://pastecal.com/x.ics', { 'User-Agent': ua }), {}, 'follow'), null, ua);
+    }
+    // Script runtimes: never a page view, but a calendar app may be one (Home Assistant, self-hosted syncers), so a follow counts.
+    for (const ua of ['node', 'undici', 'node-fetch/1.0', 'axios/1.7.2', 'Python-urllib/3.12', 'python-httpx/0.27', 'Python/3.12 aiohttp/3.9',
+        'HomeAssistant/2026.10.1 aiohttp/3.12.15 Python/3.13', 'HomeAssistant/2026.10.1 httpx/0.28.1 Python/3.13']) {
+        assert.equal(hitHeaders(req('https://pastecal.com/cal/x', { 'User-Agent': ua }), {}, 'view'), null, ua);
+        assert.equal(hitHeaders(req('https://pastecal.com/x.ics', { 'User-Agent': ua }), {}, 'follow')['X-PC-Hit'], 'follow', ua);
+    }
+    for (const ua of [iphone,
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0',
+        'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/480.0]']) {
+        assert.equal(isBot(req('https://pastecal.com/cal/x', { 'User-Agent': ua })), false, ua);
+        assert.equal(hitHeaders(req('https://pastecal.com/cal/x', { 'User-Agent': ua }), {}, 'view')['X-PC-Hit'], 'view', ua);
+    }
+});
+
 test('hitHeaders: a view carries only a source category and the place from request.cf', async () => {
     const { hitHeaders } = await loadWorker();
     const ua = { 'User-Agent': 'Mozilla/5.0 (Macintosh)' };

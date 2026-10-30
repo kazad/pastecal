@@ -7,7 +7,7 @@ pastecal health check -- read-only, about a minute, a fraction of a cent.
 Answers "is anything wrong right now?" from the places the truth lives:
   1. the calendars on Cloudflare: when each was last edited (its daily R2 backup, rewritten on every change,
      listed with the `cf` CLI), and for the ones edited in the last 24h their history and events (GET /cal/<id>,
-     read-only; a script's read is not counted as a visit)
+     read-only; its User-Agent pastecal-health keeps these reads out of visit counts, cloudflare/src/Bots.js)
   2. Google Analytics (errors by message, refused changes, blocked saves) -- via stats.sh
   3. the daily full archive (R2 archive/daily/<date>.json.gz, cloudflare/src/BackupArchive.js): GET
      /api/admin/backup/health (Bearer IMPORT_SECRET, from the env or the Keychain item pastecal-import-secret,

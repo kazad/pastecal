@@ -20,7 +20,7 @@ async function one(id) {
     const res = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
     if (!res.ok) return stats.failed.push(`${id}: ${res.error}`);
     stats.renamed += res.renamedDuplicates; stats.events += res.events;
-    const back = (await (await fetch(`${BASE}/cal/${encodeURIComponent(id)}`)).json()).calendar;
+    const back = (await (await fetch(`${BASE}/cal/${encodeURIComponent(id)}`, { headers: { 'User-Agent': 'pastecal-migrate' } })).json()).calendar;
     const src = list(cal.events), got = back.events;
     // Identical, field for field and in order -- except a renamed duplicate's id.
     const same = src.length === got.length && src.every((e, i) => JSON.stringify({ ...e, id: 0 }) === JSON.stringify({ ...got[i], id: 0 }))
