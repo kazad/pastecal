@@ -48,13 +48,20 @@ assert.equal(toDataPoints({ events: [ev('ok', { source: 'x'.repeat(500) })] })[0
 // handler: always 204, writes points, tolerates a missing binding and bad bodies
 const written = [];
 const env = { EVENTS: { writeDataPoint: (p) => written.push(p) } };
-const post = (body) => new Request('https://x/api/collect', { method: 'POST', body });
+const BROWSER = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const post = (body, ua = BROWSER) => new Request('https://x/api/collect', { method: 'POST', headers: { 'User-Agent': ua }, body });
 assert.equal((await handleCollect(post(JSON.stringify({ events: [ev('a'), ev('b')] })), env)).status, 204);
 assert.equal(written.length, 2);
 assert.equal((await handleCollect(post('{not json'), env)).status, 204);
 assert.equal((await handleCollect(post('x'.repeat(20000)), env)).status, 204);
 assert.equal(written.length, 2);
 assert.equal((await handleCollect(post('{}'), {})).status, 204);
+// Headless browsers and our own scripts and audits are not counted (Insight.isBot); still a 204.
+for (const ua of ['Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/140.0.0.0 Safari/537.36',
+    BROWSER + ' pastecal-audit', 'node', 'Python-urllib/3.12', '']) {
+    assert.equal((await handleCollect(post(JSON.stringify({ events: [ev('a')] }), ua), env)).status, 204);
+}
+assert.equal(written.length, 2, 'automation writes nothing');
 console.log('collector tests passed');
 
 // The homepage experiment variant rides along so conversion and returns can be split by it.
@@ -65,7 +72,7 @@ assert.equal(toDataPoints({ events: [ev('event_added', { hv: 'b' })] })[0].blobs
     const seen = [], keys = [];
     let allow = 2;
     const limited = { EVENTS: { writeDataPoint: (p) => seen.push(p) }, COLLECT_LIMITER: { limit: async ({ key }) => { keys.push(key); return { success: allow-- > 0 }; } } };
-    const req = () => new Request('https://x/api/collect', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.7' }, body: JSON.stringify({ events: [ev('a')] }) });
+    const req = () => new Request('https://x/api/collect', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.7', 'User-Agent': BROWSER }, body: JSON.stringify({ events: [ev('a')] }) });
     for (let i = 0; i < 4; i++) assert.equal((await handleCollect(req(), limited)).status, 204);
     assert.equal(seen.length, 2, 'only the batches under the limit are written');
     assert.deepEqual([...new Set(keys)], ['collect:203.0.113.7']);

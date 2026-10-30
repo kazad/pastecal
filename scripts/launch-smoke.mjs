@@ -26,6 +26,8 @@ const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? proces
 const BASE = arg('--base', 'https://pastecal.com').replace(/\/$/, '');
 const VIEW = arg('--view', 'demo');
 const BILLING = arg('--billing', 'off');
+// Our scripts say so in their User-Agent, so their reads are never counted as visits or follows (cloudflare/src/Bots.js).
+const UA = { 'User-Agent': 'pastecal-launch-smoke' };
 let playwright;
 for (const p of [join(root, 'node_modules/playwright'), '/Users/kazad/Dropbox/computer/Projects/pastecal/node_modules/playwright']) {
     try { playwright = require(p); break; } catch (e) { /* next */ }
@@ -45,11 +47,11 @@ console.log(`launch smoke: ${BASE}  (view: ${VIEW}, billing expected: ${BILLING}
 // 1. The deployed files are this checkout's.
 for (const f of ['index.html', 'pricing.html', 'app.js']) {
     const local = readFileSync(join(root, 'public', f));
-    const r = await fetch(`${BASE}/${f === 'index.html' ? '' : f}`, { headers: { 'Cache-Control': 'no-cache' } });
+    const r = await fetch(`${BASE}/${f === 'index.html' ? '' : f}`, { headers: { ...UA, 'Cache-Control': 'no-cache' } });
     const live = Buffer.from(await r.arrayBuffer());
     ok(r.ok && sha(live) === sha(local), `deployed ${f} matches this checkout`, r.ok ? `(live ${sha(live)}, local ${sha(local)})` : `(HTTP ${r.status})`);
 }
-const cfg = await (await fetch(`${BASE}/api/pro/config`)).json().catch(() => null);
+const cfg = await (await fetch(`${BASE}/api/pro/config`, { headers: UA })).json().catch(() => null);
 ok(cfg && typeof cfg.billing === 'boolean' && (BILLING === 'any' || cfg.billing === (BILLING === 'on')), `/api/pro/config billing is ${BILLING}`, JSON.stringify(cfg));
 
 const browser = await playwright.chromium.launch();
@@ -96,11 +98,11 @@ for (const [label, opts] of [['desktop', {}], ['phone', { viewport: { width: 390
     ok(status === 200 && rendered, `/view/${VIEW} renders its events (phone)`);
     ok(await page.getByRole('button', { name: /Add event/ }).locator('visible=true').count() === 0, `/view/${VIEW} shows no Add event`);
     const html = await page.content();
-    const lookup = await (await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(VIEW)}`)).json().catch(() => ({}));
+    const lookup = await (await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(VIEW)}`, { headers: UA })).json().catch(() => ({}));
     ok(!lookup.targetId || !html.includes(lookup.targetId), `/view/${VIEW} page holds no edit id`);
     ok(errors.length === 0, `/view/${VIEW} has no page errors`, errors.slice(0, 2).join(' | '));
     await ctx.close();
-    const ics = await fetch(`${BASE}/view/${encodeURIComponent(VIEW)}.ics`);
+    const ics = await fetch(`${BASE}/view/${encodeURIComponent(VIEW)}.ics`, { headers: UA });
     const t = await ics.text();
     ok(ics.ok && /BEGIN:VCALENDAR/.test(t) && /text\/calendar/.test(ics.headers.get('content-type') || ''), `/view/${VIEW}.ics is a calendar feed`);
 }
