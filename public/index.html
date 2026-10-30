@@ -822,8 +822,9 @@
                         <button v-for="chip in toolbarTypeChips" :key="chip.idx" type="button" role="switch"
                             @click="soloColorFilter(chip.idx)"
                             :aria-checked="colorFilters[chip.idx] ? 'true' : 'false'"
+                            :aria-label="chip.label"
                             :title="chip.label + ': tap to show only ' + chip.label"
-                            class="pc-chip pc-chip--dot pc-filter-chip pc-tb-chip"
+                            class="pc-filter-dot pc-chip pc-chip--dot pc-filter-chip pc-tb-chip"
                             :class="colorFilters[chip.idx] ? 'is-on' : 'is-off'"
                             :style="{ '--dot': chip.color }">{{ chip.label }}</button>
                     </div>
