@@ -19,6 +19,10 @@
 #   ./scripts/stats.sh trials          # Pro trial funnel: started by surface, features used, converted
 #                                      # by interval, lapsed by mode, reminder clicks, nudge + contact
 #                                      # (first-party Analytics Engine via scripts/ux.sh; no GA4 setup)
+#   ./scripts/stats.sh firsttwo        # each new calendar's first 14 days, and the weekly funnel: created ->
+#                                      # 1+ event -> 3+ events -> 2nd person -> follower -> active in wk 2
+#                                      # (default -d 28; R2 archive + Recent changes + Analytics Engine,
+#                                      # read-only, scripts/firsttwo.mjs; -j for per-calendar JSON)
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
@@ -72,7 +76,7 @@ while [ $# -gt 0 ]; do
         -j) JSON_ONLY=1; shift ;;
         --today) INCLUDE_TODAY=1; shift ;;
         --live|--realtime) REALTIME=1; shift ;;
-        -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         # `setup --create` is documented, so --create must survive option
         # parsing and reach the subcommand rather than being rejected here.
@@ -101,6 +105,12 @@ CMD="${1:-summary}"
 # gcloud checks. trials is the Pro trial funnel; it counts EU visitors too (GA4 is off for them).
 if [ "$CMD" = "trials" ]; then exec "$(dirname "$0")/ux.sh" trials "$DAYS"; fi
 if [ "$CMD" = "usage" ]; then exec "$(dirname "$0")/ux.sh" usage "$DAYS"; fi
+# Also first-party: the daily archive (R2), each new calendar's Recent changes and its cal_hit counts.
+if [ "$CMD" = "firsttwo" ]; then
+    [ "$DAYS_SET" = "1" ] || DAYS=28
+    J=(); [ "$JSON_ONLY" = "1" ] && J=(--json)
+    exec node "$(dirname "$0")/firsttwo.mjs" --base https://pastecal.com --days "$DAYS" ${J+"${J[@]}"}
+fi
 
 for tool in curl jq gcloud; do
     command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool is required." >&2; exit 1; }
