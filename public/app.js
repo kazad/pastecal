@@ -2979,6 +2979,31 @@ const CalendarVueApp = {
                         if (inst) inst.setRecurrenceRule(ScheduleAdapter.editorRule(args.data), args.data.StartTime);
                     }
 
+                    // "Every other week" in Repeat: Syncfusion's list has no such entry, so picking it sets up Weekly,
+                    // repeat every 2, on the event's weekday; the editor then shows those settings to adjust.
+                    const repeatEl = args.element.querySelector('.e-repeat-element');
+                    const repeatList = repeatEl && repeatEl.ej2_instances && repeatEl.ej2_instances[0];
+                    const recEl = args.element.querySelector('.e-recurrenceeditor');
+                    const recEditor = recEl && recEl.ej2_instances && recEl.ej2_instances[0];
+                    if (repeatList && recEditor && !repeatList.pcEveryOtherWeek) {
+                        repeatList.pcEveryOtherWeek = true;
+                        const items = repeatList.dataSource.slice();
+                        items.splice(items.findIndex((o) => o.value === 'weekly') + 1, 0, { text: 'Every other week', value: 'everyotherweek' });
+                        repeatList.dataSource = items;
+                        repeatList.dataBind();
+                        repeatList.addEventListener('change', (e) => {
+                            if (e.value !== 'everyotherweek') return;
+                            const picker = args.element.querySelector('[name="StartTime"]');
+                            const start = (picker && picker.ej2_instances && picker.ej2_instances[0].value) || new Date();
+                            const day = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][start.getDay()];
+                            setTimeout(() => {
+                                repeatList.value = 'weekly';
+                                repeatList.dataBind();
+                                recEditor.setRecurrenceRule(`FREQ=WEEKLY;INTERVAL=2;BYDAY=${day}`, start);
+                            });
+                        });
+                    }
+
                     // Configure datetime pickers with strictMode and the user's chosen date format.
                     // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
                     // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
