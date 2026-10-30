@@ -120,6 +120,15 @@ html, div#Schedule, .e-control, .e-css, .e-toolbar, .e-tbar-btn, .e-tbar-btn-tex
 .e-schedule .e-month-view .e-appointment .e-subject { font-size: 12px !important }
 .e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 !important }
 .e-schedule .e-month-view .e-appointment .e-recurrence-icon { display: none !important }
+/* Today: the whole cell takes a light tint of the accent, so it stands out at a glance. */
+.e-schedule .e-month-view td.e-work-cells.e-current-date { background: color-mix(in srgb, var(--pc-primary) 8%, var(--pc-bg)) !important }
+/* A long title wraps to three lines where its day has room (ScheduleAdapter.fitMonthTitles sets .pc-wrap). */
+.e-schedule .e-month-view .e-appointment.pc-wrap { height: auto !important }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-appointment-details { height: auto !important; white-space: normal !important;
+  display: -webkit-box !important; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; line-height: 1.25 !important; padding-block: 2px }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-time,
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-subject { display: inline !important; white-space: normal !important; overflow-wrap: normal; word-break: normal; line-height: inherit !important }
+.e-schedule .e-month-view .e-appointment.pc-wrap .e-time { margin-right: 4px; white-space: nowrap !important }
 .e-schedule .e-month-view .e-more-indicator { color: var(--pc-text-muted) !important; font-weight: 600; font-size: 11.5px !important }
 
 /* ---- Week and Day: working hours plain, the rest a faint tint, quiet hour lines -------------- */
@@ -160,6 +169,10 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .e-schedule .e-month-view .e-appointment .e-subject { text-overflow: clip !important;   /* a few more letters, not an ellipsis taking three */
     -webkit-mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent); mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent) }
   .e-schedule .e-month-view .e-more-indicator { padding-inline: 2px !important; text-overflow: clip !important; font-size: var(--pc-fs-2xs) !important }
+  /* Wrapped titles (.pc-wrap): the week view's small type, so more of each word fits a ~50px column. */
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-time { display: none !important }
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-appointment-details { font-size: 10.5px !important; letter-spacing: -.02em; line-height: 1.2 !important }
+  .e-schedule .e-month-view .e-appointment.pc-wrap .e-subject { font-size: inherit !important }
   /* Week: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion sets an inline
      max-height of one line); the time, already shown by the grid, gives way. */
   .e-schedule.e-schedule .e-vertical-view .e-appointment .e-subject { white-space: normal !important; max-height: none !important; overflow-wrap: normal !important; word-break: normal !important;

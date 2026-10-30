@@ -3310,6 +3310,16 @@ const CalendarVueApp = {
                     if (staleRetries++ < 3) relayout();
                 });
             });
+            // Long titles wrap where their day has room (ScheduleAdapter.fitMonthTitles): once per frame after
+            // events are drawn, which also catches refreshLayout (a theme switch, a resize) that fires no dataBound.
+            let fitPending = false;
+            const fitTitles = () => {
+                if (fitPending) return;
+                fitPending = true;
+                requestAnimationFrame(() => { fitPending = false; ScheduleAdapter.fitMonthTitles(document.getElementById('Schedule')); });
+            };
+            scheduleObj.addEventListener('dataBound', fitTitles);
+            scheduleObj.addEventListener('eventRendered', fitTitles);
             // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
             // with empty page below, and the side panel (same grid row) follows. Rows grow, never
             // shrink below 100px; a change re-lays out once so chips sit in the taller cells.

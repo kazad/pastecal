@@ -165,6 +165,60 @@
             });
         },
 
+        /**
+         * Month view: a long title wraps (up to three lines) where its day has room, instead of
+         * being cut off. Syncfusion stacks month chips in one-line slots, placed absolutely in
+         * their start day's cell; this restacks each week row with the wrapped heights. A day
+         * showing "+N more", or one whose wrapped chips would not fit, keeps one line per chip,
+         * as does a chip spanning several days. Run after every render (it reads Syncfusion's
+         * own slots, so running it twice changes nothing).
+         */
+        fitMonthTitles(rootEl) {
+            const rows = rootEl ? rootEl.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
+            rows.forEach((tr) => {
+                const cells = [...tr.children];
+                const chips = [], busy = [], room = [];
+                cells.forEach((td, col) => {
+                    const wrap = td.querySelector(':scope > .e-appointment-wrapper');
+                    busy[col] = !!(wrap && wrap.querySelector('.e-more-indicator'));
+                    room[col] = td.getBoundingClientRect().bottom - (wrap || td).getBoundingClientRect().top - 2;
+                    if (!wrap) return;
+                    wrap.querySelectorAll(':scope > .e-appointment').forEach((el) => {
+                        el.classList.remove('pc-wrap');
+                        if (el.dataset.pcTop === undefined) el.dataset.pcTop = parseFloat(el.style.top) || 0;
+                        const span = Math.max(1, Math.round(el.offsetWidth / td.offsetWidth));
+                        chips.push({ el, col, span, slot: +el.dataset.pcTop, line: el.offsetHeight });
+                    });
+                });
+                if (!chips.length) return;
+                const cols = (c) => Array.from({ length: c.span }, (_, i) => c.col + i);
+                for (const c of chips) {
+                    c.h = c.line;
+                    if (c.span > 1 || busy[c.col]) continue;
+                    c.el.classList.add('pc-wrap');
+                    c.h = c.el.offsetHeight;
+                    if (c.h <= c.line) { c.el.classList.remove('pc-wrap'); c.h = c.line; }
+                }
+                chips.sort((a, b) => a.slot - b.slot || a.col - b.col);
+                const place = () => {
+                    const bottom = cells.map(() => 0);
+                    for (const c of chips) {
+                        c.top = Math.max(...cols(c).map((i) => bottom[i] || 0));
+                        for (const i of cols(c)) bottom[i] = c.top + c.h;
+                    }
+                    return bottom.map((b, i) => b > room[i]);
+                };
+                let over = place();
+                if (over.some(Boolean)) {
+                    // A day that can't fit its wrapped titles goes back to one line each.
+                    for (const c of chips) if (c.h > c.line && over[c.col]) { c.el.classList.remove('pc-wrap'); c.h = c.line; }
+                    over = place();
+                }
+                for (const c of chips) c.el.style.top = (over.some(Boolean) ? c.slot : c.top) + 'px';
+                if (over.some(Boolean)) chips.forEach((c) => c.el.classList.remove('pc-wrap'));
+            });
+        },
+
         /** WCAG 2 contrast ratio between two #rgb/#rrggbb colors (1..21); NaN if either is unreadable. */
         contrastRatio(a, b) {
             const la = luminance(a), lb = luminance(b);
