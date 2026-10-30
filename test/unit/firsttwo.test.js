@@ -60,6 +60,13 @@ test('firebaseEvidence: by name key, earliest dated save or author, 0 when undat
     assert.equal(firebaseEvidence({}).size, 0);
 });
 
+test('editedBefore: a row-dated birth is wrong if someone edited more than a day before it', async () => {
+    const { editedBefore } = await load();
+    assert.equal(editedBefore([{ firstSeen: BIRTH - 3 * D }], BIRTH), true);
+    assert.equal(editedBefore([{ firstSeen: BIRTH - H }, { firstSeen: BIRTH + D }], BIRTH), false);
+    assert.equal(editedBefore([], BIRTH), false);
+});
+
 test('bulkBirths: 8+ calendars within an hour are not people', async () => {
     const { bulkBirths } = await load();
     const spread = Array.from({ length: 10 }, (_, i) => BIRTH + i * 3 * H);            // one every 3 hours
@@ -129,9 +136,10 @@ test('funnel and render: counts per birth week, floors marked, no names', async 
     const [w] = funnel(rows);
     assert.deepEqual({ week: w.week, created: w.created, event1: w.event1, event3: w.event3, secondPerson: w.secondPerson, follower: w.follower, week2Of: w.week2Of, week2: w.week2 },
         { week: '2026-10-26', created: 4, event1: 3, event3: 1, secondPerson: 1, follower: 1, week2Of: 4, week2: 0 });
-    const text = render(rows, { today: '2026-11-20', days: 28 });
-    assert.match(text, /2026-10-26\s+4\s+3 \(75%\)\s+1 \(25%\)\s+1 \(25%\)\s+1 \(25%\)\s+0 \(0%\)/);
+    const text = render(rows, { today: '2026-11-20', start: '2026-10-26' });
+    assert.match(text, /2026-10-26\s+4\s+3 \(75%\)\s+1 \(25%\)\s+1 \(25%\)\s+1 \(25%\)\s+1 \(25%\)\s+0 \(0%\)/);
+    assert.match(render(rows, { today: '2026-11-20', start: '2026-10-26', bulk: 3, reStamped: 2 }), /3 calendar\(s\) left out: made in bulk[^]*2 calendar\(s\) left out: their directory row/);
     assert.match(text, /abc123def456/);
     assert.equal(funnel([]).length, 0);
-    assert.match(render([], { today: '2026-11-20', days: 28 }), /no new calendars/);
+    assert.match(render([], { today: '2026-11-20', start: '2026-10-26' }), /no new calendars/);
 });

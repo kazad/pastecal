@@ -93,6 +93,12 @@ export function firebaseEvidence(db) {
 }
 
 /**
+ * A row-dated birth is wrong when someone edited the calendar more than a day before it: the directory re-stamps
+ * created_at whenever a name is registered again (INSERT OR REPLACE), as the Oct 22 and Oct 28 2026 repairs did.
+ */
+export const editedBefore = (authors, birth) => (authors || []).some((a) => Number.isFinite(a.firstSeen) && a.firstSeen < birth - DAY);
+
+/**
  * Births that came in bulk: `size` or more within `spanMs` of each other (site-wide, about ten calendars are made a
  * day). Seen Oct 14 05:00-06:00 and Oct 22 16:20 2026: one-event calendars made minutes apart, repairs and test runs,
  * not people. -> Set of indexes into births.
@@ -185,30 +191,31 @@ const pad = (rows) => {
 };
 
 /** The printed report (pure, for the test). */
-export function render(rows, { today, days, bulk = 0 }) {
+export function render(rows, { today, start, bulk = 0, reStamped = 0 }) {
     const f = funnel(rows);
     const out = [];
-    out.push(`New calendars' first two weeks -- born in the last ${days} days (to ${today}, UTC days; this week partial)`);
+    out.push(`New calendars' first two weeks -- born from ${start} (whole weeks, to ${today}, UTC days; this week partial)`);
     out.push('');
     if (!f.length) { out.push('  (no new calendars found)'); return out.join('\n'); }
-    const head = ['born week', 'created', '1+ event', '3+ events', '2nd person', 'follower', 'active wk2'];
+    const head = ['born week', 'created', '1+ event', '3+ events', '2nd editor', '2nd person', 'follower', 'active wk2'];
     out.push(pad([head, ...f.map((w) => {
         const floor = w.hitsWhole ? '' : '+';
-        return [w.week, String(w.created), pct(w.event1, w.created), pct(w.event3, w.created),
+        return [w.week, String(w.created), pct(w.event1, w.created), pct(w.event3, w.created), pct(w.secondEditor, w.created),
             pct(w.secondPerson, w.created) + floor, pct(w.follower, w.created) + floor,
             w.week2Of ? `${pct(w.week2, w.week2Of)}${w.week2Of < w.created ? ` of ${w.week2Of}` : ''}${floor}` : 'too young'];
     })]).replace(/^/gm, '  '));
     out.push('');
     out.push('  created            saved under a name (a draft never saved is not on the server, so it is not counted)');
     out.push('  1+ / 3+ event      events added in its first 14 days, d0-d13 (Recent changes)');
-    out.push('  2nd person         a second browser edited it (writer id or uid), or a day with 2+ visitors; one person on two');
-    out.push('                     devices counts too, as in stats.sh northstar');
+    out.push('  2nd editor         a second browser saved a change in d0-d13 (writer id or uid; one person on two devices counts too)');
+    out.push('  2nd person         a 2nd editor, or a day with 2+ visitors (as stats.sh northstar, devices not people)');
     out.push('  follower           a calendar app fetched its feed in d0-d13');
     out.push("  active wk2         an edit, or a visit, in d7-d13 (visits include the creator's own), of calendars 14+ days old");
     out.push('  +                  a floor: visits and follows are only recorded from 2026-10-26, so part of these windows is unseen');
     const byRow = f.reduce((a, w) => a + w.datedByRow, 0);
     if (byRow) out.push(`  ${byRow} calendar(s) dated by their directory row (their created save scrolled out of the newest 20): event counts are floors`);
     if (bulk) out.push(`  ${bulk} calendar(s) left out: made in bulk (8+ within an hour: repairs and test runs, not people)`);
+    if (reStamped) out.push(`  ${reStamped} calendar(s) left out: their directory row was re-stamped (edited more than a day before it)`);
     out.push('');
     out.push('Per calendar (hash = Analytics Engine blob9; d = days after birth, 0 = the day it was made)');
     out.push('');
@@ -293,7 +300,9 @@ async function main() {
         catch { console.error('no IMPORT_SECRET and no Keychain item pastecal-import-secret'); process.exit(2); }
     }
     const now = Date.now(), today = utcDay(now);
-    const from = midnight(now) - (days - 1) * DAY;
+    // Whole weeks only: from the first Monday in the window (a partial first week reads like a collapse).
+    const back = midnight(now) - (days - 1) * DAY;
+    const from = weekOf(back) === utcDay(back) ? back : Date.parse(weekOf(back)) + 7 * DAY;
 
     process.stderr.write('reading the newest daily archive...\n');
     const { key, lines } = newestArchive();
@@ -329,15 +338,17 @@ FROM pastecal_events WHERE blob1 = 'cal_hit' AND timestamp > NOW() - INTERVAL '$
 
     process.stderr.write(`reading Recent changes and authors for ${ids.length} candidate calendars...\n`);
     const auth = { Authorization: `Bearer ${secret}` };
-    let done = 0, unread = 0;
+    let done = 0, unread = 0, reStamped = 0;
     const found = (await mapLimit(ids, 6, async (id) => {
         if (++done % 50 === 0) process.stderr.write(`  ${done} of ${ids.length}\r`);
         try {
             const history = await getJson(`${base}/cal/${encodeURIComponent(id)}/history`);
             const b = birthOf(Array.isArray(history) ? history : [], rowAt.has(id) ? rowAt.get(id) : null, fb.evidence.get(CalendarName.key(id)));
             if (!b || b.birth < from) return null;
-            const authors = await getJson(`${base}/cal/${encodeURIComponent(id)}/authors`, auth);
-            return { id, ...b, history, authors: Array.isArray(authors) ? authors : [] };
+            let authors = await getJson(`${base}/cal/${encodeURIComponent(id)}/authors`, auth);
+            authors = Array.isArray(authors) ? authors : [];
+            if (b.how === 'row' && editedBefore(authors, b.birth)) { reStamped++; return null; }
+            return { id, ...b, history, authors };
         } catch { unread++; return null; }   // a room that never answers is reported, not fatal
     })).filter(Boolean);
     if (unread) process.stderr.write(`\n${unread} calendar(s) did not answer (4 tries, 20 s each) and are left out`);
@@ -346,8 +357,8 @@ FROM pastecal_events WHERE blob1 = 'cal_hit' AND timestamp > NOW() - INTERVAL '$
     const bulk = bulkBirths(found.map((c) => c.birth));
     const rows = found.filter((c, i) => !bulk.has(i))
         .map((c) => ({ ...firstTwoWeeks({ ...c, hits: hitsBy.get(calHash(c.id)) || [], today }), hash: calHash(c.id) }));
-    if (asJson) { console.log(JSON.stringify({ today, days, archive: key, bulkLeftOut: bulk.size, funnel: funnel(rows), calendars: rows }, null, 2)); return; }
-    console.log(render(rows, { today, days, bulk: bulk.size }));
+    if (asJson) { console.log(JSON.stringify({ today, days, archive: key, bulkLeftOut: bulk.size, reStampedLeftOut: reStamped, funnel: funnel(rows), calendars: rows }, null, 2)); return; }
+    console.log(render(rows, { today, start: utcDay(from), bulk: bulk.size, reStamped }));
     console.log('');
     console.log(`  Sources: ${key} (candidates), ${fb.key.replace(/_pastecal.*$/, '')} (Firebase: older calendars),`);
     console.log(`  /cal/<id>/history + /authors (${found.length} new of ${ids.length} edited in the window${unread ? `; ${unread} did not answer` : ''}),`);
