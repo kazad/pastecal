@@ -2987,9 +2987,8 @@ const CalendarVueApp = {
                     const recEditor = recEl && recEl.ej2_instances && recEl.ej2_instances[0];
                     if (repeatList && recEditor && !repeatList.pcEveryOtherWeek) {
                         repeatList.pcEveryOtherWeek = true;
-                        const items = repeatList.dataSource.slice();
-                        items.splice(items.findIndex((o) => o.value === 'weekly') + 1, 0, { text: 'Every other week', value: 'everyotherweek' });
-                        repeatList.dataSource = items;
+                        // Last in the list: Syncfusion selects Never..Yearly by position, so nothing may move.
+                        repeatList.dataSource = [...repeatList.dataSource, { text: 'Every other week', value: 'everyotherweek' }];
                         repeatList.dataBind();
                         repeatList.addEventListener('change', (e) => {
                             if (e.value !== 'everyotherweek') return;

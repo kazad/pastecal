@@ -26,8 +26,8 @@ test('classic: Every other week saves a weekly rule every 2 weeks, shown on alte
   await expect(async () => {
     await repeat.locator('..').click();
     await page.waitForTimeout(300);
-    // The menu has the entry once, right after Weekly.
-    await expect(page.locator('.e-popup-open li')).toHaveText(['Never', 'Daily', 'Weekly', 'Every other week', 'Monthly', 'Yearly']);
+    // The menu has the entry once, last (Syncfusion picks Never..Yearly by position).
+    await expect(page.locator('.e-popup-open li')).toHaveText(['Never', 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Every other week']);
     await page.locator('.e-popup-open li', { hasText: /^Every other week$/ }).click({ timeout: 2000 });
     await page.waitForTimeout(300);
     expect(await repeat.inputValue()).toBe('Every other week');
