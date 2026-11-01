@@ -8,6 +8,8 @@
  *   POST /lookupCalendar          Firebase callable compatible lookup endpoint
  *   POST /api/create-view         Create a view-only slug / random publicViewId
  *   POST /createPublicLink        Firebase callable compatible view link creation
+ *   GET  /og/<name>.png, /og/view/<id>.png   Link-preview card (preview/route.js)
+ *   GET  /countdown/view/<id>.png   Countdown to the calendar's next event, as a picture (?tz=, ?theme=dark, ?shape=banner)
  *   GET  /cal/<id>/ws             WebSocket live sync
  *   GET  /cal/<id>                Calendar JSON
  *   GET  /cal/<id>/history        Recent changes history entries for undo
@@ -31,7 +33,7 @@ import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 import { handleContact } from './Contact.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
-import { calendarTarget, previewPage, previewImage } from './preview/route.js';
+import { calendarTarget, previewPage, previewImage, countdownImage } from './preview/route.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -514,6 +516,9 @@ async function route(request, env, ctx) {
 
         // Link-preview cards: /og/<name>.png, /og/view/<id>.png (preview/route.js). Always an image.
         if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/og/')) return previewImage(request, env, ctx, url);
+
+        // Countdown images: /countdown/view/<id>.png (preview/route.js). View links only; errors are errors.
+        if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/countdown/')) return countdownImage(request, env, ctx, url);
 
         // 7. /link-ended/<name>: the app lands here for a short name whose account was deleted (Names.js).
         const namePage = await serveNamePage(request, env, url);

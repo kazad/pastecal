@@ -196,6 +196,61 @@ export function calendarCard(pen, model) {
     return s + '</svg>';
 }
 
+// ---- 3. the countdown image (/countdown/view/<id>.png) ---------------------------------------------
+/**
+ * model: countdownModel() values: {state, big, unit, title, detail, color, calendar, branded}.
+ * opts.theme: 'light' | 'dark'.  opts.shape: 'card' (1200x630, for link previews and pages) or 'banner'
+ * (1200x400, shown at 600 wide for newsletters). Everything is laid out from the same left edge.
+ */
+export function countdownCard(pen, model, { theme = 'light', shape = 'card' } = {}) {
+    const t = THEMES[theme] || THEMES.light, banner = shape === 'banner';
+    const W = 1200, H = banner ? 400 : 630, X = 72, R = W - 72;
+    const label = clean(model.calendar) || 'A shared calendar';
+    let s = svgOpen(W, H, W, model.state === 'none' ? `${label}: no upcoming events` : `${label}: ${model.big}${model.unit ? ' ' + model.unit : ''} until ${clean(model.title)}`);
+    s += rect(0, 0, W, H, 0, t.bg);
+    const color = safeColor(model.color) || t.brand;
+    s += rect(0, 0, W, banner ? 8 : 10, 0, color);
+
+    // The calendar's name, small, above everything.
+    const nameY = banner ? 66 : 88;
+    s += pen.text(X, nameY, pen.fit(label, banner ? 26 : 30, 700, R - X), { size: banner ? 26 : 30, weight: 700, fill: t.muted });
+
+    // Brand footer / mark. The card has a footer rule, the banner a small lockup at the bottom right.
+    const footerTop = model.branded && !banner ? 540 : H;
+    if (model.branded && !banner) {
+        s += `<line x1="0" y1="${footerTop}" x2="${W}" y2="${footerTop}" stroke="${t.line}" stroke-width="2"/>`;
+        s += lockup(pen, X, footerTop + 45, 40, t.brand, { tagline: '· Shared calendars. No sign-ups.', taglineFill: t.muted });
+    } else if (model.branded) {
+        const size = 26, w = size * 1.22 + pen.width('pastecal', size * 0.78, 800);
+        s += lockup(pen, R - w, H - 34, size, t.brand);
+    }
+
+    if (model.state === 'none') {
+        const y = banner ? 220 : 300;
+        s += calIcon(X, y - 52, 64, t.muted);
+        s += pen.text(X + 92, y, 'No upcoming events', { size: banner ? 44 : 56, weight: 800, fill: t.text2 });
+        return s + '</svg>';
+    }
+
+    // The headline: a big number with its unit beside it, or one big word ("Tomorrow", "Now"). Shrunk to fit.
+    const bigBase = banner ? 150 : 210, unitSize = banner ? 46 : 64;
+    const baseline = banner ? 218 : 312;
+    const room = R - X;
+    let size = bigBase;
+    const unitW = model.unit ? pen.width(model.unit, unitSize, 700) + 24 : 0;
+    while (size > 60 && pen.width(model.big, size, 800) + unitW > room) size -= 10;
+    const bigW = pen.width(model.big, size, 800);
+    s += pen.text(X, baseline, model.big, { size, weight: 800, fill: t.text, spacing: -size * 0.02 });
+    if (model.unit) s += pen.text(X + bigW + 24, baseline, model.unit, { size: unitSize, weight: 700, fill: t.muted });
+
+    // Then the event: a dot in its color, its name, and when.
+    const titleSize = banner ? 38 : 50, titleY = baseline + (banner ? 62 : 86);
+    s += `<circle cx="${X + 13}" cy="${titleY - titleSize * 0.32}" r="${banner ? 10 : 13}" fill="${color}"/>`;
+    s += pen.text(X + 40, titleY, pen.fit(model.title, titleSize, 800, room - 40), { size: titleSize, weight: 800, fill: t.text });
+    s += pen.text(X + 40, titleY + (banner ? 40 : 52), pen.fit(model.detail, banner ? 26 : 32, 500, room - 40), { size: banner ? 26 : 32, weight: 500, fill: t.muted });
+    return s + '</svg>';
+}
+
 // A small calendar glyph (outline), for empty states.
 function calIcon(x, y, size, color) {
     const k = size / 24;

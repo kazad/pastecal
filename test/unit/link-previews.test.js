@@ -305,3 +305,104 @@ test('link-preview fetchers get the calendar\'s tags, and the rendered tags are 
         assert.deepEqual(calls, { directory: 1, room: 1 }, 'the second fetch is served from the cache');
     } finally { delete globalThis.caches; }
 });
+
+// ---- countdown images (/countdown/view/<id>.png) ------------------------------------------------
+
+test('countdown images answer view links only: an edit name never works in a public image address', async () => {
+    const { countdownTarget } = await src('meta.js');
+    assert.deepEqual(countdownTarget('/countdown/view/ab12cd34.png'), { kind: 'view', id: 'ab12cd34' });
+    assert.deepEqual(countdownTarget('/countdown/view/my%20club.png'), { kind: 'view', id: 'my club' });
+    for (const p of ['/countdown/kalid.png', '/countdown/ab12cd34.png', '/countdown/view/ab12cd34', '/countdown/view/ab12cd34.svg',
+        '/countdown/view/a/b.png', '/countdown/view/.png', '/countdown/view/bad%zz.png', '/countdown/view/x.y.png', '/og/view/ab12cd34.png', '/countdown/', '']) {
+        assert.equal(countdownTarget(p), null, p);
+    }
+});
+
+test('countdown model: calendar dates in the calendar\'s zone ("Tomorrow", "N days"), then hours and minutes on the day itself', async () => {
+    const { countdownModel } = await src('model.js');
+    const cal = (events, extra = {}) => ({ v: 1, title: 'Choir', tz: 'America/Los_Angeles', events, zoneSamples: [], ...extra });
+    const timed = (id, s, e) => ({ id, title: id, type: 1, start: s, end: e });
+    const small = (m) => countdownModel(cal([timed('Soon', new Date(NOW + m * 60000).toISOString(), new Date(NOW + (m + 30) * 60000).toISOString())]), NOW);
+
+    const sectionals = { id: 's', title: 'Sectionals', type: 1, isAllDay: true, start: pdtMidnight('2026-10-25'), end: pdtMidnight('2026-10-26') };
+    const days = countdownModel(cal([sectionals]), NOW - 2 * DAY);              // Thu Oct 22; Sectionals is the all-day Sun Oct 25
+    assert.deepEqual([days.state, days.big, days.unit, days.title, days.detail], ['days', '3', 'days', 'Sectionals', 'Sun Oct 25']);
+    assert.equal(countdownModel(choir(), NOW - 2 * DAY).title, 'Earlier today', 'the soonest event, whatever its color or kind');
+    const tomorrow = countdownModel(choir(), NOW);                              // Sat Oct 24 1pm: Sectionals is tomorrow
+    assert.deepEqual([tomorrow.state, tomorrow.big, tomorrow.unit], ['days', 'Tomorrow', '']);
+    // 11:30pm tonight to a 12:30am start tomorrow is "Tomorrow", not "1 hour": by date, not by 24-hour blocks
+    const lateNight = countdownModel(cal([timed('Midnight run', at('2026-10-25', 0.5), at('2026-10-25', 1.5))]), Date.parse('2026-10-25T06:30:00Z'));
+    assert.equal(lateNight.big, 'Tomorrow');
+    assert.equal(countdownModel(cal([timed('Concert', at('2026-10-29', 19), at('2026-10-29', 21))]), NOW).detail, 'Thu Oct 29 · 7pm PDT');
+
+    const hours = countdownModel(cal([timed('Practice', at('2026-10-24', 18), at('2026-10-24', 19))]), NOW);   // 6pm, it is 1pm
+    assert.deepEqual([hours.state, hours.big, hours.unit], ['soon', '5', 'hours']);
+    assert.deepEqual([small(61).big, small(61).unit], ['1', 'hour']);
+    assert.deepEqual([small(45).big, small(45).unit, small(45).maxAge], ['45', 'minutes', 60]);
+    assert.deepEqual([small(1).big, small(1).unit], ['1', 'minute']);
+    assert.deepEqual([small(0.2).big, small(0.2).unit], ['1', 'minute'], 'never "0 minutes"');
+});
+
+test('countdown model: now, nothing upcoming, recurring series, deleted occurrences, and the zone choice', async () => {
+    const { countdownModel } = await src('model.js');
+    const cal = (events, extra = {}) => ({ v: 1, title: 'Choir', tz: 'America/Los_Angeles', events, zoneSamples: [], ...extra });
+    const timed = (id, s, e, x = {}) => ({ id, title: id, type: 1, start: s, end: e, ...x });
+
+    const now = countdownModel(cal([timed('Open house', at('2026-10-24', 12), at('2026-10-24', 15))]), NOW);   // 12 to 3pm, it is 1pm
+    assert.deepEqual([now.state, now.big, now.detail], ['now', 'Now', 'Until 3pm']);
+    const multi = countdownModel(cal([timed('Camp', at('2026-10-23', 9), at('2026-10-26', 17))]), NOW);
+    assert.equal(multi.detail, 'Until Mon Oct 26', 'a stay that runs past today names its last day');
+    const allDay = countdownModel(cal([{ id: 'x', title: 'Retreat', type: 1, isAllDay: true, start: pdtMidnight('2026-10-23'), end: pdtMidnight('2026-10-26') }]), NOW);
+    assert.deepEqual([allDay.state, allDay.big], ['now', 'Now']);
+
+    const none = countdownModel(cal([timed('Past', at('2026-10-01', 12), at('2026-10-01', 13))]), NOW);
+    assert.deepEqual([none.state, none.big, none.title], ['none', '', '']);
+    assert.equal(countdownModel({ title: 'Empty', events: [] }, NOW).state, 'none');
+    assert.equal(countdownModel({ title: '  ', events: [] }, NOW).calendar, 'A shared calendar');
+
+    // a weekly series: the next occurrence, and a deleted one is skipped
+    const weekly = timed('Warmups', at('2026-10-06', 18), at('2026-10-06', 19), { recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;' });
+    assert.deepEqual(countdownModel(cal([weekly]), NOW).detail, 'Tue Oct 27 · 6pm PDT');
+    const skipped = countdownModel(cal([{ ...weekly, recurrenceException: '20261028T010000Z' }]), NOW);        // Tue Oct 27 6pm PDT = Oct 28 01:00Z
+    assert.equal(skipped.detail, 'Tue Nov 3 · 6pm PST', 'the series keeps its wall-clock time across the end of daylight saving');
+
+    // ?tz= beats the calendar's own zone; an invalid one is ignored
+    const ev = [timed('Game', at('2026-10-27', 19), at('2026-10-27', 21))];                                    // 7pm PDT = 22:00 in New York
+    assert.equal(countdownModel(cal(ev), NOW, { tz: 'America/New_York' }).detail, 'Tue Oct 27 · 10pm EDT');
+    assert.equal(countdownModel(cal(ev), NOW, { tz: 'Mars/Olympus' }).detail, 'Tue Oct 27 · 7pm PDT');
+    // no zone known and none guessable: dates only, never a guessed clock time, and "Today" rather than hours
+    const unknown = countdownModel({ title: 'X', events: [timed('Soon', new Date(NOW + 3600000).toISOString(), new Date(NOW + 7200000).toISOString())], zoneSamples: [] }, NOW);
+    assert.deepEqual([unknown.big, unknown.detail], ['Today', 'Sat Oct 24']);
+    // Pro's "hide branding" hides it here too
+    assert.equal(countdownModel({ ...choir(), pro: true, hideBranding: true }, NOW).branded, false);
+    assert.equal(countdownModel(choir(), NOW).branded, true);
+});
+
+test('the countdown SVG: both shapes and themes, user text escaped, nothing outside referenced', async () => {
+    const { countdownCard, Pen } = await src('svg.js');
+    const { countdownModel } = await src('model.js');
+    const { FontSet, parseFont } = await src('fonts.js');
+    const font = (w) => { const f = parseFont(fs.readFileSync(path.join(__dirname, `../../cloudflare/src/vendor/fonts/Figtree-${w}.ttf`))); f.family = 'Figtree'; return f; };
+    const pen = new Pen(new FontSet({ primary: { 500: font(500), 700: font(700), 800: font(800) } }), {});
+    const hostile = { v: 1, title: 'Club <script>x</script> & "q"', tz: 'America/Los_Angeles', colors: ['"/><script>'],
+        events: [{ id: 'a', title: '</text><image href="https://evil/x.png"/>\u0000', type: 1, start: at('2026-10-30', 19), end: at('2026-10-30', 20) }] };
+    const m = countdownModel(hostile, NOW);
+    for (const shape of ['card', 'banner']) for (const theme of ['light', 'dark']) {
+        const svg = countdownCard(pen, m, { shape, theme });
+        assert.ok(!/<script|<image|href="/i.test(svg), `${shape}/${theme}: no markup, links or images from user text`);
+        assert.ok(svg.includes('&lt;/text&gt;&lt;image href=&quot;'), 'shown as text');
+        assert.ok(!/[\u0000-\u0008]/.test(svg));
+        assert.match(svg, shape === 'card' ? /width="1200" height="630"/ : /width="1200" height="400"/);
+    }
+    assert.ok(countdownCard(pen, m, { theme: 'dark' }).includes('fill="#1e1e1e"'), 'the dark theme paints the dark ground');
+    assert.ok(countdownCard(pen, m, { theme: 'nonsense' }).includes('fill="#ffffff"'), 'an unknown theme is the light one');
+    assert.match(countdownCard(pen, m, { shape: 'card' }), />6<\/text>/, 'the number is on the picture');
+    // The branding footer follows the model; the empty state still draws a picture
+    assert.ok(countdownCard(pen, { ...m, branded: true }, { shape: 'card' }).includes('Shared calendars. No sign-ups.'));
+    assert.ok(!countdownCard(pen, { ...m, branded: false }, { shape: 'card' }).includes('Shared calendars'));
+    const none = countdownCard(pen, countdownModel({ title: 'Empty', events: [] }, NOW), {});
+    assert.ok(none.includes('No upcoming events'));
+    // A headline too wide for the picture is shrunk to fit, never clipped
+    const wide = countdownCard(pen, { ...m, big: 'Tomorrowtomorrowtomorrow', unit: '' }, {});
+    assert.ok(!/font-size="210"[^>]*>Tomorrowtomorrowtomorrow/.test(wide));
+});

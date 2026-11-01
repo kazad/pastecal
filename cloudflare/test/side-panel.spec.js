@@ -324,6 +324,7 @@ test('Share: each copy field copies, shows Copied, and falls back when the clipb
     ['share-view-copy', `/${id}?date=`],
     ['share-feed-copy', `/view/${viewId}.ics`],
     ['share-embed-copy', '<iframe'],
+    ['share-countdown-copy', `/countdown/view/${viewId}.png`],
   ];
   for (const [testid, expected] of fields) {
     const field = page.getByTestId(testid);
@@ -332,6 +333,9 @@ test('Share: each copy field copies, shows Copied, and falls back when the clipb
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(expected);
     await expect(field).not.toContainText('Copied to clipboard', { timeout: 4000 });   // and goes back
   }
+  // The countdown picture is made to be pasted into public pages: it is the view link's, never the edit link's.
+  await page.getByTestId('share-countdown-copy').locator('.pc-link-act').click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).not.toContain(id);
   // Clipboard refused: the older copy path still copies and still says Copied.
   await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('NotAllowedError')); });
   const field = page.getByTestId('share-readonly-addr');

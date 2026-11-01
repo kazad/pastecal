@@ -49,6 +49,52 @@ export function describe(cal, now) {
     return out;
 }
 
+/**
+ * The countdown image's model (svg.countdownCard): how long until the calendar's next event, in the
+ * words a person would use. `opts.tz` is the image link's ?tz=.
+ *
+ *   state 'none'  nothing upcoming
+ *   state 'now'   an occurrence is under way: big "Now"
+ *   state 'soon'  under a day away, counted in minutes (under an hour) or hours (the same calendar day)
+ *   state 'days'  later: "Tomorrow", else "N days", by calendar date in the zone, never by 24-hour blocks
+ *
+ * `big` is the headline ("12", "Tomorrow", "Now"), `unit` the word after a number ("days"), and
+ * `maxAge` how long the picture stays right, in seconds: counted-down states change within minutes,
+ * a days count only at midnight.
+ */
+export function countdownModel(cal, now, opts = {}) {
+    const { tz, noTimes } = chooseZone(cal, opts.tz);
+    const { shown } = upcoming(cal, now, tz, 1);
+    const base = { calendar: displayTitle(cal), branded: !(cal.pro && cal.hideBranding), tz };
+    const o = shown[0];
+    if (!o) return { ...base, state: 'none', big: '', unit: '', title: '', detail: '', color: null, maxAge: 1800 };
+
+    const today = dayOf(now, tz);
+    const day = startDay(o, tz);
+    const underway = o.allDay ? o.start <= today : o.start <= now;
+    const showTime = !o.allDay && !noTimes;
+    const detail = [fmtDay(day), showTime ? `${fmtTime(o.start, tz)} ${zoneLabel(tz, o.start)}` : null].filter(Boolean).join(' · ');
+    const out = { ...base, title: clip(o.title, 80) || '(No title)', detail, color: eventColor(o.type, cal.colors), stamp: String(o.start) };
+
+    if (underway) {
+        // Timed: until when (the date too if it runs past today). All-day: its date. No known zone: no clock times.
+        const until = showTime ? (dayOf(o.end, tz) === today ? `Until ${fmtTime(o.end, tz)}` : `Until ${fmtDay(dayOf(o.end, tz))}`) : 'Happening now';
+        return { ...out, state: 'now', big: 'Now', unit: '', detail: o.allDay ? detail : until, maxAge: 300 };
+    }
+    if (!o.allDay && !noTimes && day === today) {
+        const mins = Math.max(1, Math.floor((o.start - now) / 60000));
+        return mins < 60
+            ? { ...out, state: 'soon', big: String(mins), unit: mins === 1 ? 'minute' : 'minutes', maxAge: 60 }
+            : { ...out, state: 'soon', big: String(Math.floor(mins / 60)), unit: Math.floor(mins / 60) === 1 ? 'hour' : 'hours', maxAge: 300 };
+    }
+    const n = Math.round((day - today) / DAY_MS);
+    // n is 0 only for a timed event today in a zone we only guessed (no clock times): say the day, not the hour.
+    if (n <= 0) return { ...out, state: 'days', big: 'Today', unit: '', maxAge: 1800 };
+    return n === 1
+        ? { ...out, state: 'days', big: 'Tomorrow', unit: '', maxAge: 1800 }
+        : { ...out, state: 'days', big: String(n), unit: 'days', maxAge: 1800 };
+}
+
 /** The link card's model (svg.calendarCard). */
 export function cardModel(cal, now) {
     const { tz, noTimes } = chooseZone(cal, null);

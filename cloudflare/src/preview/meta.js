@@ -39,6 +39,15 @@ export function calendarTarget(pathname, search = '') {
     return { kind, id };
 }
 
+/**
+ * Which calendar a countdown image path names: {kind: 'view', id}, or null. View links only: the image
+ * address is meant for public pages, so an edit name (full edit access) must never work in it.
+ */
+export function countdownTarget(pathname) {
+    const m = /^\/countdown\/view\/([^/]+)\.png$/.exec(String(pathname || ''));
+    return m ? calendarTarget('/view/' + m[1], '') : null;
+}
+
 /** The page's own address, as pasted: https://pastecal.com/<name> or /view/<id>. */
 export function pageUrl(origin, target) {
     return `${origin}/${target.kind === 'view' ? 'view/' : ''}${encodeURIComponent(target.id)}`;

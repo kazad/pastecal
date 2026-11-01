@@ -3435,6 +3435,13 @@ const CalendarVueApp = {
             return `<iframe src="${this.getReadOnlyURL()}" title="${title}" width="100%" height="640" style="border:0" loading="lazy"></iframe>`;
         },
 
+        /** A picture of how long until the next event (the Worker's /countdown/view/<id>.png), to paste into a page,
+         *  newsletter or chat. Built from the read-only link only: this address is meant to be public. */
+        countdownImageURL() {
+            const m = /^(https?:\/\/[^/]+)\/view\/([^/?#]+)$/.exec(this.getReadOnlyURL() || '');
+            return m ? `${m[1]}/countdown/view/${m[2]}.png` : null;
+        },
+
         getReadOnlyURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyURL(this.calendar);

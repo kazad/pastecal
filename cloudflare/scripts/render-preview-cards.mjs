@@ -4,8 +4,8 @@
 // Fallback fonts and emoji are fetched the way the Worker fetches them (Google Fonts, Twemoji).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { setup, prepare, toPng } from '../src/preview/render.js';
-import { Pen, siteCard, calendarCard } from '../src/preview/svg.js';
-import { cardModel, describe } from '../src/preview/model.js';
+import { Pen, siteCard, calendarCard, countdownCard } from '../src/preview/svg.js';
+import { cardModel, countdownModel, describe } from '../src/preview/model.js';
 
 const src = new URL('../src/', import.meta.url);
 const read = (p) => readFileSync(new URL(p, src));
@@ -48,5 +48,10 @@ if (out) {
         const model = cardModel(cal, now);
         console.log(name, '|', describe(cal, now));
         await render((pen) => calendarCard(pen, model), [[model.title, 800], [model.title, 700], ...model.events.map((e) => [e.title, 700])], `${out}/card-${name}.png`);
+        // And the countdown picture of each, in the looks it comes in.
+        for (const [look, opts] of [['light', {}], ['dark-banner', { theme: 'dark', shape: 'banner' }]]) {
+            const cd = countdownModel({ tz: 'America/Los_Angeles', ...cal }, now);
+            await render((pen) => countdownCard(pen, cd, opts), [[cd.calendar, 700], [cd.title, 800], [cd.detail, 500]], `${out}/countdown-${name}-${look}.png`);
+        }
     }
 }
