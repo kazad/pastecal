@@ -13,6 +13,7 @@ Add events, press Save & share, and send the link. Everyone sees every change in
 - **Share two ways:** the edit link for helpers, and a view-only link for everyone else.
 - **Add it to Google, Apple or Outlook.** Each calendar has a feed (`.ics`) that stays up to date.
 - **Embed it** on a website with one `<iframe>`.
+- **Count down to the next event** with a picture that updates itself: `pastecal.com/countdown/view/<id>.png` (add `?theme=dark`, `?shape=banner` for email, or `?tz=America/New_York`). It works from the view-only link only.
 - **Undo anything.** Recent changes are listed, and any of them can be put back.
 - **Link to a date and view:** `pastecal.com/soccer-fall?date=2026-10-25&view=week` (views: day, week, month, year, agenda).
 
@@ -25,6 +26,15 @@ pastecal is free: unlimited calendars and people, no login. Optional upgrades (c
 ## How it's built
 
 A small Vue front end on Cloudflare Workers, with each calendar stored in its own Durable Object. Tests: `node --test $(node test/unit-files.js)` for unit tests and `scripts/test-all.sh` for everything else.
+
+To run it locally (Node 22, see `.nvmrc`):
+
+```bash
+npm ci && (cd functions && npm ci) && (cd cloudflare && npm ci)   # three package.json files; the unit tests load functions/ too
+npm run test:unit:fast                                            # pure-logic tests, a few seconds
+cd cloudflare && npx wrangler dev                                 # the whole app on http://localhost:8787
+npx playwright test -c cloudflare/playwright.config.js            # browser tests against that server
+```
 
 ## Why it exists
 
