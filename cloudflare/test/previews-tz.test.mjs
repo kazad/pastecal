@@ -15,7 +15,10 @@ let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
 let ip = 0;
 const BOT = 'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)';
 const PERSON = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
-const la5pm = (d) => new Date(Date.UTC(2026, 10, d, 1)).toISOString();          // Nov <d-1> 5pm PST = <d> 01:00Z
+// Next year's November, so the practice is always upcoming (a fixed Nov 2026 date read "No upcoming events" once it passed).
+const Y = new Date().getUTCFullYear() + 1;
+const la5pm = (d) => new Date(Date.UTC(Y, 10, d, 1)).toISOString();          // Nov <d-1> evening in LA = <d> 01:00Z
+const nov3 = new Date(Date.UTC(Y, 10, 3, 12)).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }) + ' Nov 3';
 const create = async (id, options) => fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', headers: { 'CF-Connecting-IP': `10.70.0.${++ip}` },
     body: JSON.stringify({ title: 'U10 Soccer', options, events: [{ id: 'p', title: 'Practice', start: la5pm(4), end: la5pm(4).replace('T01', 'T02'), type: 1 }] }) });
 const tzOf = async (id) => ((await (await fetch(`${BASE}/cal/${enc(id)}`)).json()).calendar.options || {}).tz;
@@ -65,7 +68,7 @@ assert.equal((await create(cal, { tz: 'America/Los_Angeles' })).status, 201);
 const head = async (ua, p = `/${cal}`) => (await (await fetch(BASE + p, { headers: { 'User-Agent': ua } })).text()).split('</head>')[0];
 const botHead = await head(BOT);
 assert.match(botHead, /<title>U10 Soccer · pastecal<\/title>/);
-assert.match(botHead, /<meta name="description" content="Tue Nov 3 · Practice">/, 'the LA date, not the UTC one');
+assert.ok(botHead.includes(`<meta name="description" content="${nov3} · Practice">`), `the LA date (${nov3}), not the UTC one`);
 const img = /<meta property="og:image" content="[^"]*(\/og\/[^"?]+\.png\?v=[^"]+)"/.exec(botHead)[1];
 assert.equal((await fetch(BASE + img.replace(/&amp;/g, '&'))).headers.get('content-type'), 'image/png');
 const personHead = await head(PERSON);
