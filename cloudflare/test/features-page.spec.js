@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * pastecal.com/features ("How pastecal works", public/features.html): a real page (not a calendar named "features"),
+ * pastecal.com/features ("A free shared calendar, no sign-up", public/features.html): a real page (not a calendar named "features"),
  * indexable, in the sitemap and the site header, every picture loads, "Make a calendar" goes home, and nothing
  * scrolls sideways on a phone. Its animations rest on the finished scene, so reduced motion shows everything.
  * Needs `wrangler dev` on BASE_URL.
@@ -10,7 +10,7 @@ const { test, expect } = require('@playwright/test');
 test('the page is served, indexable and in the sitemap', async ({ request }) => {
   const r = await request.get('/features');
   expect(r.status()).toBe(200);
-  expect(await r.text()).toContain('<h1>How pastecal works</h1>');
+  expect(await r.text()).toContain('<h1>A free shared calendar, no sign-up</h1>');
   expect(r.headers()['x-robots-tag'] || '').not.toContain('noindex');
   expect(await (await request.get('/sitemap.xml')).text()).toContain('https://pastecal.com/features<');
 });
@@ -25,7 +25,7 @@ for (const width of [1280, 390]) {
     await ctx.route(/googletagmanager|google-analytics|clarity|hotjar|\/api\/collect/, (r) => r.abort());
     const page = await ctx.newPage();
     await page.goto('/features');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('How pastecal works');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('A free shared calendar, no sign-up');
     await expect(page.locator('.ft-row h2')).toHaveCount(5);
     await expect(page.locator('.site-header a[href="/features"]')).toHaveCount(1);
     const imgs = page.locator('main img');

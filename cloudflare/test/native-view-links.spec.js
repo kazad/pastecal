@@ -102,7 +102,8 @@ test('native view link: no Syncfusion, events on the right days, views, navigati
   await expect(page.locator('[data-testid="view-add-to-cal"]:visible')).toHaveAttribute('href', new RegExp(`/view/${viewId}/add$`));
 
   // The weekly repeat on every Tuesday but the skipped one; the camp across its three days; the game on the 10th.
-  expect(await daysOf(page, 'event-w')).toEqual(p.tuesdays.filter((d) => d !== p.skipped));
+  // Only this month's own days: the grid also shows next month's first days (Dec 1 2026 is a Tuesday on November's grid).
+  expect((await daysOf(page, 'event-w')).filter((d) => d.slice(0, 7) === p.tuesdays[0].slice(0, 7))).toEqual(p.tuesdays.filter((d) => d !== p.skipped));
   expect(await daysOf(page, 'event-c')).toEqual(p.campDays);
   expect(await daysOf(page, 'event-g')).toEqual([ymd(new Date(p.y, p.m, 10))]);
   await expect(page.locator('.nc-month [data-testid="event-w"]').first()).toContainText('5:30 PM');
@@ -214,7 +215,8 @@ test('native view link: embeds, and a phone without sideways scroll', async ({ b
   ({ page } = await openNative(ctx, viewId));
   await expect(page.getByTestId('view-only-badge-mobile')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
-  expect(await daysOf(page, 'event-w')).toEqual(p.tuesdays.filter((d) => d !== p.skipped));
+  // Only this month's own days: the grid also shows next month's first days (Dec 1 2026 is a Tuesday on November's grid).
+  expect((await daysOf(page, 'event-w')).filter((d) => d.slice(0, 7) === p.tuesdays[0].slice(0, 7))).toEqual(p.tuesdays.filter((d) => d !== p.skipped));
   // The views live behind a menu on a phone.
   await page.getByTestId('view-menu').click();
   await page.locator('.nc-view-menu').getByText('Agenda').click();
