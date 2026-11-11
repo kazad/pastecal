@@ -24,6 +24,8 @@
     });
     window.addEventListener('unhandledrejection', (e) => {
         const r = e.reason;
-        report('unhandledrejection', (r && (r.message || r.code)) || String(r), 'promise');
+        // Where it was thrown: the first stack frame's file:line ("app.js:401"), else 'promise'.
+        const top = r && typeof r.stack === 'string' && r.stack.match(/\/([\w.-]+\.js)(?:\?[^:\s)]*)?:(\d+)/);
+        report('unhandledrejection', (r && (r.message || r.code)) || String(r), top ? `${top[1]}:${top[2]}` : 'promise');
     });
 })();

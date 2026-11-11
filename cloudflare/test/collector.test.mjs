@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { toDataPoints, handleCollect } from '../src/Collector.js';
+import { toDataPoints, handleCollect, scrubError } from '../src/Collector.js';
 
 const ev = (name, params = {}, path = '/abc') => ({ name, params, path });
 
@@ -26,6 +26,14 @@ assert.equal(toDataPoints({ events: [ev('pro_beta_joined', { beta_surface: 'stat
 assert.equal(toDataPoints({ events: [ev('x', { kind: 'pro', beta_surface: 'share' })] })[0].blobs[5], 'pro');
 assert.equal(toDataPoints({ events: [ev('pro_beta_joined', { beta_surface: 'stats', surface: 'test' })] }).length, 0, 'test events still dropped');
 assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be stored');
+
+// js_error keeps its message and file:line (blob9, blob10), with URLs cut to their origin and quoted text masked
+const je = toDataPoints({ events: [ev('js_error', { kind: 'error', message: "Cannot read properties of undefined (reading 'Subject')", where: 'app.js:2985' })] })[0];
+assert.equal(je.blobs[5], 'error'); assert.equal(je.blobs[8], "Cannot read properties of undefined (reading 'Subject')"); assert.equal(je.blobs[9], 'app.js:2985');
+assert.equal(scrubError('Failed to fetch https://pastecal.com/cal/secret-id/history?x=1'), 'Failed to fetch https://pastecal.com/…');
+assert.equal(scrubError('Unexpected token \'D\', "Dr. Patel bio"... is not valid JSON'), 'Unexpected token \'D\', "…"... is not valid JSON');
+assert.equal(toDataPoints({ events: [ev('js_error', { message: 'x'.repeat(500) })] })[0].blobs[8].length, 200);
+assert.equal(toDataPoints({ events: [ev('event_added', { message: 'not kept' })] })[0].blobs.length, 8, 'only js_error carries text');
 
 // native vs classic from the path
 assert.equal(toDataPoints({ events: [ev('x', {}, '/nativecal/foo')] })[0].blobs[1], 'native');
