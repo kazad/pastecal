@@ -27,6 +27,7 @@
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
 #   ./scripts/stats.sh --live          # what is firing right now (post-deploy check)
+#   ./scripts/stats.sh errors          # browser errors as bug reports: message, how often, browsers, the code line (-d N)
 #   ./scripts/stats.sh health          # is anything wrong? data integrity, errors, refused
 #                                      # saves, DAU/WAU/MAU, active calendars, cost (scripts/health.py)
 #
@@ -105,6 +106,7 @@ CMD="${1:-summary}"
 # gcloud checks. trials is the Pro trial funnel; it counts EU visitors too (GA4 is off for them).
 if [ "$CMD" = "trials" ]; then exec "$(dirname "$0")/ux.sh" trials "$DAYS"; fi
 if [ "$CMD" = "usage" ]; then exec "$(dirname "$0")/ux.sh" usage "$DAYS"; fi
+if [ "$CMD" = "errors" ]; then [ "$DAYS_SET" = 1 ] || DAYS=7; exec python3 "$(dirname "$0")/errors.py" --days "$DAYS"; fi
 # Also first-party: the daily archive (R2), each new calendar's Recent changes and its cal_hit counts.
 if [ "$CMD" = "firsttwo" ]; then
     [ "$DAYS_SET" = "1" ] || DAYS=28

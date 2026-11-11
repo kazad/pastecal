@@ -598,7 +598,15 @@ const Analytics = {
             kind,                                   // 'error' | 'unhandledrejection'
             message: String(message || '').slice(0, 200),
             where: String(where || '').slice(0, 120),
+            // So a report like "the editor closes on my laptop" can be matched: which browser, which layout.
+            browser: this.browserName(),
+            device: window.matchMedia && window.matchMedia('(max-width: 767px)').matches ? 'phone' : 'desktop',
         });
+    },
+
+    browserName() {
+        const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+        return /Edg\//.test(ua) ? 'edge' : /Firefox\//.test(ua) ? 'firefox' : /Chrome\/|CriOS/.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
     },
 
     /**
@@ -688,7 +696,7 @@ if (typeof window !== 'undefined') {
             const nav = performance.getEntriesByType('navigation')[0];
             const fcp = performance.getEntriesByName('first-contentful-paint')[0];
             const ua = navigator.userAgent;
-            const browser = /Edg\//.test(ua) ? 'edge' : /Firefox\//.test(ua) ? 'firefox' : /Chrome\/|CriOS/.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
+            const browser = Analytics.browserName();
             const ms = (v) => (v > 0 ? Math.round(v) : undefined);
             // Straight to the sinks, not via track()'s requestIdleCallback: a hidden page
             // (iOS Safari especially) may never run the idle callback.
