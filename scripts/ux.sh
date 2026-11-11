@@ -126,6 +126,10 @@ run "Trust: refused saves and errors by UI and detail" \
 "SELECT blob1 AS event, blob2 AS ui, blob6 AS detail, SUM(_sample_interval) AS n
 FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed','edit_link_readonly','edit_name_collision','edit_case_variant','edit_link_forwarded') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
 
+run "Browser errors: message and file:line (js_error; text kept since Nov 11 2026)" \
+"SELECT blob6 AS kind, blob9 AS message, blob10 AS where, blob2 AS ui, SUM(_sample_interval) AS n
+FROM $DS WHERE blob1 = 'js_error' AND $D GROUP BY kind, message, where, ui ORDER BY n DESC LIMIT 25"
+
 # "Try the new calendar (beta)" (app.js setCalPref / sendCalFeedback): detail is <action>_<source>,
 # e.g. opt_in_footer, opt_out_pill, feedback_open_pill, feedback_sent_pill (Collector.js).
 run "New calendar (beta): opt-ins, opt-outs and feedback, by action and where" \

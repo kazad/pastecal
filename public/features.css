@@ -177,3 +177,16 @@ main.ft-main > * { max-width: none }
 }
 @media (prefers-reduced-motion: reduce) { .ft-art *, .ft-art *::before { animation: none !important } }
 /* @end-illustrations */
+
+/* Text sections after the pictures: also included, uses (template links), questions */
+.ft-more { margin-top: 96px; max-width: 760px }
+.ft-more h2 { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-section); line-height: 1.15; letter-spacing: var(--pc-tracking-tight) }
+.ft-more > p { margin: 0 0 var(--pc-space-4); color: var(--pc-text-2) }
+.ft-more ul { margin: 0; padding-left: 1.2em; color: var(--pc-text-2) }
+.ft-more li { margin: 0 0 var(--pc-space-2) }
+.ft-more li b { color: var(--pc-text) }
+.ft-more ul.ft-uses { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--pc-space-2) var(--pc-space-6) }
+.ft-uses a { font-weight: var(--pc-fw-semibold) }
+.ft-faq h3 { margin: var(--pc-space-6) 0 var(--pc-space-1); font-size: var(--pc-fs-lg) }
+.ft-faq p { margin: 0; color: var(--pc-text-2); max-width: 62ch }
+@media (max-width: 860px) { .ft-more { margin-top: 64px } }

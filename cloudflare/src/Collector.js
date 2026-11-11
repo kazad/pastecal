@@ -10,6 +10,7 @@
 // Column layout (keep in sync with scripts/stats.sh ux; Analytics Engine columns are positional):
 //   index1 = event name
 //   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached | blob8 homepage variant
+//   js_error only: blob9 message (200) | blob10 where (file:line, 120). Other events keep 8 blobs.
 //   double1 ttfb_ms | double2 fcp_ms | double3 lcp_ms | double4 load_ms | double5 cls | double6 first_event_seconds | double7 count
 
 import { isBot, isScript } from './Bots.js';
@@ -19,6 +20,12 @@ export const MAX_EVENTS = 20;           // the page sends at most 12 at a time (
 
 const NAME = /^[a-z0-9_]{1,40}$/;
 const str = (v, n = 60) => (v == null ? '' : String(v).slice(0, n));
+// An error's text, for debugging (js_error): the page already masks calendar ids (app.js, nativecal/errors.js).
+// Here, too: a URL keeps only its origin, and a double-quoted run (JSON.parse quotes the text it choked on,
+// which can be an event's title) becomes "…".
+export const scrubError = (m) => String(m ?? '')
+    .replace(/https?:\/\/[^\s'")]+/g, (u) => { try { return new URL(u).origin + '/…'; } catch (e) { return '…'; } })
+    .replace(/"[^"]*"/g, '"…"');
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 /** Turn a request body into Analytics Engine data points (pure, so it is unit-testable). */
@@ -31,7 +38,7 @@ export function toDataPoints(body, country = '') {
         const p = (e.params && typeof e.params === 'object') ? e.params : {};
         if (p.surface === 'test') continue;
         const path = typeof e.path === 'string' ? e.path : '';
-        points.push({
+        const point = {
             indexes: [name],
             blobs: [
                 name,
@@ -50,7 +57,9 @@ export function toDataPoints(body, country = '') {
                 str(p.hv, 8),
             ],
             doubles: [num(p.ttfb_ms), num(p.fcp_ms), num(p.lcp_ms), num(p.load_ms), num(p.cls), num(p.first_event_seconds), 1],
-        });
+        };
+        if (name === 'js_error') point.blobs.push(str(scrubError(p.message), 200), str(scrubError(p.where), 120));
+        points.push(point);
     }
     return points;
 }
