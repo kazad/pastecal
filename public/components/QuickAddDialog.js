@@ -119,7 +119,7 @@ const QuickAddDialog = {
                                                 @click="type = i + 1"
                                                 class="pc-swatch"
                                                 :class="{ 'is-selected': type === i + 1 }"
-                                                :style="{ backgroundColor: c }"></button>
+                                                :style="{ '--swatch': c }"></button>
                                     </template>
                                 </div>
                             </div>

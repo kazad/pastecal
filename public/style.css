@@ -1059,16 +1059,22 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
     border-bottom: 0; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0 }
   .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
   .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: var(--pc-radius-pill); background: var(--pc-line) }
-  .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
-  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 4px; font-size: var(--pc-fs-lg) }
-  .pc-side-tab--icon, .pc-side-tab--you { width: 34px }   /* seven tabs and the close button fit a 390px phone */
+  .pc-side-bar { background: transparent; padding: 0 6px 0 4px; gap: 2px }
+  .pc-side-tabs { gap: 0 }   /* flush tabs; their own 4px padding keeps 8px between labels */
+  /* Seven 44px tabs + a 44px close must fit a 390px phone without scrolling (side-panel.spec.js).
+     Measured at 390: strip 332px, tabs 324px — fs-md labels and tight bar padding buy the room. */
+  .pc-side-tabs .pc-tab { min-width: 44px; min-height: 44px; padding: 0 4px; font-size: var(--pc-fs-md) }
+  .pc-side-tab--icon, .pc-side-tab--you { width: 44px; min-height: 44px }
+  .pc-side-close { width: 44px; min-width: 44px; height: 44px }
+  .pc-qa-dialog .pc-swatch { width: 44px; height: 44px }
   .pc-side-body { padding: 16px 16px 24px }
   .pc-side-notes-input { font-size: var(--pc-fs-lg) }   /* iOS zooms into smaller fields */
 }
-/* The narrowest phones (360px and under): one size smaller, so the six tabs still fit without scrolling. */
+/* Narrow phones (360px) keep full-size 44px targets; the strip scrolls the last few pixels
+   rather than shrinking tabs below the touch minimum. */
 @media (max-width: 380px) {
-  .pc-side-tabs .pc-tab { padding: 0 4px; font-size: var(--pc-fs-md) }
-  .pc-side-tab--icon, .pc-side-tab--you { width: 32px }
+  .pc-side-bar { padding: 0 4px 0 2px }
+  .pc-side-tabs .pc-tab { font-size: var(--pc-fs-sm) }
 }
 @media (prefers-reduced-motion: no-preference) {
   @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease) } }
