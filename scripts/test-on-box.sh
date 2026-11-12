@@ -44,16 +44,38 @@ if [ "$SYNC" = 1 ]; then
   done
 fi
 S=$(date +%s)
+[ "$MODE" = none ] && exit 0
+# The box is shared (instacalc agents run there too). On 2026-11-11 a full gate (24 Chromes + 16 Worker suites, ~10 GB)
+# ran with 7 GB free and systemd-oomd killed someone else's tmux session. So: size each run from the memory free now,
+# cap it in its own systemd scope (a squeeze then kills these tests, not other work), and stop the scope when this ssh
+# session goes away (ssh without a tty sends no hangup), so no Chrome or workerd outlives the run.
+AVAIL=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
+if [ "$MODE" = worker ]; then BUDGET=$((AVAIL / 4)); PER=250; else BUDGET=$((AVAIL * 2 / 5)); PER=400; fi
+if [ "$BUDGET" -lt 1500 ]; then echo "omarchy is busy: ${AVAIL} MB free, not enough for a $MODE run; try again later"; exit 3; fi
+FIT=$((BUDGET / PER)); [ "$WORKERS" -gt "$FIT" ] && WORKERS=$FIT; [ "$JOBS" -gt "$FIT" ] && JOBS=$FIT
+UNIT=pc-ci-$MODE-$PORT
+systemctl --user stop "$UNIT.scope" 2>/dev/null   # a run whose ssh died before it could stop itself
+SSHD=$PPID
+while [ "$SSHD" -gt 1 ] && ! ps -o comm= -p "$SSHD" | grep -q '^sshd'; do SSHD=$(ps -o ppid= -p "$SSHD" | tr -d ' '); done
+boxed() {
+  systemd-run --user --scope --quiet --unit="$UNIT" -p MemoryMax="${BUDGET}M" "$@" &
+  local t=$!
+  while kill -0 "$t" 2>/dev/null; do
+    kill -0 "$SSHD" 2>/dev/null || { systemctl --user stop "$UNIT.scope"; break; }
+    sleep 2
+  done
+  wait "$t"
+}
+echo "omarchy: ${AVAIL} MB free; this $MODE run is capped at ${BUDGET} MB ($([ "$MODE" = worker ] && echo "$JOBS suites at once" || echo "$WORKERS Playwright workers"))"
 case "$MODE" in
-  none) exit 0 ;;
   worker)
-    NODE=$(which node) bash scripts/test-all.sh -j "$JOBS" "$@" > /tmp/pc-ci-w$PORT.log 2>&1
+    boxed env NODE=$(which node) bash scripts/test-all.sh -j "$JOBS" "$@" > /tmp/pc-ci-w$PORT.log 2>&1
     RC=$?
     echo "took $(( $(date +%s) - S ))s on omarchy (log: omarchy:/tmp/pc-ci-w$PORT.log)"
     sed -n '/^SUITE /,$p' /tmp/pc-ci-w$PORT.log
     exit $RC ;;
 esac
-NODE=$(which node) PW_WORKERS=$WORKERS PW_SERVERS=$SERVERS bash scripts/test-browser.sh "$PORT" "$@" > /tmp/pc-ci-$PORT.log 2>&1
+boxed env NODE=$(which node) PW_WORKERS=$WORKERS PW_SERVERS=$SERVERS bash scripts/test-browser.sh "$PORT" "$@" > /tmp/pc-ci-$PORT.log 2>&1
 RC=$?
 echo "took $(( $(date +%s) - S ))s on omarchy (log: omarchy:/tmp/pc-ci-$PORT.log)"
 grep -E "^\s+[0-9]+ (passed|failed|flaky|skipped)|✘|Error:" /tmp/pc-ci-$PORT.log | tail -30
