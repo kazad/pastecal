@@ -216,6 +216,14 @@ class CloudCalendarService extends CalendarDataService {
         return 'refused';                                             // too_big, bad_command, bad_json, unknown
     }
 
+    /** What to tell the user when the server refused a save (any code but locked/paused, which the app explains as
+     *  the lock). The edit is dropped and the server's copy shown again, so the message says it was not saved. */
+    static refusedSaveMessage(code) {
+        if (code === 'too_big') return 'Couldn’t save that change: it makes the calendar too big.';
+        if (code === 'read_only' || code === 'no_calendar') return 'Couldn’t save: this calendar can’t be edited here.';
+        return 'Couldn’t save your last change. The calendar shows what is saved.';
+    }
+
     // ---- live subscription ------------------------------------------------------------------
 
     // Open a calendar. The calendar of EXACTLY this name first, as Firebase did: "foo" and "Foo" can be two calendars,

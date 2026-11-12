@@ -526,11 +526,17 @@ const CalendarVueApp = {
         // write's own additions and edits, minus deletions the user named. Merging it
         // against the baseline would read the dropped rows as deleted-by-us and drop them
         // again. The service re-sends that list itself, so the watcher's echo is a no-op.
-        CalendarDataService.onSyncRefused = ({ removing, recovered, events }) => {
+        CalendarDataService.onSyncRefused = ({ removing, recovered, events, code, message }) => {
             // Restore first: the service swallows a throw from here, and a missing toast
             // ref must not cost the user the recovery itself.
             if (Array.isArray(events)) {
                 this.calendar.import({ events: JSON.parse(JSON.stringify(events)) });
+            }
+            if (code) {
+                // The server refused the save itself (locked, too big, ...): the edit is gone; say so, and count it.
+                this.showToast(code === 'locked' || code === 'paused' ? 'This calendar can’t be edited right now.' : CalendarDataService.refusedSaveMessage(code), 'error');
+                try { if (window.Analytics) Analytics.jsError('sync_refused', `${code} ${message || ''}`.trim(), 'sync'); } catch (e) { /* never rethrow */ }
+                return;
             }
             // The rows put back, not the net shrink (an addition offsets the count).
             const n = recovered ?? removing;

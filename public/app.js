@@ -1277,10 +1277,20 @@ const CalendarVueApp = {
             if (typeof CalendarDataService.reconnectNow === 'function') CalendarDataService.reconnectNow();
         });
 
-        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code }) => {
+        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code, message }) => {
             if (code === 'locked' || code === 'paused') {
                 // The calendar is locked or paused (or the editor link stopped working): undo the edit, say why.
                 this.showToast(code === 'paused' ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor, 'info');
+                if (Array.isArray(events)) {
+                    this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) }, { replace: true });
+                }
+                return;
+            }
+            if (code) {
+                // The server refused the save itself (too big, a bad command, ...): the edit is gone, so say that
+                // instead of "Recovered 0 events", and count it.
+                this.showToast(CalendarDataService.refusedSaveMessage(code), 'error');
+                track(a => a.jsError('sync_refused', `${code} ${message || ''}`.trim(), 'sync'));
                 if (Array.isArray(events)) {
                     this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) }, { replace: true });
                 }
