@@ -4,7 +4,9 @@
 #   Worker suites    omarchy    (scripts/test-on-box.sh --worker: scripts/test-all.sh -j 16, every suite but unit)
 #   browser journeys omarchy    (scripts/test-on-box.sh: scripts/test-browser.sh)
 # then one summary with counts and times. Passes only when unit has 0 failures, every Worker suite passes, and the
-# browser run has 0 failed (a test that passes on its retry is reported as flaky, as in test-browser.sh).
+# browser run has 0 failed (a test that passes on its retry is reported as flaky, as in test-browser.sh). A Worker
+# suite or browser spec that fails under the full parallel load is run again alone; passing alone, it is reported
+# as FLAKY and does not fail the gate (at most 5 are rerun: more than that is not load).
 #
 #   bash scripts/gate.sh             gate HEAD (the checkout as it is)
 #   bash scripts/gate.sh --force     run even when this tree already passed
@@ -92,29 +94,64 @@ wait
 OK=1 SUMMARY=""
 rc_of() { cat "$LOG/$1.rc" 2>/dev/null || echo 99; }
 line() { printf '  %-8s %-4s %4ss  %s\n' "$1" "$2" "$(cat "$LOG/$1.secs" 2>/dev/null || echo '?')" "$3"; SUMMARY="$SUMMARY $1: $3;"; }
+
+# ---- a failure under full load gets one run alone: red must mean a regression, not a busy box
+# (2026-11-11: archive, db-archive and restore failed with 16 suites and 24 Chromes running; all three passed alone.)
+# A suite or spec that passes alone is reported as FLAKY and does not fail the gate; one that fails again does.
+# More than 5 failures is not load, so those are not rerun.
+W_FLAKY="" W_ALONE="" B_FLAKY="" B_ALONE=""
+if [ "$DO_WORKER" = 1 ] && [ "$(rc_of worker)" != 0 ]; then
+  wf=$(awk -F'|' '$2 ~ /FAIL/ {gsub(/ /, "", $1); print $1}' "$LOG/worker.log")
+  n=$(echo "$wf" | grep -c .)
+  if [ "$n" -ge 1 ] && [ "$n" -le 5 ]; then
+    echo "worker suites that failed under load, run again one at a time: $(echo $wf)"
+    BOX_JOBS=1 bash scripts/test-on-box.sh --no-sync --worker --only "$(echo $wf | tr ' ' ,)" > "$LOG/worker-alone.log" 2>&1
+    for s in $wf; do
+      if awk -F'|' -v s="$s" '{gsub(/ /, "", $1)} $1 == s && $2 ~ /PASS/ {ok = 1} END {exit !ok}' "$LOG/worker-alone.log"
+      then W_FLAKY="$W_FLAKY $s"; else W_ALONE="$W_ALONE $s"; fi
+    done
+  fi
+fi
+if [ "$DO_BROWSER" = 1 ] && [ "$(rc_of browser)" != 0 ]; then
+  # Playwright's closing summary lists what still failed after its own retry, under "N failed".
+  bspecs=$(awk '/^ +[0-9]+ failed/ {f = 1; next} /^ +[0-9]+ (flaky|skipped|passed|did not run)/ {f = 0} f' "$LOG/browser.log" \
+    | grep -Eo '[a-z0-9-]+\.spec\.js' | sed 's/\.spec\.js$//' | sort -u)
+  n=$(echo "$bspecs" | grep -c .)
+  if [ "$n" -ge 1 ] && [ "$n" -le 5 ]; then
+    echo "browser specs that failed under load, run again on their own: $(echo $bspecs)"
+    # shellcheck disable=SC2086
+    if bash scripts/test-on-box.sh --no-sync $bspecs > "$LOG/browser-alone.log" 2>&1; then B_FLAKY=" $(echo $bspecs)"; else B_ALONE=" $(echo $bspecs)"; fi
+  fi
+fi
+RED=""
 echo
 if [ "$DO_UNIT" = 1 ]; then
   ul=$(grep -Eo '/tmp/pastecal-test-all-[^ ,]*/unit.log' "$LOG/unit.log" | head -1)   # node --test's own output
   p=$(grep -Eo '^(ℹ|#) pass [0-9]+' "$ul" 2>/dev/null | grep -Eo '[0-9]+$' | tail -1)
   f=$(grep -Eo '^(ℹ|#) fail [0-9]+' "$ul" 2>/dev/null | grep -Eo '[0-9]+$' | tail -1)
-  r=PASS; { [ "$(rc_of unit)" = 0 ] && [ "${f:-1}" = 0 ]; } || { r=FAIL; OK=0; }
+  r=PASS; { [ "$(rc_of unit)" = 0 ] && [ "${f:-1}" = 0 ]; } || { r=FAIL; OK=0; RED="$RED unit"; }
   line unit $r "${p:-?} passed, ${f:-?} failed"
 fi
 if [ "$DO_WORKER" = 1 ]; then
   s=$(grep -E '^suites: ' "$LOG/worker.log" | tail -1 | sed 's/^suites: //')
-  r=PASS; { [ "$(rc_of worker)" = 0 ] && echo "$s" | grep -q ' 0 failed'; } || { r=FAIL; OK=0; }
-  line worker $r "suites ${s:-?}, $(awk -F'|' '$2 ~ /PASS/ && $3+0 > 0 {c += $3} END {print c+0}' "$LOG/worker.log") checks"
+  r=PASS; { [ "$(rc_of worker)" = 0 ] && echo "$s" | grep -q ' 0 failed'; } || r=FAIL
+  [ "$r" = FAIL ] && [ -n "$W_FLAKY" ] && [ -z "$W_ALONE" ] && r=PASS   # every failure passed alone
+  [ "$r" = FAIL ] && { OK=0; RED="$RED worker"; }
+  line worker $r "suites ${s:-?}, $(awk -F'|' '$2 ~ /PASS/ && $3+0 > 0 {c += $3} END {print c+0}' "$LOG/worker.log") checks${W_FLAKY:+; FLAKY (failed under load, passed alone):$W_FLAKY}${W_ALONE:+; failed alone too:$W_ALONE}"
 fi
 if [ "$DO_BROWSER" = 1 ]; then
   cnt() { grep -Eo "^\s+[0-9]+ $1" "$LOG/browser.log" | grep -Eo '[0-9]+' | tail -1; }
   bp=$(cnt passed) bf=$(cnt failed) bk=$(cnt flaky) bs=$(cnt skipped)
-  r=PASS; { [ "$(rc_of browser)" = 0 ] && [ -z "$bf" ] && [ -n "$bp" ]; } || { r=FAIL; OK=0; }
-  line browser $r "${bp:-0} passed, ${bf:-0} failed, ${bk:-0} flaky, ${bs:-0} skipped"
+  r=PASS; { [ "$(rc_of browser)" = 0 ] && [ -z "$bf" ] && [ -n "$bp" ]; } || r=FAIL
+  [ "$r" = FAIL ] && [ -n "$B_FLAKY" ] && r=PASS   # every failed spec passed on its own
+  [ "$r" = FAIL ] && { OK=0; RED="$RED browser"; }
+  line browser $r "${bp:-0} passed, ${bf:-0} failed, ${bk:-0} flaky, ${bs:-0} skipped${B_FLAKY:+; FLAKY (failed under load, passed alone):$B_FLAKY}${B_ALONE:+; failed alone too:$B_ALONE}"
 fi
 T=$(( $(date +%s) - S0 ))
 echo "  total         ${T}s"
-for n in unit worker browser; do
-  [ -f "$LOG/$n.rc" ] && [ "$(rc_of $n)" != 0 ] && { echo; echo "---- $n (tail of $LOG/$n.log)"; tail -25 "$LOG/$n.log"; }
+for n in $RED; do
+  echo; echo "---- $n (tail of $LOG/$n.log)"; tail -25 "$LOG/$n.log"
+  [ -f "$LOG/$n-alone.log" ] && { echo "---- $n run alone (tail of $LOG/$n-alone.log)"; tail -15 "$LOG/$n-alone.log"; }
 done
 echo
 if [ "$OK" = 1 ]; then
