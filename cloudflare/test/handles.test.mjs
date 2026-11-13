@@ -229,6 +229,9 @@ try {
         assert.match(head, new RegExp(`/og/${s1}\\.png\\?v=`));
         const card = await get(`/og/${s1}.png`);
         assert.equal(card.status, 200); assert.notEqual(card.headers.get('x-preview'), 'static');
+        const emb = await get(`/${s1}.png`);   // the same calendar as an image to embed: /<name>.png, no /og/
+        assert.equal(emb.status, 200); assert.equal(emb.headers.get('content-type'), 'image/png'); assert.equal(emb.headers.get('x-preview'), null);
+        assert.ok((await emb.arrayBuffer()).byteLength > 5000, 'a rendered card, not an empty body');
         step('a short link page previews as its calendar (title, its own card), with no edit id');
     }
     assert.equal((await pj('/api/names/short', { name: s1, calendarId: extra[0] }, bob.cookie)).d.error, 'not-owner');
@@ -524,6 +527,8 @@ try {
         assert.ok(!(await r.text()).includes(`/og/${junk}`), 'an unknown name gets the generic tags');
         assert.equal((await admin(`/api/admin/cal/${enc(junk)}/lock-status`)).status, 404, 'and no room');
         assert.equal((await get(`/og/${junk}.png`)).headers.get('x-preview'), 'static');
+        assert.equal((await get(`/${junk}.png`)).status, 404, 'an unknown name is not an image (no site card, no room)');
+        assert.notEqual((await get('/pricing.png')).headers.get('content-type'), 'image/png', 'a site page name is not a calendar image');
         step('red team: /account, /handle and the site pages reach their pages with no calendar tags; an unknown path gets the generic tags, the site card, and no room');
     }
 

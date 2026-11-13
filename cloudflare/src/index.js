@@ -38,7 +38,7 @@ import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 import { handleContact } from './Contact.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
-import { calendarTarget, previewPage, previewImage } from './preview/route.js';
+import { calendarTarget, previewPage, previewImage, embedImage } from './preview/route.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -600,6 +600,12 @@ async function route(request, env, ctx) {
 
         // Link-preview cards: /og/<name>.png, /og/view/<id>.png (preview/route.js). Always an image.
         if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/og/')) return previewImage(request, env, ctx, url);
+
+        // The calendar as an image for a website: /<name>.png, /view/<id>.png (no pastecal footer; preview/route.js).
+        if ((request.method === 'GET' || request.method === 'HEAD') && /\.png$/i.test(path)) {
+            const img = await embedImage(request, env, ctx, url);
+            if (img) return img;
+        }
 
         // 7. /link-ended/<name>: the app lands here for a short name whose account was deleted (Names.js).
         const namePage = await serveNamePage(request, env, url);

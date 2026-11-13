@@ -71,17 +71,36 @@ export async function previewImage(request, env, ctx, url, now = Date.now()) {
     }
 }
 
-async function renderCard(env, ctx, target, now) {
+/**
+ * GET /<name>.png, /view/<id>.png -> the same card without the pastecal footer, for putting a calendar on
+ * a website. null when the path is not a calendar's (reserved names, files): the caller carries on.
+ * Unlike /og/ this never answers with the site card: a missing calendar is a 404, a slow render a 503.
+ */
+export async function embedImage(request, env, ctx, url, now = Date.now()) {
+    const m = /^\/((?:view\/)?[^/]+)\.png$/i.exec(url.pathname);
+    const target = m && calendarTarget('/' + m[1], '');
+    if (!target) return null;
+    try {
+        return await Promise.race([renderCard(env, ctx, target, now, true), timeout(IMAGE_BUDGET_MS)]);
+    } catch (err) {
+        const gone = err && err.message === 'no calendar';
+        if (!gone) console.error('[preview] embed image failed:', err && err.message);
+        return new Response(gone ? 'not found' : 'try again', { status: gone ? 404 : 503, headers: { 'Cache-Control': 'no-store' } });
+    }
+}
+
+async function renderCard(env, ctx, target, now, plain = false) {
     const cal = await loadPreview(env, target);
     if (!cal) throw new Error('no calendar');
     const cache = typeof caches !== 'undefined' ? caches.default : null;
     // Keyed on what the card shows, never on the URL's ?v= (anyone can write that).
-    const key = new Request(`https://og-cache.pastecal.internal/${target.kind}/${encodeURIComponent(target.id)}/${cardStamp(cal, now)}`);
+    const key = new Request(`https://og-cache.pastecal.internal/${plain ? 'plain/' : ''}${target.kind}/${encodeURIComponent(target.id)}/${cardStamp(cal, now)}`);
     const hit = cache && await cache.match(key);
     if (hit) { const out = new Response(hit.body, hit); out.headers.set('Cache-Control', `public, max-age=${CARD_MAX_AGE}`); return out; }
     const t0 = Date.now();
     await ensureRenderer();
     const model = cardModel(cal, now);
+    if (plain) model.branded = false;
     const strings = [[model.title, 800], ...model.events.map((e) => [e.title, 700])];
     const { fontSet, emoji } = await prepare(strings, { fetcher: cachedFetcher(ctx), deadlineMs: 1500 });
     const svg = calendarCard(new Pen(fontSet, emoji), model);
