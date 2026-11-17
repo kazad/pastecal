@@ -203,6 +203,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .e-quick-popup-wrapper .e-popup-content { overflow-y: auto }
 .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
 .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete { display: initial }
+/* Syncfusion disables edit/delete in readonly mode instead of removing them; hide so view/locked users don't click dead icons. */
+.e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit:disabled,
+.e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete:disabled { display: none }
 /* Syncfusion sets user-select: none on the whole popup; the description is plain text to copy. */
 .e-quick-popup-wrapper .e-description-details { user-select: text }
 /* The date line opens the editor where the pencil is enabled (app.js). */
