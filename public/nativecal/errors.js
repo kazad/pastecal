@@ -18,14 +18,30 @@
             if (typeof Analytics !== 'undefined' && Analytics) Analytics.jsError(kind, message, where);
         } catch (err) { /* reporting must never become the failure */ }
     };
+    const topStack = (err) => {
+        try {
+            const s = err && err.stack;
+            if (!s) return '';
+            const frames = [];
+            for (const line of String(s).split('\n')) {
+                const m = line.match(/(?:at\s+(?:([^\s(]+)\s+\()?|([^@\s]+)@)(?:https?:\/\/[^/]+)?([^):\s]+?)(?:\?[^:\s]*)?:(\d+):(\d+)/);
+                if (!m) continue;
+                const fn = m[1] || m[2] || '';
+                const file = (m[3] || '').split('/').pop() || 'inline';
+                frames.push((fn ? fn + '@' : '') + file + ':' + m[4] + ':' + m[5]);
+                if (frames.length >= 2) break;
+            }
+            return frames.join(' <- ');
+        } catch (e) { return ''; }
+    };
     window.addEventListener('error', (e) => {
-        const where = e.filename ? `${String(e.filename).split('/').pop().split('?')[0]}:${e.lineno || 0}` : 'unknown';
+        const base = e.filename ? `${String(e.filename).split('/').pop().split('?')[0]}:${e.lineno || 0}:${e.colno || 0}` : 'unknown';
+        const st = topStack(e.error);
+        const where = st && !st.includes(base) ? `${base} | ${st}` : (st || base);
         report('error', (e.error && e.error.message) || e.message, where);
     });
     window.addEventListener('unhandledrejection', (e) => {
         const r = e.reason;
-        // Where it was thrown: the first stack frame's file:line ("app.js:401"), else 'promise'.
-        const top = r && typeof r.stack === 'string' && r.stack.match(/\/([\w.-]+\.js)(?:\?[^:\s)]*)?:(\d+)/);
-        report('unhandledrejection', (r && (r.message || r.code)) || String(r), top ? `${top[1]}:${top[2]}` : 'promise');
+        report('unhandledrejection', (r && (r.message || r.code)) || String(r), topStack(r) || 'promise');
     });
 })();

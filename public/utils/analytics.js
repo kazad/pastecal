@@ -388,6 +388,16 @@ const Analytics = {
         });
     },
 
+    /** The event editor opened ('new' | 'edit' | 'series'). */
+    editorOpened(mode) {
+        this.track('editor_opened', { mode: mode || 'edit' });
+    },
+
+    /** The event editor saved a change ('new' | 'edit' | 'series'). */
+    editorSaved(mode) {
+        this.track('editor_saved', { mode: mode || 'edit' });
+    },
+
     /** The event editor was closed without saving. */
     editorAbandoned() {
         this.track('editor_abandoned', {});

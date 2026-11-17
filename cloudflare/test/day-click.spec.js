@@ -211,3 +211,25 @@ test('edit link: on a repeating event the date line does what the pencil does', 
   expect(server.events.find((e) => e.title === 'Choir').recurrencerule).toBe('FREQ=WEEKLY;COUNT=4');
   await ctx.close();
 });
+
+test('view link hides disabled edit/delete icons; edit link pencil opens, saves, and persists', async ({ browser, request }) => {
+  const { id, viewId } = await seed(request);
+  const v = await open(browser, `/view/${viewId}`);
+  await v.page.locator('.e-appointment', { hasText: 'Dentist' }).locator('visible=true').first().click({ force: true });
+  await v.page.waitForSelector('.e-quick-popup-wrapper.e-popup-open');
+  await expect(v.page.locator('.e-quick-popup-wrapper.e-popup-open .e-edit')).toBeHidden();
+  await expect(v.page.locator('.e-quick-popup-wrapper.e-popup-open .e-delete')).toBeHidden();
+  await v.ctx.close();
+
+  const e = await open(browser, `/${id}?backend=cf`);
+  await e.page.locator('.e-appointment', { hasText: 'Dentist' }).locator('visible=true').first().click();
+  await e.page.locator('.e-quick-popup-wrapper.e-popup-open .e-edit').click();
+  await e.page.waitForSelector('.e-schedule-dialog.e-popup-open');
+  await e.page.locator('.e-schedule-dialog.e-popup-open input[name="Subject"]').fill('Dentist (edited)');
+  await e.page.locator('.e-schedule-dialog.e-popup-open .e-event-save').click();
+  await e.page.waitForTimeout(800);
+  await e.page.reload();
+  await e.page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
+  await expect(e.page.locator('.e-appointment', { hasText: 'Dentist (edited)' }).first()).toBeVisible();
+  await e.ctx.close();
+});

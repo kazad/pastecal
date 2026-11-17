@@ -67,10 +67,29 @@ function track(fn) {
         } catch (err) { /* no storage: never risk a reload loop */ }
     };
 
+    const topStack = (err) => {
+        try {
+            const s = err && err.stack;
+            if (!s) return '';
+            const frames = [];
+            for (const line of String(s).split('\n')) {
+                const m = line.match(/(?:at\s+(?:([^\s(]+)\s+\()?|([^@\s]+)@)(?:https?:\/\/[^/]+)?([^):\s]+?)(?:\?[^:\s]*)?:(\d+):(\d+)/);
+                if (!m) continue;
+                const fn = m[1] || m[2] || '';
+                const file = (m[3] || '').split('/').pop() || 'inline';
+                frames.push((fn ? fn + '@' : '') + file + ':' + m[4] + ':' + m[5]);
+                if (frames.length >= 2) break;
+            }
+            return frames.join(' <- ');
+        } catch (e) { return ''; }
+    };
+
     window.addEventListener('error', (e) => {
-        const where = e.filename
-            ? `${String(e.filename).split('/').pop()}:${e.lineno || 0}`
+        const base = e.filename
+            ? `${String(e.filename).split('/').pop().split('?')[0]}:${e.lineno || 0}:${e.colno || 0}`
             : 'unknown';
+        const st = topStack(e.error);
+        const where = st && !st.includes(base) ? `${base} | ${st}` : (st || base);
         const message = (e.error && e.error.message) || e.message;
         report('error', message, where);
         // Only our own files: an extension's content script failing must not reload the page.
@@ -78,15 +97,15 @@ function track(fn) {
     });
     window.pcReportError = (err, where) => {
         const message = (err && err.message) || String(err);
-        report('error', message, where);
-        reloadIfStale(message, where, true);
+        const st = topStack(err);
+        const fullWhere = st ? `${where} | ${st}` : where;
+        report('error', message, fullWhere);
+        reloadIfStale(message, fullWhere, true);
     };
 
     window.addEventListener('unhandledrejection', (e) => {
         const r = e.reason;
-        // Where it was thrown: the first stack frame's file:line ("app.js:401"), else 'promise'.
-        const top = r && typeof r.stack === 'string' && r.stack.match(/\/([\w.-]+\.js)(?:\?[^:\s)]*)?:(\d+)/);
-        report('unhandledrejection', (r && (r.message || r.code)) || String(r), top ? `${top[1]}:${top[2]}` : 'promise');
+        report('unhandledrejection', (r && (r.message || r.code)) || String(r), topStack(r) || 'promise');
     });
 })();
 
@@ -2903,6 +2922,9 @@ const CalendarVueApp = {
             scheduleObj.actionBegin = (args) => {
                 if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
                 args.cancel = true;
+                if (this.editorOpenMode && (args.requestType === 'eventCreate' || args.requestType === 'eventChange')) {
+                    track(a => a.editorSaved(this.editorOpenMode));
+                }
                 this.editorSaved = true;
                 this.applyScheduleAction(args);
             };
@@ -2912,6 +2934,7 @@ const CalendarVueApp = {
                 if (args.type !== 'Editor') return;
                 if (!this.editorSaved) track(a => a.editorAbandoned());
                 this.editorSaved = false;
+                this.editorOpenMode = null;
             };
             // The user's change is measured from the event as it was when they started (see
             // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
@@ -3005,6 +3028,8 @@ const CalendarVueApp = {
                 }
                 if (args.type === 'Editor') {
                     this.editorSaved = false;
+                    this.editorOpenMode = !args.data || args.data.Id === undefined ? 'new' : (args.data.RecurrenceRule ? 'series' : 'edit');
+                    track(a => a.editorOpened(this.editorOpenMode));
                     ScheduleAdapter.noteStart(args.data);
                     // A yearly "last Monday of October" is drawn as every 12 months (ScheduleAdapter, #48); the
                     // repeat editor shows and saves the yearly rule it stands for.
@@ -7359,7 +7384,9 @@ const vueApp = Vue.createApp(CalendarVueApp);
 // same way (and let a stale page reload) while still logging them as Vue would.
 vueApp.config.errorHandler = (err, instance, info) => {
     console.error(err);
-    try { window.pcReportError && window.pcReportError(err, `vue:${info}`); } catch (e) { /* never the failure */ }
+    const comp = (instance && ((instance.$options && instance.$options.name) || (instance.$ && instance.$.type && instance.$.type.name))) || 'root';
+    const shortInfo = String(info || '').startsWith('http') ? '' : `:${info}`;
+    try { window.pcReportError && window.pcReportError(err, `vue:${comp}${shortInfo}`); } catch (e) { /* never the failure */ }
 };
 // The native calendar's icons, used inside its own templates (a native view link only).
 if (typeof NcIcon !== 'undefined') vueApp.component('nc-icon', NcIcon);
