@@ -76,7 +76,8 @@ function track(fn) {
                 const m = line.match(/(?:at\s+(?:([^\s(]+)\s+\()?|([^@\s]+)@)(?:https?:\/\/[^/]+)?([^):\s]+?)(?:\?[^:\s]*)?:(\d+):(\d+)/);
                 if (!m) continue;
                 const fn = m[1] || m[2] || '';
-                const file = (m[3] || '').split('/').pop() || 'inline';
+                const rawFile = (m[3] || '').split('/').pop() || 'inline';
+                const file = /\.js$/i.test(rawFile) ? rawFile : 'page';
                 frames.push((fn ? fn + '@' : '') + file + ':' + m[4] + ':' + m[5]);
                 if (frames.length >= 2) break;
             }
@@ -85,8 +86,9 @@ function track(fn) {
     };
 
     window.addEventListener('error', (e) => {
-        const base = e.filename
-            ? `${String(e.filename).split('/').pop().split('?')[0]}:${e.lineno || 0}:${e.colno || 0}`
+        const raw = e.filename ? String(e.filename).split('/').pop().split('?')[0] : '';
+        const base = raw
+            ? `${/\.js$/i.test(raw) ? raw : 'page'}:${e.lineno || 0}:${e.colno || 0}`
             : 'unknown';
         const st = topStack(e.error);
         const where = st && !st.includes(base) ? `${base} | ${st}` : (st || base);
@@ -2928,13 +2930,17 @@ const CalendarVueApp = {
                 this.editorSaved = true;
                 this.applyScheduleAction(args);
             };
-            // An editor that closes without a save is the "this was confusing or fiddly" signal.
+            // Syncfusion fires popupClose BEFORE actionBegin when saving from the full Editor
+            // dialog (dialogObject.hide() -> popupClose -> processCrudActions -> actionBegin), so
+            // check editorSaved on the next macrotask after actionBegin has had its chance to run.
             scheduleObj.popupClose = (args) => {
                 this.hideDraftBlock();
                 if (args.type !== 'Editor') return;
-                if (!this.editorSaved) track(a => a.editorAbandoned());
-                this.editorSaved = false;
-                this.editorOpenMode = null;
+                setTimeout(() => {
+                    if (!this.editorSaved) track(a => a.editorAbandoned());
+                    this.editorSaved = false;
+                    this.editorOpenMode = null;
+                }, 0);
             };
             // The user's change is measured from the event as it was when they started (see
             // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.

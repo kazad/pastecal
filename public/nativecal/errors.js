@@ -27,7 +27,8 @@
                 const m = line.match(/(?:at\s+(?:([^\s(]+)\s+\()?|([^@\s]+)@)(?:https?:\/\/[^/]+)?([^):\s]+?)(?:\?[^:\s]*)?:(\d+):(\d+)/);
                 if (!m) continue;
                 const fn = m[1] || m[2] || '';
-                const file = (m[3] || '').split('/').pop() || 'inline';
+                const rawFile = (m[3] || '').split('/').pop() || 'inline';
+                const file = /\.js$/i.test(rawFile) ? rawFile : 'page';
                 frames.push((fn ? fn + '@' : '') + file + ':' + m[4] + ':' + m[5]);
                 if (frames.length >= 2) break;
             }
@@ -35,7 +36,8 @@
         } catch (e) { return ''; }
     };
     window.addEventListener('error', (e) => {
-        const base = e.filename ? `${String(e.filename).split('/').pop().split('?')[0]}:${e.lineno || 0}:${e.colno || 0}` : 'unknown';
+        const raw = e.filename ? String(e.filename).split('/').pop().split('?')[0] : '';
+        const base = raw ? `${/\.js$/i.test(raw) ? raw : 'page'}:${e.lineno || 0}:${e.colno || 0}` : 'unknown';
         const st = topStack(e.error);
         const where = st && !st.includes(base) ? `${base} | ${st}` : (st || base);
         report('error', (e.error && e.error.message) || e.message, where);
