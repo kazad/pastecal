@@ -28,7 +28,7 @@ async function loudness(page) {
     const all = [...document.querySelectorAll('body *')].filter((el) => !el.closest('[hidden], template, script, style') && seen(el));
     const clickable = all.filter((el) => el.matches('a[href], button, [role=button], [role=tab]'));
     const filled = clickable.filter((el) => same(getComputedStyle(el).backgroundColor, primary));
-    const accent = clickable.filter((el) => !filled.includes(el) && !grid(el) && (same(getComputedStyle(el).color, link) || same(getComputedStyle(el).color, primary)) && el.textContent.trim());
+    const accent = clickable.filter((el) => !filled.includes(el) && !grid(el) && !el.closest('.nc-views') && (same(getComputedStyle(el).color, link) || same(getComputedStyle(el).color, primary)) && el.textContent.trim());
     const chips = all.filter((el) => el.matches('.pc-chip, .pc-pill-tag, .pc-view-badge, .pc-badge, [class*="badge"]') && !grid(el));
     let words = 0;
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -54,14 +54,15 @@ async function seed(request) {
 }
 
 // Budgets: today's counts (Oct 26 2026), to be lowered as the pages get quieter. Never raised without a reason in the doc.
+// Measured on the new calendar (?cal=native), the default since Nov 18 2026. The selected view tab (.nc-views) is a state, not a link.
 const PAGES = [
-  { name: 'homepage desktop', path: () => '/?backend=cf', size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 3, chipsBadges: 0, words: 118 } },
+  { name: 'homepage desktop', path: () => '/?backend=cf&cal=native', size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 3, chipsBadges: 0, words: 118 } },
   // filled 2 on the phone homepage (+ and Save & share) breaks 'one loud action': next to fix (docs/DESIGN-RESTRAINT.md).
-  { name: 'homepage phone', path: () => '/?backend=cf', size: { width: 390, height: 844 }, budget: { filled: 2, accentLinks: 2, chipsBadges: 0, words: 33 } },
-  { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 36 } },
-  { name: 'view link desktop', path: (s) => `/view/${s.viewId}?backend=cf`, size: { width: 1440, height: 900 }, budget: { filled: 0, accentLinks: 3, chipsBadges: 1, words: 46 } },
-  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 32 } },
-  { name: 'embed', path: (s) => `/view/${s.viewId}?backend=cf&embed`, size: { width: 720, height: 640 }, budget: { filled: 0, accentLinks: 0, chipsBadges: 0, words: 18 } },
+  { name: 'homepage phone', path: () => '/?backend=cf&cal=native', size: { width: 390, height: 844 }, budget: { filled: 2, accentLinks: 2, chipsBadges: 0, words: 33 } },
+  { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 39 } },
+  { name: 'view link desktop', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 0, accentLinks: 3, chipsBadges: 1, words: 49 } },
+  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 35 } },
+  { name: 'embed', path: (s) => `/view/${s.viewId}?backend=cf&cal=native&embed`, size: { width: 720, height: 640 }, budget: { filled: 0, accentLinks: 0, chipsBadges: 0, words: 18 } },
 ];
 
 for (const p of PAGES) {
@@ -94,7 +95,9 @@ for (const p of PAGES) {
 // panel, one in the dialog. Budgets in docs/DESIGN-RESTRAINT.md; they may only go down.
 const PANELS = [
   { name: 'Settings panel', open: "p.openSideTab('settings')", el: 'settings', budget: { filled: 0, words: 43 } },
-  { name: 'You panel', open: "p.openSideTab('you')", el: 'you', budget: { filled: 0, words: 36 } },
+  // 38: +2 for "Calendar" and its chosen option (Nov 18 2026): the new calendar is the default, and this select is the
+  // only way back to Classic on the home page and Pro calendars, which have no footer switch.
+  { name: 'You panel', open: "p.openSideTab('you')", el: 'you', budget: { filled: 0, words: 38 } },
   { name: 'Make a copy dialog', open: "p.openCopyDialog('settings')", el: 'copy-dialog', budget: { filled: 1, words: 8 } },
   // The import preview (Oct 28 2026) for a file of two new events: its title, "New · 2", two rows
   // (date, time, title), Cancel and Import 2 events. The rows are the file's; the rest is the dialog's own.

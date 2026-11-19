@@ -116,8 +116,9 @@ events in, `{ event, start, end, allDay, title, type }` out), never Syncfusion's
 ## Milestone 1: view links on the native calendar
 
 The flag: `?cal=native|classic`, else `localStorage pc_cal`, else the server's `<meta name="pc-cal">`
-(Worker var `NATIVE_VIEW_LINKS="1"`, unset = classic). Decided in index.html's head, by path (`/view/<id>`,
-`/@handle/<name>`): edit links, and locked calendars opened from one, stay classic. In native mode
+(Worker var `CALENDAR_DEFAULT="classic"` is the kill switch; since Nov 18 2026 unset = native, for every
+page: edit links, view links, handle pages, embeds and the home page; before that `NATIVE_VIEW_LINKS="1"` made
+only view links native). Decided in index.html's head. In native mode
 index.html writes in rrule (jsDelivr, SRI), `nativecal/components/{ncUx,NcIcon,NativeCalendar,EventPopover}.js`
 and `native-calendar.css` instead of `ej2-calendar.min.js` and `material(.dark).css`.
 
@@ -139,11 +140,20 @@ About 1 MB less, two thirds of the page. The rest of the native page is fonts, V
 
 ### Not yet the same as classic
 
-- Week / Day: classic tints the hours outside 9-5; native tints only weekends.
-- A multi-day bar cut by the week edge: classic draws « and »; native squares the corner.
-- Links with `?view=q`, `12w` or `custom&dur=&unit=`: classic opens them as Day (on branch `pro` too: the custom
-  view is replaced when the calendar loads); native opens the view the link names. Day/Week/Month/Year/Agenda
+- Done Nov 19 2026 (`native-classic-details.spec.js`): the week and day grids tint the hours outside 9 to 6 (read off
+  classic's own work-hours cells: 9:00 to 18:00), a multi-day bar cut by its week, row or day ends in « and », and
+  one edited occurrence of a repeat carries a crossed repeat icon (month and week; the series' plain repeat icon is
+  week-only, as in classic).
+
+### Where native differs from classic, on purpose (each one is better)
+
+- **A repeat rule nobody can expand** (garbage, or one that would hang a page): native shows the event once and
+  logs why; classic drops it, so the event silently vanishes from the calendar.
+- **Links with `?view=q`, `12w` or `custom&dur=&unit=`:** native opens the view the link names; classic opens
+  them as Day (on branch `pro` too: the custom view is replaced when the calendar loads). Day/Week/Month/Year/Agenda
   links open the same view and dates in both (tested).
+- **The edited-occurrence icon in the month** sits at the right of its one-line bar; classic drops it onto a second
+  line and makes the bar taller than its neighbors.
 - No `location` field exists in the event model, so neither popup shows one.
 - The native editor, drag-to-create, Undo and Recent changes are milestone 2 (edit links), below.
 

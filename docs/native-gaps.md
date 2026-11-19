@@ -5,6 +5,8 @@ The plan is in [native-switch.md](native-switch.md). Measured Oct 25 2026 on bra
 (pro + `native-audit`), against a local wrangler dev. Native means `/beta/<id>`, which opens in the v2 look
 (`public/nativecal/index.html:101`; `?ux=1` gives v1).
 
+**Update, Nov 19 2026:** native is the default calendar; the last visible gaps with classic (the « » arrows on clipped bars, the 9 to 6 tint, the edited-occurrence icon) are closed. Every remaining difference is an improvement, listed with its reason in native-inventory.md ("Where native differs from classic, on purpose").
+
 **Update, milestone 2 (branch `native-editing`):** the main app's edit link now edits on the native calendar
 (`/<id>?cal=native`, docs/native-inventory.md "Milestone 2"), through classic's own write path. The data-parity
 spec opens it by default (`NATIVE_URL=beta` for /beta): all 17 journeys pass there. Gap status in the main app:

@@ -280,3 +280,30 @@ for (const device of ['desk', 'phone']) {
     });
   }
 }
+
+// Enter in the calendar-title field commits the name and closes the field, with no uncaught error (the field's `enter`
+// carried no event, so setTitle threw a TypeError: ~8 a week in production, and Enter did nothing). Desktop and phone,
+// both renderers. Enter on a blank name keeps the field open (a deliberate action that cannot save nothing).
+for (const [label, size] of [['desktop', { width: 1280, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
+  for (const cal of ['native', 'classic']) {
+    test(`Enter in the calendar title renames and closes the field, no error (${label}, ${cal})`, async ({ browser }) => {
+      const { id } = await seed([], { title: 'Old name', noView: true });
+      const ctx = await browser.newContext({ viewport: size, hasTouch: size.width < 600 });
+      await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`${BASE}/${id}?backend=cf&cal=${cal}`);
+      await page.waitForFunction(() => document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 });
+      const field = page.locator('input[aria-label="Calendar title"]:visible');
+      await page.locator('h1:visible', { hasText: 'Old name' }).first().click();
+      await field.fill('Renamed');
+      await field.press('Enter');
+      await expect(page.locator('h1:visible', { hasText: 'Renamed' }).first(), 'the field closed on Enter and shows the new name').toBeVisible();
+      await expect(field).toHaveCount(0);
+      await expect.poll(async () => (await calOf(id)).title, { message: 'saved on the server' }).toBe('Renamed');
+      expect(errors, 'no uncaught error').toEqual([]);
+      await ctx.close();
+    });
+  }
+}

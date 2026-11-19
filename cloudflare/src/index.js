@@ -55,7 +55,7 @@ import { handleCollisionAdmin } from './NameCollisions.js';
 import { handleRekey } from './Rekey.js';
 import CalendarName from '../../public/services/CalendarName.js';
 import { exactLookup, nameTakenByVariant, handleRoomsAdmin } from './ExactNames.js';
-import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL, NATIVE_CAL_META, nativeViewLinks } from './Site.js';
+import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL, CLASSIC_CAL_META, classicDefault } from './Site.js';
 
 // Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
 const bearerIsSecret = (request, env) => timingSafeEqual(request.headers.get('Authorization') || '', `Bearer ${env.IMPORT_SECRET}`);
@@ -618,10 +618,9 @@ async function route(request, env, ctx) {
         // A calendar page (/<name>, /view/<id>): index.html with tags about that calendar, for link previews.
         const target = !beta && request.method === 'GET' ? calendarTarget(path, url.search) : null;
         if (target) res = await previewPage(request, env, res, target);
-        // View links on pastecal's own calendar instead of Syncfusion's (docs/native-switch.md), when NATIVE_VIEW_LINKS
-        // is "1": the page reads this tag before it loads anything (public/index.html, window.pcNativeCal). Off by default.
-        if (nativeViewLinks(env) && request.method === 'GET' && /^\/view\/[^/.]+\/?$/.test(path) && (res.headers.get('Content-Type') || '').includes('text/html')) {
-            res = new HTMLRewriter().on('head', { element(e) { e.prepend(NATIVE_CAL_META, { html: true }); } }).transform(res);
+        // CALENDAR_DEFAULT=classic: pages say so before they load anything (public/index.html, window.pcNativeCal).
+        if (classicDefault(env) && request.method === 'GET' && (res.headers.get('Content-Type') || '').includes('text/html')) {
+            res = new HTMLRewriter().on('head', { element(e) { e.prepend(CLASSIC_CAL_META, { html: true }); } }).transform(res);
             res = new Response(res.body, res);
             res.headers.delete('ETag');
         }

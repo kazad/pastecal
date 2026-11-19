@@ -161,7 +161,7 @@ const AddToCalendar = {
 };
 
 // ============================================================
-// "Try the new calendar (beta)": a quiet item in the line under the calendar (edit links and view links, never
+// "Use the new calendar" / the "New calendar" pill: a quiet item in the line under the calendar (edit links and view links, never
 // embeds or the homepage). On the classic calendar it opts this browser in; on the new one it is a small pill
 // with Send feedback and Back to classic, hidden for the rest of the session by its x. It lives inside the
 // footer line, not floating over the page, so it can never cover events, the filter banner or a toast, and the
@@ -171,13 +171,13 @@ const CalSwitch = {
     props: { native: Boolean },
     emits: ['switch', 'feedback', 'hide'],
     template: `
-        <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Try the new calendar (beta)</button>
-        <span v-else class="pc-cal-pill" role="group" aria-label="New calendar (beta)" data-testid="new-cal-pill">
-            <span class="pc-cal-pill-name" title="You're trying the new calendar">Beta</span>
+        <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Use the new calendar</button>
+        <span v-else class="pc-cal-pill" role="group" aria-label="New calendar" data-testid="new-cal-pill">
+            <span class="pc-cal-pill-name" title="pastecal's new calendar">New calendar</span>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
             <button type="button" class="pc-link" data-testid="new-cal-feedback" aria-label="Send feedback on the new calendar" @click="$emit('feedback')">Feedback</button>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
-            <button type="button" class="pc-link" data-testid="back-to-classic" aria-label="Back to the classic calendar" @click="$emit('switch', 'classic')">Classic</button>
+            <button type="button" class="pc-link" data-testid="back-to-classic" aria-label="Classic editor" @click="$emit('switch', 'classic')">Classic editor</button>
             <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-cal-pill-x" aria-label="Hide until next visit" title="Hide until next visit" data-testid="new-cal-pill-hide" @click="$emit('hide')">&times;</button>
         </span>`,
 };
@@ -208,7 +208,7 @@ const COMPONENT_REGISTRY = {
     'close-icon': CloseIcon,                   // Close icon SVG
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
-    'cal-switch': CalSwitch,                   // Footer: "Try the new calendar (beta)" / the beta pill
+    'cal-switch': CalSwitch,                   // Footer: "Use the new calendar" (classic) / the "New calendar" pill (native)
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
     'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
@@ -319,7 +319,7 @@ const CalendarVueApp = {
             lock: { locked: false, pro: false, paused: false, canEdit: true, proSettings: null },
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
-            // "Try the new calendar (beta)" (CalSwitch): which calendar draws this page (index.html decided), the
+            // "Use the new calendar" (CalSwitch): which calendar draws this page (index.html decided), the
             // pill hidden for this session, and the feedback dialog ({ text, email, ... } while open).
             nativeCal: !!window.pcNativeCal,
             calPillHidden: (() => { try { return sessionStorage.getItem('pc_cal_pill_hidden') === '1'; } catch (e) { return false; } })(),
@@ -939,7 +939,7 @@ const CalendarVueApp = {
             if (this.isExisting && this.embedded) return 'embed';   // an embedded edit link: its one-line header carries the credit
             return this.isExisting ? 'editor' : '';
         },
-        // The footer's "Try the new calendar (beta)" link or, on the new calendar, its pill (CalSwitch). Edit links
+        // The footer's "Use the new calendar" link or, on the new calendar, its pill (CalSwitch). Edit links
         // and view links (locked and Pro ones too); never an embed, the homepage (classic only for now) or a pill
         // hidden for this session.
         showCalSwitch() {
@@ -1828,13 +1828,13 @@ const CalendarVueApp = {
             if (Math.abs(this.nativeRowHeight - h) >= 2) this.nativeRowHeight = h;
         },
         eventTextOn(color) { return ScheduleAdapter.onColor(color); },
-        // ---- "Try the new calendar (beta)" (CalSwitch in the footer) ----
+        // ---- The calendar switch (CalSwitch in the footer, and Settings > Calendar) ----
         // This browser's choice of calendar, then a reload into it. The head script in index.html reads
         // localStorage pc_cal before anything loads (so no flash, and no Syncfusion download in native mode); the
         // same value also goes in a cookie (a year, whole site) so the Worker could see the choice one day, e.g. to
         // send the right first byte. Nothing on the server reads it today, and nothing may depend on it: storage
         // is the source of truth. "Back to classic" stores 'classic' rather than clearing: with nothing stored, a
-        // view link falls back to the server's default (<meta name="pc-cal">, NATIVE_VIEW_LINKS), which may be native.
+        // page falls back to the server's default (<meta name="pc-cal">, CALENDAR_DEFAULT=classic), then to native.
         // A ?cal= in the address would win over the stored choice, so it is dropped before reloading.
         setCalPref(pick, source) {
             const value = pick === 'native' ? 'native' : 'classic';
@@ -1867,7 +1867,7 @@ const CalendarVueApp = {
             const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\/|FxiOS/.test(ua) ? 'Firefox' : /Chrome\/|CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'other browser';
             const os = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'ChromeOS'
                 : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'other OS';
-            const where = `[New calendar (beta) feedback: ${this.isReadOnly ? 'view link' : 'edit link'}, ${browser} on ${os}, ${window.innerWidth}px wide]`;
+            const where = `[New calendar feedback: ${this.isReadOnly ? 'view link' : 'edit link'}, ${browser} on ${os}, ${window.innerWidth}px wide]`;
             f.sending = true; f.error = '';
             try {
                 const res = await fetch('/api/contact', {
@@ -4649,9 +4649,12 @@ const CalendarVueApp = {
         },
 
         setTitle(event) {
-            if (event.target.value.trim()) {
+            // CalendarTitle emits `enter` with the keydown event; a missing target (production saw ~8 TypeErrors a week
+            // from an empty emit) must not throw, and Enter on a blank name keeps the field open.
+            const v = (event && event.target && typeof event.target.value === 'string') ? event.target.value.trim() : '';
+            if (v) {
                 this.editTitle = false;
-                this.calendar.title = event.target.value.trim();
+                this.calendar.title = v;
             }
         },
 

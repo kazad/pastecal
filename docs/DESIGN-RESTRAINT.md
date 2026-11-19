@@ -30,7 +30,7 @@ and the key pages carry a budget that can only go down (`cloudflare/test/restrai
 
 ## The budget
 
-`restraint.spec.js` measures the first screen of six pages, in dark and light: filled buttons, accent-colored links
+`restraint.spec.js` measures the first screen of six pages, in dark and light, on the new calendar (`?cal=native`, the default since Nov 18 2026; the selected view tab is a state and not counted as a link): filled buttons, accent-colored links
 (outside the calendar grid), chips and badges, and words outside the calendar grid. The numbers in the spec are the
 ceiling. Lower them when a page gets quieter. Raise one only with a reason written here.
 
@@ -38,13 +38,13 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 |---|---|---|---|---|---|
 | Homepage, desktop 1440 | 1 | 3 | 0 | 118 | was 150 before the guide panel trim; template choices became quiet outline pills (links 6 to 3); +4 words for "3,000+ calendars since 2021", owner's call (Oct 26 2026) |
 | Homepage, phone 390 | 2 | 2 | 0 | 33 | **over the rule**: + and Save & share are both filled; next to fix |
-| Edit link, desktop | 1 | 1 | 1 | 36 | |
-| View link, desktop | 0 | 3 | 1 | 46 | |
-| View link, phone | 0 | 2 | 1 | 32 | +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
+| Edit link, desktop | 1 | 1 | 1 | 39 | +3 words Nov 19 2026: the footer pill ("New calendar · Feedback · Classic editor"), the way back to Classic; its links are muted, not accent. Temporary: remove with the pill |
+| View link, desktop | 0 | 3 | 1 | 49 | +3 words: the pill (above) |
+| View link, phone | 0 | 2 | 1 | 35 | +3 words: the pill (above). +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
 | Embed, 720 | 0 | 0 | 0 | 18 | one quiet header line |
 | Event card (quick view) | - | - | - | 13 | title, type, date and times, More details, Done; the "Edited just now" line (3 words) removed Oct 27 2026 |
 | Settings panel | 0 | - | - | 43 | this calendar only since Oct 28 2026 (was ~70 words with "Only me" in it); Backup last |
-| You panel | 0 | - | - | 36 | your name (optional) and its one line, then the six preferences that left Settings |
+| You panel | 0 | - | - | 38 | your name (optional) and its one line, then the six preferences that left Settings; +2 Nov 18 2026 for Calendar (New / Classic), the way back to Classic where there is no footer switch |
 | Make a copy dialog | 1 | - | - | 8 | name, Include events, Make copy |
 | Import dialog (2 new events) | 1 | - | - | 21 | title, "New · 2", two rows (date, time, title, as the Agenda), Cancel, Import 2 events; no summary line (the headings and the button carry the counts), "Already in this calendar" and "Not imported" folded (Oct 28 2026) |
 

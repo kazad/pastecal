@@ -154,23 +154,25 @@
          new one is fetched, so the page was briefly unstyled (the FOUC) and any event chip
          Syncfusion laid out in that gap was sized against a shrink-wrapped grid (16px wide
          chips that stayed wrong until an edit). Dark-mode users also got a light flash. -->
-    <!-- Which calendar draws this page (docs/native-switch.md). View links (/view/<id>, /@handle/<name>) and edit links
-         (/<id>) may use pastecal's own calendar (NativeCalendar) instead of Syncfusion's: ?cal=native|classic, else this
-         browser's choice (localStorage pc_cal), else -- view links only -- the server's default (<meta name="pc-cal">,
-         the Worker's NATIVE_VIEW_LINKS). The homepage stays classic, and so does every page by default. Decided here,
-         before anything loads: in native mode no Syncfusion file is fetched. window.pcNativeEdit: an edit link. -->
+    <!-- Which calendar draws this page (docs/native-switch.md). The home page, edit links (/<id>) and view links
+         (/view/<id>, /@handle/<name>) draw pastecal's own calendar (NativeCalendar) by default; Syncfusion's ("classic")
+         is the way back: ?cal=native|classic, else this browser's choice (localStorage pc_cal, set by the footer's
+         "Use the classic calendar"), else the server's default (<meta name="pc-cal">, the Worker's CALENDAR_DEFAULT=classic,
+         the one-deploy way to send everyone back), else native. Decided here, before anything loads: in native mode no
+         Syncfusion file is fetched. window.pcNativeEdit: a page that edits (not a view link). -->
     <script>
         window.pcNativeEdit = false;
         window.pcNativeCal = (function () {
             try {
                 var p = location.pathname;
                 var view = /^\/view\/[^/]+\/?$/.test(p) || (/^\/@/.test(p) && !!document.querySelector('meta[name="pc-view"]'));
-                var edit = !view && /^\/[^/@.][^/.]*\/?$/.test(p);
+                var edit = !view && (p === '/' || /^\/[^/@.][^/.]*\/?$/.test(p));
                 if (!view && !edit) return false;
                 var q = new URLSearchParams(location.search).get('cal');
                 var pick = q === 'native' || q === 'classic' ? q : null;
                 if (!pick) { try { pick = localStorage.getItem('pc_cal'); } catch (e) { pick = null; } }
-                if (view && pick !== 'native' && pick !== 'classic') { var m = document.querySelector('meta[name="pc-cal"]'); pick = m && m.getAttribute('content'); }
+                if (pick !== 'native' && pick !== 'classic') { var m = document.querySelector('meta[name="pc-cal"]'); pick = m && m.getAttribute('content'); }
+                if (pick !== 'classic') pick = 'native';
                 window.pcNativeEdit = edit && pick === 'native';
                 return pick === 'native';
             } catch (e) { return false; }
@@ -1432,6 +1434,13 @@
                                         <option value="dark">Dark</option>
                                     </select>
                                 </div>
+                                <div class="pc-set-field">
+                                    <label class="pc-set-label" for="set-calendar">Calendar</label>
+                                    <select id="set-calendar" :value="nativeCal ? 'native' : 'classic'" @change="setCalPref($event.target.value, 'settings')" class="pc-field pc-field--sm" data-testid="set-calendar">
+                                        <option value="native">New</option>
+                                        <option value="classic">Classic</option>
+                                    </select>
+                                </div>
                                 <!-- Custom view length, only while Custom is the default -->
                                 <div v-if="globalSettings.defaultView === 'Custom'" class="pc-set-field pc-set-wide">
                                     <span class="pc-set-label">Custom view shows</span>
@@ -2003,7 +2012,7 @@
             </div>
         </div>
 
-        <!-- Feedback on the new calendar (beta), from its footer pill (CalSwitch). Goes to /api/contact (sendCalFeedback)
+        <!-- Feedback on the new calendar, from its footer pill (CalSwitch). Goes to /api/contact (sendCalFeedback)
              with the page kind, browser and screen width only, never the calendar. -->
         <div v-if="calFeedback" class="pc-modal" @click.self="calFeedback = null" @keydown.esc="calFeedback = null" v-cloak>
             <form class="pc-modal-panel pc-cal-feedback" role="dialog" aria-modal="true" aria-labelledby="cal-feedback-title" data-testid="cal-feedback" @submit.prevent="sendCalFeedback">
@@ -2016,7 +2025,7 @@
                     <div class="pc-cal-feedback-actions"><button type="button" class="pc-btn pc-btn--primary" @click="calFeedback = null">Done</button></div>
                 </template>
                 <template v-else>
-                    <h3 id="cal-feedback-title" class="pc-section-title">The new calendar (beta)</h3>
+                    <h3 id="cal-feedback-title" class="pc-section-title">The new calendar</h3>
                     <label class="pc-cal-feedback-label" for="cal-feedback-text">What should we change?</label>
                     <textarea id="cal-feedback-text" class="pc-field" rows="5" maxlength="1800" v-model="calFeedback.text" data-testid="cal-feedback-text" required></textarea>
                     <label class="pc-cal-feedback-label" for="cal-feedback-email">Email (if you'd like a reply)</label>

@@ -56,8 +56,9 @@ export function noindexEverywhere(env, host) {
 
 export const ROBOTS_DISALLOW_ALL = 'User-agent: *\nDisallow: /\n';
 
-// View links drawn by pastecal's own calendar instead of Syncfusion's (docs/native-switch.md): with the var
-// NATIVE_VIEW_LINKS set to "1", view pages (/view/<id>, /@handle/<name>) carry this tag, which public/index.html
-// reads before it loads anything. Unset (the default), they stay classic. ?cal= and localStorage pc_cal override it.
-export const NATIVE_CAL_META = '<meta name="pc-cal" content="native">';
-export const nativeViewLinks = (env) => !!env && env.NATIVE_VIEW_LINKS === '1';
+// Which calendar draws a page (docs/native-switch.md): pastecal's own (native) by default, Syncfusion's ("classic")
+// when a browser asks for it (?cal=, the footer's "Use the classic calendar"). With the var CALENDAR_DEFAULT set to
+// "classic", every page carries this tag, which public/index.html reads before it loads anything, so a browser that
+// has not chosen gets classic: the one-deploy way to send everyone back. A browser's own choice still wins.
+export const CLASSIC_CAL_META = '<meta name="pc-cal" content="classic">';
+export const classicDefault = (env) => !!env && env.CALENDAR_DEFAULT === 'classic';
