@@ -38,9 +38,9 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 |---|---|---|---|---|---|
 | Homepage, desktop 1440 | 1 | 3 | 0 | 118 | was 150 before the guide panel trim; template choices became quiet outline pills (links 6 to 3); +4 words for "3,000+ calendars since 2021", owner's call (Oct 26 2026) |
 | Homepage, phone 390 | 2 | 2 | 0 | 33 | **over the rule**: + and Save & share are both filled; next to fix |
-| Edit link, desktop | 1 | 1 | 1 | 39 | +3 words Nov 19 2026: the footer pill ("New calendar · Feedback · Classic editor"), the way back to Classic; its links are muted, not accent. Temporary: remove with the pill |
-| View link, desktop | 0 | 3 | 1 | 49 | +3 words: the pill (above) |
-| View link, phone | 0 | 2 | 1 | 35 | +3 words: the pill (above). +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
+| Edit link, desktop | 1 | 1 | 1 | 36 | the footer pill ("Feedback · Classic editor") is the way back to Classic; its links are muted, not accent. It carried the name "New calendar" (+3 words) until Nov 20 2026: dropped, the page says what you can do and not what it is |
+| View link, desktop | 0 | 3 | 1 | 46 | the pill (above) |
+| View link, phone | 0 | 2 | 1 | 32 | the pill (above). +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
 | Embed, 720 | 0 | 0 | 0 | 18 | one quiet header line |
 | Event card (quick view) | - | - | - | 13 | title, type, date and times, More details, Done; the "Edited just now" line (3 words) removed Oct 27 2026 |
 | Settings panel | 0 | - | - | 43 | this calendar only since Oct 28 2026 (was ~70 words with "Only me" in it); Backup last |

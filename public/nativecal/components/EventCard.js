@@ -797,7 +797,7 @@ const EventCard = (() => {
                     if (this.picker) { this.closePicker(); e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.custom) { this.closeCustom(); e.stopImmediatePropagation(); e.preventDefault(); return; }   // (the repeat settings, then the card)
                     e.stopImmediatePropagation(); e.preventDefault();
-                    this.cancel();
+                    this.closing = true; this.$emit('cancel', 'escape');   // (the reason is what analytics records)
                     return;
                 }
                 if (pcKeys.is(e, 'Tab') && !this.picker && !this.menu) {

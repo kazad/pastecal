@@ -173,8 +173,6 @@ const CalSwitch = {
     template: `
         <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Use the new calendar</button>
         <span v-else class="pc-cal-pill" role="group" aria-label="New calendar" data-testid="new-cal-pill">
-            <span class="pc-cal-pill-name" title="pastecal's new calendar">New calendar</span>
-            <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
             <button type="button" class="pc-link" data-testid="new-cal-feedback" aria-label="Send feedback on the new calendar" @click="$emit('feedback')">Feedback</button>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
             <button type="button" class="pc-link" data-testid="back-to-classic" aria-label="Classic editor" @click="$emit('switch', 'classic')">Classic editor</button>
@@ -1431,9 +1429,9 @@ const CalendarVueApp = {
             if (this.icsDialogOpen) { this.icsDialogClose(); return; }
             // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
             if (this.nativeAsk) { this.nativeAnswer(null); return; }
-            if (this.nativeEditor) { this.closeNativeEditor(); return; }
+            if (this.nativeEditor) { this.closeNativeEditor('escape'); return; }
             if (this.nativeQuick) { this.nativeQuick = null; return; }
-            if (this.nativeCard) { this.nativeCardCancel(); return; }   // (the card takes its own Escape first: EventCard onKey)
+            if (this.nativeCard) { this.nativeCardCancel('escape'); return; }   // (the card takes its own Escape first: EventCard onKey)
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
             if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
@@ -1445,6 +1443,23 @@ const CalendarVueApp = {
             if (this.showHelp) { this.showHelp = false; }
         };
         window.addEventListener('keydown', this._escapeHandler);
+
+        // Classic's editor is asked for by its pencil, its "More details" or a double-click on an event; if no editor
+        // opened a moment later, that is the failure people report as "the pencil does nothing" (#52, #53). Counted
+        // so it shows up without a report. (The new calendar counts its own, in openNativeCard.)
+        const askedForEditor = (how) => {
+            if (!this.canEdit || this.isReadOnly) return;
+            const asked = Date.now();
+            setTimeout(() => { if ((this._classicOpenedAt || 0) < asked) track(a => a.editorOpenFailed(how)); }, 900);
+        };
+        document.addEventListener('click', (e) => {
+            if (this.nativeCal || !e.target.closest) return;
+            if (e.target.closest('.e-quick-popup-wrapper .e-edit, .e-quick-popup-wrapper .e-event-edit')) askedForEditor('pencil');
+        }, true);
+        document.addEventListener('dblclick', (e) => {
+            if (this.nativeCal || !e.target.closest) return;
+            if (e.target.closest('.e-appointment')) askedForEditor('dblclick');
+        }, true);
 
         // A .ics file dragged over the page: "Drop to add these events" while it is over, and the import's dialog after
         // the drop (icsLoad). Only a drag that carries files, so dragging an event in either calendar is untouched; a
@@ -2011,7 +2026,7 @@ const CalendarVueApp = {
                 record = { Subject: fresh.title || '', StartTime: new Date(fresh.start), EndTime: nativeEnd(fresh.end, fresh.isAllDay),
                     IsAllDay: !!fresh.isAllDay, Type: 1, Description: '', RecurrenceRule: '' };
             } else {
-                if (!row) return;
+                if (!row) { track(a => a.editorOpenFailed('click')); return; }
                 record = this.nativeRecord(row);
                 // One occurrence: a new row pointing at the series, at the occurrence's time (classic's EditOccurrence).
                 if (mode === 'EditOccurrence') Object.assign(record, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: record.Id,
@@ -2025,13 +2040,31 @@ const CalendarVueApp = {
                 recurrencerule: record.RecurrenceRule || '', recurrenceID: mode === 'Save' ? (record.RecurrenceID || null) : null,
                 ...(mode === 'EditOccurrence' ? { _occurrenceOf: record.RecurrenceID } : {}) };
             // Frozen: the form loads once, and a live update from another browser never resets what is being typed.
-            this.nativeEditor = { mode, record, occurrence, event: Object.freeze(shown) };
+            this.nativeEditor = { mode, record, occurrence, event: Object.freeze(shown),
+                ed: this.trackEditorOpened(mode === 'Add' ? 'new' : mode === 'Save' ? 'edit' : 'series') };
             this.editorSaved = false;
         },
-        closeNativeEditor() {
+        /**
+         * The editor funnel on the native calendar: every open is counted, and every close says why (reason), so
+         * opened minus closed is a close nobody saw and 'flicker' is an editor that vanished by itself.
+         * (Classic's editor reports the same events from popupOpen / popupClose.)
+         */
+        trackEditorOpened(mode) {
+            track(a => a.editorOpened(mode));
+            return { mode, at: Date.now(), done: false };
+        },
+        trackEditorClosed(ed, saved, reason, countSaved = true) {
+            if (!ed || ed.done) return;
+            ed.done = true;
+            if (saved && countSaved) track(a => a.editorSaved(ed.mode));
+            const asked = ['cancel', 'escape', 'deleted', 'replaced'].includes(reason);
+            track(a => a.editorClosed(saved ? 'saved' : !asked && Date.now() - ed.at < 500 ? 'flicker' : reason || 'viewed'));
+        },
+        closeNativeEditor(reason) {
             if (!this.nativeEditor) return;
             // An editor that closes without a save is the "this was confusing or fiddly" signal (as classic's popupClose).
             if (!this.editorSaved) track(a => a.editorAbandoned());
+            this.trackEditorClosed(this.nativeEditor.ed, this.editorSaved, reason || 'cancel');
             this.editorSaved = false;
             this.nativeEditor = null;
         },
@@ -2283,6 +2316,8 @@ const CalendarVueApp = {
         /** Open the card on an event that was clicked (or double-clicked: full). */
         openNativeCard({ event, occurrence, jsEvent }, full = false) {
             const row = this.nativeStored(event);
+            // Asked to open and nothing to open: the silent failure (#52, #53), counted so it is seen without a report.
+            if (!row && this.nativeCanEdit()) track(a => a.editorOpenFailed(full ? 'dblclick' : 'click'));
             if (!row || !this.nativeCanEdit()) return;
             this.nativePopover = null;
             const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
@@ -2319,10 +2354,12 @@ const CalendarVueApp = {
         },
         showNativeCard({ isNew, full, target, value, canRepeat, anchor, returnTo }) {
             this.nativeQuick = null;
+            if (this.nativeCard) this.trackEditorClosed(this.nativeCard.ed, false, 'replaced');   // opened over another: that one ended
             this._nativeCardSeq = (this._nativeCardSeq || 0) + 1;
             this._nativeCardReturn = returnTo && returnTo.dataset ? returnTo.dataset.testid : null;
             this.nativeCard = { key: this._nativeCardSeq, isNew, full, canRepeat, target, value, opened: this.nativeCardClone(value), anchor, place: 0,
-                keepOccurrences: null, entries: [] };
+                keepOccurrences: null, entries: [], saved: false,
+                ed: this.trackEditorOpened(isNew ? 'new' : target.kind === 'row' ? 'edit' : 'series') };
         },
         /** One change from the card (patch: the fields it changed; message: what the toast says). */
         nativeCardChange(patch, message, meta = null) {
@@ -2565,10 +2602,11 @@ const CalendarVueApp = {
             const details = description != null ? description : v.description || '';
             // Done or Enter adds it, untitled as "(No title)" as the editor and quick add save it (stress F03). A click
             // outside with nothing entered was not meant: anything entered (details, a type, a repeat) is still kept.
-            if (!added && !name && !details.trim() && !v.rule && Number(v.type) === Number(c.opened.type)) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
+            if (!added && !name && !details.trim() && !v.rule && Number(v.type) === Number(c.opened.type)) { track(a => a.editorAbandoned()); return this.closeNativeCard('empty'); }
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
                 Type: Number(v.type) || 1, Description: details, RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
+            c.saved = !!ok;
             this.closeNativeCard();
             if (!ok) return;
             this._nativeLastType = { cal: this.calendar.id, type: Number(v.type) || 1 };
@@ -2576,7 +2614,7 @@ const CalendarVueApp = {
             this._nativeGlow = row ? `event-${row.id}` : null;
         },
         /** Cancel (or Escape): every change since the card opened is taken back; a new event is dropped. No Undo for that. */
-        nativeCardCancel() {
+        nativeCardCancel(reason = 'cancel') {
             const c = this.nativeCard;
             if (!c) return;
             // A new event closed without adding is the "this was confusing or fiddly" signal (as classic's popupClose).
@@ -2588,11 +2626,13 @@ const CalendarVueApp = {
                 if (!this.undoLastLocal({ quiet: true })) break;
                 undid++;
             }
-            this.closeNativeCard();
+            this.closeNativeCard(reason);
         },
-        closeNativeCard() {
+        closeNativeCard(reason) {
             const c = this.nativeCard;
             if (!c) return;
+            // Saved: an event added, or any change that is still in (Cancel takes them back), or a delete.
+            this.trackEditorClosed(c.ed, c.saved || reason === 'deleted' || (!c.isNew && c.entries.length > 0), reason);
             const card = document.querySelector('.nk-card');
             const hadFocus = !!card && card.contains(document.activeElement);
             if (hadFocus) document.activeElement.blur();
@@ -2603,9 +2643,9 @@ const CalendarVueApp = {
         nativeCardDelete() {
             const c = this.nativeCard;
             if (!c) return;
-            if (c.isNew) return this.closeNativeCard();
+            if (c.isNew) return this.closeNativeCard('cancel');
             const t = c.target;
-            this.closeNativeCard();
+            this.closeNativeCard('deleted');
             // The event shrinks and fades where it was.
             const el = document.querySelector(`.nc [data-testid="event-${t.id}"]`);
             const ghost = () => {
@@ -2938,6 +2978,8 @@ const CalendarVueApp = {
                 if (args.type !== 'Editor') return;
                 setTimeout(() => {
                     if (!this.editorSaved) track(a => a.editorAbandoned());
+                    // (a save already counted editor_saved in actionBegin; this adds the close and its reason)
+                    this.trackEditorClosed(this._classicEd, this.editorSaved, 'closed', false);
                     this.editorSaved = false;
                     this.editorOpenMode = null;
                 }, 0);
@@ -3035,7 +3077,8 @@ const CalendarVueApp = {
                 if (args.type === 'Editor') {
                     this.editorSaved = false;
                     this.editorOpenMode = !args.data || args.data.Id === undefined ? 'new' : (args.data.RecurrenceRule ? 'series' : 'edit');
-                    track(a => a.editorOpened(this.editorOpenMode));
+                    this._classicEd = this.trackEditorOpened(this.editorOpenMode);
+                    this._classicOpenedAt = Date.now();
                     ScheduleAdapter.noteStart(args.data);
                     // A yearly "last Monday of October" is drawn as every 12 months (ScheduleAdapter, #48); the
                     // repeat editor shows and saves the yearly rule it stands for.

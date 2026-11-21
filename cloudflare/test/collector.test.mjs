@@ -34,6 +34,11 @@ assert.equal(scrubError('Failed to fetch https://pastecal.com/cal/secret-id/hist
 assert.equal(scrubError('Unexpected token \'D\', "Dr. Patel bio"... is not valid JSON'), 'Unexpected token \'D\', "…"... is not valid JSON');
 assert.equal(toDataPoints({ events: [ev('js_error', { message: 'x'.repeat(500) })] })[0].blobs[8].length, 200);
 assert.equal(toDataPoints({ events: [ev('event_added', { message: 'not kept' })] })[0].blobs.length, 8, 'only js_error carries text');
+// the trail (the last few events before the error) is blob11, capped at 120 characters
+assert.equal(toDataPoints({ events: [ev('js_error', { message: 'x', trail: 'editor_opened-2s,editor_closed-0s' })] })[0].blobs[10], 'editor_opened-2s,editor_closed-0s');
+assert.equal(toDataPoints({ events: [ev('js_error', { message: 'x', trail: 'y'.repeat(300) })] })[0].blobs[10].length, 120);
+// the editor events keep one detail each: mode, reason, source
+for (const [name, params, detail] of [['editor_opened', { mode: 'edit' }, 'edit'], ['editor_saved', { mode: 'new' }, 'new'], ['editor_closed', { reason: 'flicker' }, 'flicker'], ['editor_open_failed', { source: 'pencil' }, 'pencil']]) assert.equal(toDataPoints({ events: [ev(name, params)] })[0].blobs[5], detail, name);
 
 // native vs classic from the path
 assert.equal(toDataPoints({ events: [ev('x', {}, '/nativecal/foo')] })[0].blobs[1], 'native');

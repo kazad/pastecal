@@ -59,9 +59,9 @@ const PAGES = [
   { name: 'homepage desktop', path: () => '/?backend=cf&cal=native', size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 3, chipsBadges: 0, words: 118 } },
   // filled 2 on the phone homepage (+ and Save & share) breaks 'one loud action': next to fix (docs/DESIGN-RESTRAINT.md).
   { name: 'homepage phone', path: () => '/?backend=cf&cal=native', size: { width: 390, height: 844 }, budget: { filled: 2, accentLinks: 2, chipsBadges: 0, words: 33 } },
-  { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 39 } },
-  { name: 'view link desktop', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 0, accentLinks: 3, chipsBadges: 1, words: 49 } },
-  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 35 } },
+  { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 36 } },
+  { name: 'view link desktop', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 1440, height: 900 }, budget: { filled: 0, accentLinks: 3, chipsBadges: 1, words: 46 } },
+  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf&cal=native`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 32 } },
   { name: 'embed', path: (s) => `/view/${s.viewId}?backend=cf&cal=native&embed`, size: { width: 720, height: 640 }, budget: { filled: 0, accentLinks: 0, chipsBadges: 0, words: 18 } },
 ];
 

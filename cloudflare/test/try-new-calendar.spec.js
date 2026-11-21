@@ -3,7 +3,7 @@
  * The new (native) calendar is the default; Syncfusion's is "classic", one click away. Driven like a visitor on a
  * production-default server (NATIVE_DEFAULT_URL, no CALENDAR_DEFAULT): a fresh browser draws the native calendar on an
  * edit link, a view link, an embed and the home page, with no Syncfusion download. A small pill in the footer says
- * "New calendar · Feedback · Classic editor"; Classic editor stores the choice (localStorage pc_cal plus a pc_cal cookie),
+ * "Feedback · Classic editor"; Classic editor stores the choice (localStorage pc_cal plus a pc_cal cookie),
  * reloads into Syncfusion, and leaves "Use the new calendar" in its place. Settings > You > Calendar does the same
  * from anywhere (the home page and Pro calendars have no footer switch). The choice survives a reload and carries to
  * another calendar; a ?cal= address still wins; embeds show neither the link nor the pill. Feedback posts to
@@ -108,7 +108,8 @@ test('a fresh visitor gets the new calendar everywhere; Classic editor switches,
   // The pill sits in the footer line, not over the calendar.
   const pill = page.getByTestId('new-cal-pill');
   await expect(pill).toBeVisible();
-  await expect(pill).toContainText('New calendar');
+  await expect(pill).toContainText('Feedback');
+  await expect(pill).not.toContainText('New calendar');   // no name: the pill only says what you can do
   await expect(pill.getByTestId('new-cal-feedback')).toHaveText('Feedback');
   await expect(pill.getByTestId('back-to-classic')).toHaveText('Classic editor');
   const pb = await pill.boundingBox(), cb = await page.locator('.pc-native-cal').boundingBox();

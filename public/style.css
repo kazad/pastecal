@@ -820,7 +820,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-cal-try.pc-link:hover { color: var(--pc-text) }
 .pc-cal-pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 2px 1px 10px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill);
     background: var(--pc-soft); color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-xs)/1.6 var(--pc-font); white-space: nowrap; vertical-align: 1px }
-.pc-cal-pill-name { color: var(--pc-text-2); font-weight: var(--pc-fw-semibold) }
 .pc-cal-pill .pc-link { font-size: inherit; color: var(--pc-text-muted); text-decoration: underline }   /* quiet: Feedback and Use classic are not the page's call to action (docs/DESIGN-RESTRAINT.md) */
 .pc-cal-pill .pc-link:hover { color: var(--pc-link) }
 .pc-cal-pill .pc-cal-pill-x { width: 22px; height: 22px; min-height: 0; border-radius: 50%; color: var(--pc-text-muted); font-size: var(--pc-fs-md); line-height: 1 }

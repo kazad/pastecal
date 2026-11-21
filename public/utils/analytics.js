@@ -117,6 +117,7 @@ const Analytics = {
     track(name, params = {}) {
         try {
             if (!this.enabled) return;
+            this.remember(name);
 
             let enriched;
             try {
@@ -140,6 +141,21 @@ const Analytics = {
             // Absolute backstop. Never rethrow.
             if (this.debug) console.warn('[analytics] track failed:', name, err);
         }
+    },
+
+    // ---- the trail ------------------------------------------------------------
+    //
+    // The last few things this visitor did (the events themselves), so a js_error says what led up to it:
+    // "editor_opened:edit-9s,editor_saved:edit-2s". Names and ages only, never any data.
+    _trail: [],
+    remember(name) {
+        if (name === 'js_error' || name === 'page_perf' || name === 'sync_shape') return;
+        this._trail.push([name, Date.now()]);
+        if (this._trail.length > 5) this._trail.shift();
+    },
+    trail() {
+        const now = Date.now();
+        return this._trail.map(([n, t]) => `${n}-${Math.round((now - t) / 1000)}s`).join(',').slice(-120);
     },
 
     // ---- batching (HTTP sink only) -------------------------------------------
@@ -403,6 +419,18 @@ const Analytics = {
         this.track('editor_abandoned', {});
     },
 
+    /** Every editor close, saved or not, with why: 'saved' | 'cancel' | 'escape' | 'outside' | 'empty' | 'viewed' | 'deleted'
+     *  | 'replaced', or 'flicker' (closed within half a second of opening without being asked to: the "opens and
+     *  vanishes" bug). editor_opened minus editor_closed is a close nobody saw. */
+    editorClosed(reason) {
+        this.track('editor_closed', { reason });
+    },
+
+    /** The person asked for the editor ('click' | 'dblclick' | 'pencil' | 'add') and none appeared: the silent failure. */
+    editorOpenFailed(how) {
+        this.track('editor_open_failed', { source: how });
+    },
+
     /** The calendar was printed (or saved as PDF from the print dialog): 'share_edit' from Share's Print button,
      *  'browser_edit' / 'browser_view' from Ctrl+P or the browser menu. Measures whether printing is worth more work. */
     printed(source) {
@@ -608,6 +636,7 @@ const Analytics = {
             kind,                                   // 'error' | 'unhandledrejection'
             message: String(message || '').slice(0, 200),
             where: String(where || '').slice(0, 120),
+            trail: this.trail(),   // the last few events before it
             // So a report like "the editor closes on my laptop" can be matched: which browser, which layout.
             browser: this.browserName(),
             device: window.matchMedia && window.matchMedia('(max-width: 767px)').matches ? 'phone' : 'desktop',

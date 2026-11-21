@@ -122,13 +122,20 @@ run "Editor abandonment: events added vs editors abandoned, by UI" \
   SUMIf(_sample_interval, blob1 = 'editor_abandoned') AS abandoned
 FROM $DS WHERE blob1 IN ('event_added','editor_abandoned') AND $D GROUP BY ui"
 
+# The editor funnel (app.js trackEditorOpened / trackEditorClosed; Classic reports the same from popupOpen / popupClose).
+# Every open should end in exactly one editor_closed (detail = why); opened minus closed is a close nobody saw, flicker
+# is an editor that vanished by itself, and editor_open_failed (detail: click, dblclick, pencil) is "asked for, none came".
+run "Editor funnel: opened, saved, closed (and why), open failed, by UI" \
+"SELECT blob2 AS ui, blob1 AS event, blob6 AS detail, SUM(_sample_interval) AS n
+FROM $DS WHERE blob1 IN ('editor_opened','editor_saved','editor_closed','editor_open_failed') AND $D GROUP BY ui, event, detail ORDER BY ui, event, n DESC"
+
 run "Trust: refused saves and errors by UI and detail" \
 "SELECT blob1 AS event, blob2 AS ui, blob6 AS detail, SUM(_sample_interval) AS n
-FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed','edit_link_readonly','edit_name_collision','edit_case_variant','edit_link_forwarded') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
+FROM $DS WHERE blob1 IN ('sync_refused','js_error','command_failed','editor_open_failed','edit_link_readonly','edit_name_collision','edit_case_variant','edit_link_forwarded') AND $D GROUP BY event, ui, detail ORDER BY n DESC LIMIT 20"
 
-run "Browser errors: message and file:line (js_error; text kept since Nov 11 2026)" \
-"SELECT blob6 AS kind, blob9 AS message, blob10 AS where, blob2 AS ui, SUM(_sample_interval) AS n
-FROM $DS WHERE blob1 = 'js_error' AND $D GROUP BY kind, message, where, ui ORDER BY n DESC LIMIT 25"
+run "Browser errors: message, file:line and the events just before (trail, since Nov 20 2026)" \
+"SELECT blob6 AS kind, blob9 AS message, blob10 AS where, blob11 AS trail, blob2 AS ui, SUM(_sample_interval) AS n
+FROM $DS WHERE blob1 = 'js_error' AND $D GROUP BY kind, message, where, trail, ui ORDER BY n DESC LIMIT 25"
 
 # "Try the new calendar (beta)" (app.js setCalPref / sendCalFeedback): detail is <action>_<source>,
 # e.g. opt_in_footer, opt_out_pill, feedback_open_pill, feedback_sent_pill (Collector.js).

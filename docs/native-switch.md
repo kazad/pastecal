@@ -5,7 +5,7 @@ for every calendar, behind a flag, then Syncfusion is deleted.
 
 **Update (Nov 18, 2026): native is the default for everyone, without the slow rollout below.** Reason: Classic's
 editing bugs in the field (GitHub #53, #54) and Syncfusion errors in production. Classic stays one click away: the
-footer pill ("New calendar · Feedback · Classic editor"), Settings > You > Calendar (the only way on the home page and
+footer pill ("Feedback · Classic editor"), Settings > You > Calendar (the only way on the home page and
 Pro calendars), `?cal=classic`, and the Worker's `CALENDAR_DEFAULT=classic` kill switch for browsers that have not
 chosen. The browser test pool runs Classic-pinned (`CALENDAR_DEFAULT:classic`) plus one production-default server
 (`NATIVE_DEFAULT_URL`) for the native default, the switch and the kill switch (`try-new-calendar.spec.js`).
