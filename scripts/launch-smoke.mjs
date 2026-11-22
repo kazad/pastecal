@@ -69,7 +69,7 @@ async function visit(path, { viewport = { width: 1440, height: 900 }, mobile = f
 // 2. Homepage, desktop and phone.
 for (const [label, opts] of [['desktop', {}], ['phone', { viewport: { width: 390, height: 844 }, mobile: true }]]) {
     const { ctx, page, errors, status } = await visit('/', opts);
-    const cal = await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-schedule .e-work-cells'), null, { timeout: 20000 }).then(() => true, () => false);
+    const cal = await page.waitForFunction(() => document.querySelector('.nc .nc-month, .nc .nc-col') || (window.scheduleObj && document.querySelector('.e-schedule .e-work-cells')), null, { timeout: 20000 }).then(() => true, () => false);
     ok(status === 200 && cal, `homepage (${label}) renders the calendar`);
     const text = await page.locator('#how').innerText().catch(() => '');
     const missing = cardPrices.filter((p) => !text.includes(p));
@@ -94,7 +94,7 @@ for (const [label, opts] of [['desktop', {}], ['phone', { viewport: { width: 390
 // 4. A view-only calendar and its feed.
 {
     const { ctx, page, errors, status } = await visit(`/view/${encodeURIComponent(VIEW)}`, { viewport: { width: 390, height: 844 }, mobile: true });
-    const rendered = await page.waitForFunction(() => window.scheduleObj && (scheduleObj.eventsData || []).length > 0, null, { timeout: 20000 }).then(() => true, () => false);
+    const rendered = await page.waitForFunction(() => document.querySelector('.nc [data-testid^="event-"]') || (window.scheduleObj && (scheduleObj.eventsData || []).length > 0), null, { timeout: 20000 }).then(() => true, () => false);
     ok(status === 200 && rendered, `/view/${VIEW} renders its events (phone)`);
     ok(await page.getByRole('button', { name: /Add event/ }).locator('visible=true').count() === 0, `/view/${VIEW} shows no Add event`);
     const html = await page.content();
